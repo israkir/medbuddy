@@ -1,0 +1,27 @@
+---
+description: MedBuddy API — non-negotiables and conventions (Python)
+globs: apps/backend/**
+alwaysApply: false
+---
+
+# Backend (`apps/backend`)
+
+## Tooling (do not fight the config)
+
+- **Python** `>=3.11`. Package lives under `src/medbuddy/`; tests under `tests/`.
+- **Format / lint**: Black and Ruff as in `pyproject.toml` (line length 100, `py311`). Run `make be-lint` or rely on pre-commit before commit.
+- **Tests**: `pytest` with `pytest-asyncio` (`asyncio_mode = auto`). New behavior or fixes need tests in `tests/` unless explicitly trivial (then say why in the PR).
+
+## Structure
+
+- **FastAPI** app entry: `medbuddy.main`. Settings: `pydantic-settings` (`medbuddy.config`).
+- Prefer clear boundaries: **ports** (`protocols/`), **integrations** (`integrations/` with `mocks/` vs `real/`), **engine** orchestration — extend existing patterns instead of ad-hoc modules at the package root.
+
+## Security and config
+
+- **No secrets** in code or committed `.env`. Use env vars consumed via settings; never log tokens or webhook secrets.
+- Preserve **LINE signature verification** and existing webhook behavior unless the task explicitly changes security semantics.
+
+## Commits / repo
+
+- Commits that touch backend must stay consistent with repo **pre-commit** and **`CHANGELOG.md`** rules (see root `Makefile` and `CHANGELOG.md`).

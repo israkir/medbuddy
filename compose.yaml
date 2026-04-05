@@ -1,0 +1,15 @@
+# Podman Compose: `podman compose up --build` (from repository root)
+services:
+  medbuddy-api:
+    build:
+      context: ./apps/backend
+      dockerfile: Containerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # mock | real — real needs LINE_CHANNEL_ACCESS_TOKEN, etc. (see apps/backend/.env.example)
+      MEDBUDDY_INTEGRATION: "${MEDBUDDY_INTEGRATION:-mock}"
+      MOCK_EXTERNAL_SERVICES: "${MOCK_EXTERNAL_SERVICES:-true}"
+      PUBLIC_BASE_URL: "http://localhost:8000"
+      LINE_CHANNEL_SECRET: ""
+      LINE_CHANNEL_ACCESS_TOKEN: ""

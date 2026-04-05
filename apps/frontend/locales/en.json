@@ -1,0 +1,123 @@
+{
+  "appName": "MedBuddy",
+  "tabs": {
+    "today": "Home",
+    "medicationsDock": "Medications",
+    "medications": "My medications",
+    "family": "Family",
+    "settings": "Settings"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "hint": "Changes apply immediately.",
+    "langZhTW": "Traditional Chinese (Taiwan)",
+    "langEn": "English",
+    "lineInfoLink": "How MedBuddy works with LINE"
+  },
+  "voice": {
+    "holdToSpeak": "Hold to speak",
+    "releasing": "Release to send…",
+    "sameAsLine": "Same as sending a voice message to MedBuddy on LINE—no typing needed.",
+    "resultTitle": "Voice received",
+    "resultBody": "The full app will transcribe and reply; this prototype demonstrates the flow.",
+    "permissionTitle": "Microphone needed",
+    "permissionBody": "Allow MedBuddy to use the microphone in system settings to ask questions by voice.",
+    "recordError": "Could not start recording. Please try again.",
+    "webUnavailable": "Hold-to-talk is not available on web. Use the mobile app or LINE.",
+    "medicationsLead": "Listen first, then ask your doctor or pharmacist if unsure."
+  },
+  "today": {
+    "greeting": "Hello—let’s take good care of you today",
+    "voiceIntro": "Speaking is often easier than typing—hold the button below to talk.",
+    "scheduleTitle": "Medications today",
+    "title": "Medications today",
+    "subtitle": "Take them on schedule. Tap Listen on a dose to hear what that medicine is for. Open My medications for your full list. Hold the mic below to ask questions.",
+    "sectionMorning": "Morning · after meal",
+    "sectionNoon": "Noon · after meal",
+    "sectionEvening": "Evening · after meal",
+    "listenShort": "Listen",
+    "notTakenYet": "Not taken yet",
+    "markTaken": "I took it",
+    "sampleMetformin": "Metformin (blood sugar)",
+    "sampleBp": "Blood pressure medicine",
+    "sampleStatin": "Cholesterol medicine"
+  },
+  "medications": {
+    "title": "My medications",
+    "subtitle": "All your medicines in one place—dose, how often, and how many you have left. Tap Listen to hear what each one is for. At the bottom, save questions and personal notes (like side effects) by voice or text. Editing the list will be available later.",
+    "labelDose": "Dose",
+    "labelFrequency": "How often",
+    "labelRemaining": "How many left",
+    "remainingCount": "{{count}} tablets left",
+    "explain": "Listen — what it is for",
+    "explaining": "Playing…",
+    "sampleExplanation": "Take this medicine after meals to help control blood sugar and reduce stomach upset. If you feel nauseous, tell your family or doctor—do not stop on your own.",
+    "sampleBpExplanation": "Take this medicine after meals to lower blood pressure and reduce stomach discomfort. Take it at the same times each day; if you forget, do not double the next dose.",
+    "sampleStatinExplanation": "Take this medicine as directed to lower cholesterol and help protect your heart. If you have unusual muscle pain, tell your doctor—do not stop on your own.",
+    "items": {
+      "metformin": {
+        "name": "Metformin (blood sugar)",
+        "dose": "500 mg · 1 tablet",
+        "frequency": "Twice daily · after meals"
+      },
+      "bp": {
+        "name": "Blood pressure medicine",
+        "dose": "5 mg · 1 tablet",
+        "frequency": "Once daily · after breakfast"
+      },
+      "statin": {
+        "name": "Cholesterol medicine",
+        "dose": "20 mg · 1 tablet",
+        "frequency": "Once daily · in the evening"
+      }
+    },
+    "questionsTitle": "Questions & notes for your visit",
+    "questionsSubtitle": "Tell your doctor or pharmacist what you need: questions about your medicines, or notes about your body—like stomach pain, dizziness, or poor sleep after taking a pill. Speaking is easiest; you can also write below.",
+    "questionsPurposeAskTitle": "Ask",
+    "questionsPurposeAskBody": "Dosing, food, other medicines, what to expect…",
+    "questionsPurposeNoteTitle": "Note",
+    "questionsPurposeNoteBody": "Side effects, pain, sleep, anything you felt…",
+    "questionsSamePlace": "Use the microphone or text box for either—questions or notes.",
+    "questionsVoiceBadge": "Voice first",
+    "questionsHoldMic": "Hold to speak — questions or how you feel",
+    "questionsReleasing": "Recording… release when done",
+    "questionsVoiceSaved": "Last recording: {{when}}",
+    "questionsOrType": "Or write below",
+    "questionsTextFieldLabel": "Your questions and notes",
+    "questionsPlaceholder": "Example: I had a stomach ache after taking this. Can I take it with food? Is it OK with my other pills?",
+    "questionsTypeHint": "Saved on this device. Show this screen at your visit, or copy onto paper.",
+    "questionsSectionLabel": "For your care team",
+    "quickJumpTitle": "Jump to",
+    "quickJumpList": "Medicine list",
+    "quickJumpQuestions": "Questions & notes"
+  },
+  "family": {
+    "title": "Family & care",
+    "body": "Many older adults already use LINE every day for voice chats with family—no new app to learn. MedBuddy works on LINE too: send text or voice. Here you can invite family to share your log (backend coming soon).",
+    "invite": "Invite family",
+    "inviteSoon": "This feature is coming soon"
+  },
+  "modal": {
+    "title": "MedBuddy & LINE",
+    "tagline": "The LINE you already use is the front door—no new username or password.",
+    "p1": "We chose LINE because many older adults in Taiwan already open it daily; voice chat is familiar, so there is little to relearn.",
+    "p2": "LINE provides a Messaging API: each message to our official account is sent securely to our servers. We verify every webhook with your channel secret (HMAC-SHA256) before handling it.",
+    "p3": "LINE provides identity: each user has a stable line_user_id for our channel—that is how we recognize you, with no separate login. When someone new follows the bot, we create a user record and start onboarding.",
+    "p4": "Reply vs push: replies to user-initiated messages are unlimited. Push messages (reminders, carer alerts) count against monthly quotas; the free tier is tight for production, but paid plans are affordable for pilots. Where possible we use chat-initiated patterns (e.g., when you open LINE) so reminders are sent as replies, not pushes.",
+    "p5": "This mobile app is a companion UI; the same voice-first, low-friction idea applies as on LINE."
+  },
+  "a11y": {
+    "tabToday": "Home: voice and today’s medications",
+    "tabMedications": "My medications tab",
+    "tabFamily": "Family tab",
+    "tabSettings": "Settings tab",
+    "openInfo": "Open MedBuddy and LINE information",
+    "questionsMic": "Hold to record questions or notes about your medicines and how you feel",
+    "listenTopHint": "Hear what this medicine is for. This is not the same as marking it taken.",
+    "playExplanation": "Listen to explanation for this medicine",
+    "markDoseTaken": "Mark this time slot as taken",
+    "voiceHold": "Hold to speak",
+    "voiceHoldHint": "Hold to record; release to send. Same as a voice message on LINE."
+  }
+}

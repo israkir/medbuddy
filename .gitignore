@@ -1,0 +1,31 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.env
+.env.local
+.env.*.local
+
+# Coverage (pytest-cov / CI)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# OS / editors
+.DS_Store
+.idea/
+*.swp
+*.swo
+
+# Expo / React Native (apps/frontend)
+apps/frontend/node_modules/
+apps/frontend/.expo/
+apps/frontend/dist/
+apps/frontend/web-build/
+apps/frontend/.metro-health-check*
+apps/frontend/coverage/

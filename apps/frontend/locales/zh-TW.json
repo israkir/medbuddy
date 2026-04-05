@@ -1,0 +1,123 @@
+{
+  "appName": "MedBuddy",
+  "tabs": {
+    "today": "首頁",
+    "medicationsDock": "藥品",
+    "medications": "我的藥品",
+    "family": "家人",
+    "settings": "設定"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "介面語言",
+    "hint": "變更後立即生效。",
+    "langZhTW": "繁體中文（台灣）",
+    "langEn": "English",
+    "lineInfoLink": "MedBuddy 與 LINE 怎麼配合？"
+  },
+  "voice": {
+    "holdToSpeak": "按住麥克風說話",
+    "releasing": "放開後送出…",
+    "sameAsLine": "與在 LINE 傳語音給 MedBuddy 相同，無須打字。",
+    "resultTitle": "語音已收到",
+    "resultBody": "正式版會將語音轉成文字並回覆您；此為原型示範。",
+    "permissionTitle": "需要麥克風",
+    "permissionBody": "請在系統設定中允許 MedBuddy 使用麥克風，才能用語音發問。",
+    "recordError": "無法開始錄音，請稍後再試。",
+    "webUnavailable": "網頁版不支援按住說話，請使用手機 App 或 LINE。",
+    "medicationsLead": "先聽說明，再問醫師或藥師。"
+  },
+  "today": {
+    "greeting": "您好，今天也要照顧好自己",
+    "voiceIntro": "有問題用說的比較快——按住下方按鈕說話即可。",
+    "scheduleTitle": "今日待服藥",
+    "title": "今日用藥",
+    "subtitle": "請依時間服用。點「聽說明」可聽該藥是做什麼用；到「我的藥品」查看完整清單；按住下方麥克風可發問。",
+    "sectionMorning": "早上 · 餐後",
+    "sectionNoon": "中午 · 餐後",
+    "sectionEvening": "晚上 · 餐後",
+    "listenShort": "聽說明",
+    "notTakenYet": "尚未服用",
+    "markTaken": "我已服用",
+    "sampleMetformin": "Metformin（降血糖）",
+    "sampleBp": "血壓藥",
+    "sampleStatin": "膽固醇藥"
+  },
+  "medications": {
+    "title": "我的藥品",
+    "subtitle": "藥名、劑量、吃法與還剩幾顆，一目了然。點「聽說明」可聽每種藥是做什麼用。最下方可語音或打字記下想問的事，或身體狀況（例如吃藥後不舒服）。之後可在此編輯清單。",
+    "labelDose": "劑量",
+    "labelFrequency": "吃法 / 頻率",
+    "labelRemaining": "還剩幾顆",
+    "remainingCount": "還剩 {{count}} 顆",
+    "explain": "聽說明 · 做什麼用",
+    "explaining": "播放中…",
+    "sampleExplanation": "這顆藥在餐後服用，幫助穩定血糖，減少腸胃不舒服。若噁心想吐，請告訴家人或醫師，不要自行停藥。",
+    "sampleBpExplanation": "這顆藥在餐後服用，可降低血壓並減少胃部不適。請固定時間吃，忘記時不要一次吃兩倍。",
+    "sampleStatinExplanation": "這顆藥依醫囑服用，幫助降低膽固醇、保護心血管。若肌肉痠痛異常，請告訴醫師，不要自行停藥。",
+    "items": {
+      "metformin": {
+        "name": "Metformin（降血糖）",
+        "dose": "500 毫克 · 每次 1 顆",
+        "frequency": "一天兩次 · 餐後"
+      },
+      "bp": {
+        "name": "血壓藥",
+        "dose": "5 毫克 · 每次 1 顆",
+        "frequency": "一天一次 · 早餐後"
+      },
+      "statin": {
+        "name": "膽固醇藥",
+        "dose": "20 毫克 · 每次 1 顆",
+        "frequency": "一天一次 · 晚上"
+      }
+    },
+    "questionsTitle": "看診問題與身體備註",
+    "questionsSubtitle": "告訴醫師或藥師：想問的用藥問題，或身體狀況——例如吃藥後胃痛、頭暈、睡不著。用說的最輕鬆，也可在下方打字。",
+    "questionsPurposeAskTitle": "發問",
+    "questionsPurposeAskBody": "劑量、食物、跟其他藥一起服用、注意事項…",
+    "questionsPurposeNoteTitle": "備註",
+    "questionsPurposeNoteBody": "副作用、疼痛、睡眠、吃藥後的任何感受…",
+    "questionsSamePlace": "以下麥克風與文字框，兩種都可用：問問題或寫身體狀況。",
+    "questionsVoiceBadge": "優先語音",
+    "questionsHoldMic": "按住說——想問的事或身體怎麼不舒服",
+    "questionsReleasing": "錄音中… 說完請放開",
+    "questionsVoiceSaved": "上次錄音：{{when}}",
+    "questionsOrType": "或改為打字",
+    "questionsTextFieldLabel": "文字：問題與備註",
+    "questionsPlaceholder": "例：吃了這個藥後胃很難受，可以改飯後吃嗎？跟血壓藥一起沒問題嗎？",
+    "questionsTypeHint": "內容存在這台手機。看診時可開此畫面，或抄在紙上。",
+    "questionsSectionLabel": "給醫師／藥師",
+    "quickJumpTitle": "快速前往",
+    "quickJumpList": "藥品清單",
+    "quickJumpQuestions": "問題與備註"
+  },
+  "family": {
+    "title": "家人與照護",
+    "body": "許多長輩每天都開 LINE 與家人語音，不必學新 App。MedBuddy 在 LINE 上也能用：傳文字或語音即可。此處可邀請家人一起看用藥紀錄（即將連接後端）。",
+    "invite": "邀請家人",
+    "inviteSoon": "此功能即將開放"
+  },
+  "modal": {
+    "title": "MedBuddy 與 LINE",
+    "tagline": "您熟悉的 LINE，就是入口——不必另記帳號密碼。",
+    "p1": "我們選擇 LINE，是因為許多台灣長輩每天都在用，語音聊天本來就會，不必重新學一個 App。",
+    "p2": "LINE 提供 Messaging API：您傳給官方帳號的每一則訊息，會以安全連線送到我們的伺服器。我們用頻道密鑰（channel secret）驗證每一筆通知的真偽（HMAC-SHA256），通過後才處理。",
+    "p3": "LINE 幫我們做身分：每位使用者有固定的 line_user_id，在官方帳號底下不變，這就是系統認識您的方式——不必註冊帳號密碼。新好友加入時，我們建立使用者並開始引導。",
+    "p4": "回覆與推播：您主動傳訊後，機器人的回覆不計入推播額度。主動推播（例如提醒）才會用到每月則數；原型階段免費額度有限，正式試辦可改為付費方案。我們也盡量用「您打開 LINE 時」的問候與檢查，以回覆形式完成提醒，減少推播用量。",
+    "p5": "此手機 App 為輔助介面，核心服務與 LINE 相同理念：語音優先、少打字、好理解。"
+  },
+  "a11y": {
+    "tabToday": "首頁：語音與今日用藥",
+    "tabMedications": "我的藥品分頁",
+    "tabFamily": "家人分頁",
+    "tabSettings": "設定分頁",
+    "openInfo": "開啟 MedBuddy 與 LINE 說明",
+    "questionsMic": "按住錄音：想問的用藥問題，或身體不舒服等備註",
+    "listenTopHint": "聽這個藥是做什麼用，與「已服用」不同。",
+    "playExplanation": "聽這個藥的說明",
+    "markDoseTaken": "標記這個時間的藥已服用",
+    "voiceHold": "按住說話",
+    "voiceHoldHint": "按住時錄音，放開後送出。與在 LINE 傳語音相同。"
+  }
+}

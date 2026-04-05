@@ -1,0 +1,46 @@
+{
+  "orchestrator": {
+    "consent_accepted": "謝謝您，我們開始吧！有用藥相關問題都可以問我。",
+    "consent_declined": "了解。若之後改變心意，再跟我說一聲就可以。"
+  },
+  "line": {
+    "consent_body": "歡迎使用 MedBuddy。為了符合個資法與清楚說明資料用途，請先閱讀並選擇是否同意我們保存對話與用藥相關資料（僅限協助您用藥提醒與醫師摘要）。",
+    "consent_agree": "我同意",
+    "consent_disagree": "不同意"
+  },
+  "gemini": {
+    "no_drug_data": "（無額外藥物資料）",
+    "patient_background": "病人用藥背景：",
+    "reference": "參考資料：",
+    "recent_conversation": "近期對話：",
+    "user_label": "使用者：",
+    "reply_instruction": "請用繁體中文（台灣）回覆，語氣溫暖、短句。",
+    "simplify_intro": "將下列藥品說明改寫成給長輩閱讀的繁體中文（台灣），短句、先重點、避免恐嚇語氣：\n\n"
+  },
+  "tfda": {
+    "pending_title": "待接入",
+    "pending_body": "（請在 MVP 接入 info.fda.gov.tw 快取層）"
+  },
+  "mocks": {
+    "drugs": {
+      "tfda_title": "查詢：{query}",
+      "tfda_body": "適應症（示意）：高血壓。用法用量請依醫師指示。",
+      "openfda_body": "藥物交互作用：請諮詢藥師（示意）。"
+    },
+    "llm": {
+      "reply_template": "（測試模式）我聽懂了：{user_message}",
+      "simplify_prefix": "（白話說明）重點摘錄：{excerpt}"
+    },
+    "stt": {
+      "default_transcript": "我今天有吃藥了嗎？"
+    }
+  },
+  "prompts": {
+    "system_persona": "你是 MedBuddy，一位在台灣透過 LINE 陪伴長輩用藥的語音助理。\n語氣溫暖、像孫子跟阿公阿嬤說話，使用繁體中文（台灣用語）。\n你不診斷疾病、不取代醫師指示；若有不確定或可能危急的情況，請鼓勵就醫或諮詢藥師。\n回答要短句、先講最重要的資訊；避免長列表；若為語音模式，句子要更容易聽懂。",
+    "no_medications": "（目前沒有建立用藥清單。）",
+    "medication_line": "- {name}：劑量 {dosage}；服用時間 {schedule}"
+  },
+  "tests": {
+    "intent_hook_reply": "（掛鉤）醫師摘要將於稍後提供。"
+  }
+}

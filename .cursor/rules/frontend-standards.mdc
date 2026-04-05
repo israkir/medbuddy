@@ -1,0 +1,26 @@
+---
+description: MedBuddy app — non-negotiables and conventions (Expo / RN / TS)
+globs: apps/frontend/**
+alwaysApply: false
+---
+
+# Frontend (`apps/frontend`)
+
+## Tooling (do not fight the config)
+
+- **Stack**: Expo (expo-router), React Native, TypeScript. Follow **eslint-config-expo** / flat config in `eslint.config.js`.
+- **Quality gate**: `npm run check` = ESLint (`--max-warnings 0`) + `tsc --noEmit`. Same checks run via pre-commit / `make fe-check`.
+
+## Code style
+
+- Prefer **function components** and hooks; keep screens/components small and consistent with existing `app/` and `components/` layout.
+- **i18n**: Use the project’s `i18next` setup (`i18n/`, `useTranslation`); do not hard-code user-visible strings for features that already use keys.
+
+## Security and env
+
+- **No private API keys** in source or committed `.env`. Only **`EXPO_PUBLIC_*`** for values that are intentionally public to the client bundle.
+- Respect **mock vs API** toggles (`EXPO_PUBLIC_USE_MOCK_DATA`, API base URL) as existing code does.
+
+## Commits / repo
+
+- Commits that touch the app must stay consistent with repo **pre-commit** and **`CHANGELOG.md`** rules (see root `Makefile` and `CHANGELOG.md`).
