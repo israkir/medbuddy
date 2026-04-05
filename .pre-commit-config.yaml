@@ -1,0 +1,40 @@
+# https://pre-commit.com
+# Install: make pre-commit-install  (needs backend: make be-install, frontend: make fe-install)
+# On git commit: CHANGELOG.md must be staged with any other staged files; full backend lint+tests and frontend eslint+tsc run.
+# For local verification without a commit: make pre-commit-run  (skips only the changelog rule via SKIP).
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+  - repo: local
+    hooks:
+      - id: require-changelog-staged
+        name: CHANGELOG.md must be staged
+        entry: scripts/pre-commit-require-changelog.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      - id: backend-lint-test-all
+        name: backend (ruff + black + pytest)
+        entry: scripts/pre-commit-backend-all.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      - id: frontend-lint-typecheck-all
+        name: frontend (eslint + tsc)
+        entry: scripts/pre-commit-frontend-all.sh
+        language: script
+        pass_filenames: false
+        always_run: true
