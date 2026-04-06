@@ -49,7 +49,9 @@ class TextToSpeechPort(Protocol):
 
 @runtime_checkable
 class LLMPort(Protocol):
-    async def classify_intent(self, user_text: str) -> Intent: ...
+    async def classify_intent(
+        self, user_text: str, *, recent_context: str | None = None
+    ) -> Intent: ...
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         """If the user wants English or zh-TW replies, return ``en`` or ``zh-TW``; else ``None``."""
@@ -62,9 +64,10 @@ class LLMPort(Protocol):
         drug_grounding: str | None,
         history: list[ConversationTurn],
         user_message: str,
+        locale: str,
     ) -> str: ...
 
-    async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str: ...
+    async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str: ...
 
     async def extract_medication_draft(
         self, user_text: str, *, locale: str

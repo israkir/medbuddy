@@ -64,6 +64,8 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Quality
 
+- [ ] Make **assistant conversation** more **human-like** (natural tone, empathy, pacing; less robotic phrasing) via prompts, few-shot examples, and/or light post-processing where appropriate.
+
 - [ ] CI running **`make be-check`** (or equivalent) on PRs; deployment runbook and rollback.
 
 **References:** [`apps/backend/.env.example`](apps/backend/.env.example), [`apps/backend/README.md`](apps/backend/README.md), [`compose.yaml`](compose.yaml).

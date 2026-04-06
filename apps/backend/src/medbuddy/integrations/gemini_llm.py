@@ -113,8 +113,13 @@ class GeminiLLM(LLMPort):
     # LLMPort — intent classification
     # ------------------------------------------------------------------
 
-    def _classify_sync(self, user_text: str) -> Intent:
-        prompt = (
+    def _classify_sync(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+        followup_rule = (
+            "Never use off_topic for very short replies about medications, adherence, reminders, "
+            'or scheduling — even if vague alone (e.g. "一次", "三天", "7", "once", "yes"). '
+            "Use general_question or a clinical intent instead. "
+        )
+        base = (
             "Classify the user message into exactly one intent: "
             "add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
@@ -124,14 +129,21 @@ class GeminiLLM(LLMPort):
             "not asking about a specific drug. "
             "Use update_locale when they want to change reply language (English vs Traditional Chinese), "
             "including paraphrases. "
-            "Use off_topic when the message is clearly not about medications, adherence, reminders, "
-            "drug questions, care-related profile, vitals/symptoms tied to their care, or switching "
-            "this assistant's language — e.g. weather, sports scores, politics, coding homework, "
-            "unrelated chit-chat. If the message mixes a health/medication angle with small talk, "
-            "prefer general_question or the best matching clinical intent, not off_topic. "
-            "Reply with only the snake_case label.\n\n"
-            f"User: {user_text}"
+            + followup_rule
+            + "Use off_topic only for clearly unrelated topics (weather, sports, politics, generic "
+            "chit-chat with no care angle). If there is any health or medication angle, prefer "
+            "general_question or the best matching clinical intent, not off_topic. "
+            "Reply with only the snake_case label."
         )
+        if recent_context:
+            prompt = (
+                f"{base}\n\n"
+                "Recent conversation (context only; classify only the latest user line):\n"
+                f"{recent_context}\n\n"
+                f"Latest user message to classify:\n{user_text}"
+            )
+        else:
+            prompt = f"{base}\n\nUser: {user_text}"
         raw = self._generate_sync(self._intent_model, prompt).lower()
         for intent in Intent:
             if re.search(rf"\b{re.escape(intent.value)}\b", raw):
@@ -141,8 +153,10 @@ class GeminiLLM(LLMPort):
                 return intent
         return Intent.GENERAL_QUESTION
 
-    async def classify_intent(self, user_text: str) -> Intent:
-        return await asyncio.to_thread(self._classify_sync, user_text)
+    async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+        return await asyncio.to_thread(
+            self._classify_sync, user_text, recent_context=recent_context
+        )
 
     def _extract_locale_intent_sync(self, user_text: str) -> str | None:
         prompt = (
@@ -175,9 +189,10 @@ class GeminiLLM(LLMPort):
         drug_grounding: str | None,
         history: list[ConversationTurn],
         user_message: str,
+        locale: str,
     ) -> str:
         hist_lines = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
-        loc = self._locale
+        loc = locale or self._locale
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
         prompt = (
             f"{system_persona}\n\n"
@@ -197,6 +212,7 @@ class GeminiLLM(LLMPort):
         drug_grounding: str | None,
         history: list[ConversationTurn],
         user_message: str,
+        locale: str,
     ) -> str:
         return await asyncio.to_thread(
             self._compose_sync,
@@ -205,19 +221,20 @@ class GeminiLLM(LLMPort):
             drug_grounding=drug_grounding,
             history=history,
             user_message=user_message,
+            locale=locale,
         )
 
     # ------------------------------------------------------------------
     # LLMPort — drug text simplification
     # ------------------------------------------------------------------
 
-    def _simplify_sync(self, raw_label: str) -> str:
-        loc = self._locale
+    def _simplify_sync(self, raw_label: str, *, locale: str) -> str:
+        loc = locale or self._locale
         prompt = f"{t('gemini.simplify_intro', locale=loc)}{raw_label}"
         return self._generate_sync(self._chat_model, prompt)
 
-    async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str:
-        return await asyncio.to_thread(self._simplify_sync, raw_label)
+    async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str:
+        return await asyncio.to_thread(self._simplify_sync, raw_label, locale=locale)
 
     # ------------------------------------------------------------------
     # LLMPort — medication extraction (structured output)
@@ -369,6 +386,7 @@ class GeminiLLM(LLMPort):
         prompt = (
             f"{persona}\n\n"
             f"{t('gemini.medication_companion_interactions', locale=loc)}\n\n"
+            f"{t('gemini.interaction_structured_output_note', locale=loc)}\n\n"
             f"Patient context:\n{patient_context}\n\n"
             f"Current medications:\n{med_list}\n\n"
             f"Drug reference data:\n{grounding}\n\n"

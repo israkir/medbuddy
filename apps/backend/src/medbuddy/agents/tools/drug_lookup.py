@@ -78,6 +78,7 @@ class ExplainMedicationTool:
             drug_grounding=drug_grounding,
             history=history_llm,
             user_message=safe_text,
+            locale=locale,
         )
 
         # Save to personalization cache

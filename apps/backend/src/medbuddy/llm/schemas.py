@@ -67,7 +67,9 @@ class IntentClassification(BaseModel):
         description=(
             "One of: add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
-            "update_profile, update_locale, off_topic, general_question"
+            "update_profile, update_locale, off_topic, general_question. "
+            "Do not use off_topic for brief answers about reminders, dosing, or scheduling "
+            "(e.g. once, 7 days, 一次, 三天) — use general_question or a clinical intent."
         )
     )
     reasoning: str = Field(description="Brief reasoning for this classification (1 sentence)")

@@ -6,8 +6,8 @@ unhandled intents fall back to a free-form LLM ``compose_reply``.
 
 Flow
 ----
-1. Load user context (profile + medications) in parallel.
-2. Classify intent via ``svc.llm.classify_intent()``.
+1. Load user context (profile + medications) and recent conversation turns in parallel.
+2. Classify intent via ``svc.llm.classify_intent(..., recent_context=...)``.
 3. Locale change, hooks, then ``off_topic`` (fixed refusal), profile regex, tools, or
    ``compose_reply`` fallback.
 4. Persist both turns to conversation store.
@@ -37,7 +37,10 @@ from medbuddy.exceptions import MedBuddyError
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
-from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
+from medbuddy.privacy.redact import (
+    redact_conversation_turns_for_llm,
+    redact_pii_text,
+)
 from medbuddy.prompts.persona import build_patient_context_for_llm, get_system_persona
 from medbuddy.user_locale import effective_user_locale
 
@@ -85,11 +88,14 @@ class MedicationAgent:
         """
         safe_text = redact_pii_text(user_text)
 
-        # Load context and classify intent concurrently
-        (user_row, medications), intent = await asyncio.gather(
+        # Load profile/meds and recent turns so intent classification can use dialogue context
+        # (short replies like "一次" / "once" need the prior assistant question to avoid off_topic).
+        (user_row, medications), history = await asyncio.gather(
             _load_user_context(svc, user_key),
-            svc.llm.classify_intent(safe_text),
+            svc.conversations.get_recent_turns(user_key, svc.settings.conversation_history_turns),
         )
+        recent_ctx = _recent_context_for_intent(history)
+        intent = await svc.llm.classify_intent(safe_text, recent_context=recent_ctx)
         log.info(
             "medication_agent: user_key=%s intent=%s med_count=%d user_chars=%d",
             user_key,
@@ -99,9 +105,6 @@ class MedicationAgent:
         )
 
         locale = effective_user_locale(user_row.get("locale"))
-        history = await svc.conversations.get_recent_turns(
-            user_key, svc.settings.conversation_history_turns
-        )
 
         # Persist user turn before generating reply
         await svc.conversations.append_turn(
@@ -184,6 +187,14 @@ async def _load_user_context(
     )
 
 
+def _recent_context_for_intent(turns: list[ConversationTurn], *, max_turns: int = 4) -> str | None:
+    """Format recent turns for intent classification (redacted, last N only)."""
+    if not turns:
+        return None
+    tail = redact_conversation_turns_for_llm(turns[-max_turns:])
+    return "\n".join(f"{t.role}: {t.content}" for t in tail)
+
+
 async def _run_tool_safe(tool: Any, **kwargs: Any) -> ToolResult:
     """Run a tool, converting ``MedBuddyError`` to a user-friendly message."""
     locale: str = kwargs.get("locale", "zh-TW")
@@ -226,4 +237,5 @@ async def _compose_fallback_reply(
         drug_grounding=None,
         history=history_llm,
         user_message=safe_text,
+        locale=locale,
     )

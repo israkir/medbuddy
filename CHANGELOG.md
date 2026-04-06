@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **English locale prompts**: **`locales/en.json`** `prompts.system_persona` and **`gemini.reply_instruction`** no longer instruct the model to reply in Traditional Chinese; they now match **`en`** (clear, simple English). This removes a contradiction with task-specific English instructions (e.g. medication-added and reminder appendix copy), which caused Chinese replies after switching away from Chinese.
+
+- **Per-user locale for `compose_reply`**: **`LLMPort.compose_reply`** (and **`simplify_drug_text_to_patient_zh`**) take **`locale`** and use it for scaffold copy (**`gemini.reply_instruction`**, section headers, etc.) instead of only the process default **`MEDBUDDY_LOCALE`**. Callers (**`MedicationAgent`** fallback, explain-medication, interaction fallback) pass the user’s **`effective_user_locale`**. **`interaction.*`** locale strings localize structured interaction replies (severity labels, recommendation prefix). **`gemini.simplify_intro`** for **`en`** targets plain English. Structured interaction analysis prompts include **`gemini.interaction_structured_output_note`** so JSON patient-facing fields match the user’s locale.
+
+- **Intent classification**: **`LLMPort.classify_intent`** accepts optional **recent redacted conversation**; **`MedicationAgent`** supplies it so short follow-ups (e.g. reminder or dosing answers) are less often labeled **`off_topic`**. Provider prompts and **`IntentClassification`** schema text narrow **`off_topic`** to clearly unrelated topics.
+
 - **Supabase**: The PostgREST client is created with an **`httpx.Client` using `http2=False`** (postgrest-py defaults to HTTP/2), avoiding intermittent **`RemoteProtocolError` / `ConnectionTerminated`** during user upserts and LINE webhooks.
 
 - **`drug_personalization_cache`**: `save_personalized_reply` now stores **`medication_id`** when exactly

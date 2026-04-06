@@ -120,8 +120,14 @@ class OpenAILLM(LLMPort):
                 f"Could not parse {schema.__name__} from model output: {raw[:200]}"
             ) from exc
 
-    def _classify_sync(self, user_text: str) -> Intent:
-        prompt = (
+    def _classify_sync(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+        followup_rule = (
+            "Never use off_topic for very short replies that answer the assistant about "
+            "medications, adherence, reminders, or scheduling — even if the text alone looks vague "
+            '(e.g. "一次", "三天", "7", "once", "yes", "ok", "每天"). '
+            "Those are general_question (or a matching clinical intent), not off_topic. "
+        )
+        base = (
             "Classify the user message into exactly one intent: "
             "add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
@@ -133,13 +139,21 @@ class OpenAILLM(LLMPort):
             "(English vs Traditional Chinese), including paraphrases like "
             '"I\'d prefer English" or "請用中文回覆". '
             "Do not use update_locale when they only want a drug explanation translated. "
-            "Use off_topic when the message is clearly not about medications, adherence, reminders, "
-            "drug questions, care-related profile, vitals/symptoms tied to their care, or switching "
-            "this assistant's language — e.g. weather, sports scores, politics, unrelated homework, "
-            "random chit-chat. If there is a health or medication angle, prefer general_question or "
-            "the best matching clinical intent, not off_topic.\n\n"
-            f"User: {user_text}"
+            + followup_rule
+            + "Use off_topic only when the user is clearly changing topic to something unrelated "
+            "to care — e.g. weather, sports scores, politics, coding homework, random chit-chat "
+            "with no medication or health angle. If there is any health or medication angle, "
+            "prefer general_question or the best matching clinical intent, not off_topic."
         )
+        if recent_context:
+            prompt = (
+                f"{base}\n\n"
+                "Recent conversation (for context only; classify only the latest user line below):\n"
+                f"{recent_context}\n\n"
+                f"Latest user message to classify:\n{user_text}"
+            )
+        else:
+            prompt = f"{base}\n\nUser: {user_text}"
         try:
             parsed: IntentClassification = self._generate_structured_sync(
                 self._model, prompt, IntentClassification
@@ -149,8 +163,10 @@ class OpenAILLM(LLMPort):
             return Intent.GENERAL_QUESTION
         return _map_intent_label(parsed.intent)
 
-    async def classify_intent(self, user_text: str) -> Intent:
-        return await asyncio.to_thread(self._classify_sync, user_text)
+    async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+        return await asyncio.to_thread(
+            self._classify_sync, user_text, recent_context=recent_context
+        )
 
     def _extract_locale_intent_sync(self, user_text: str) -> str | None:
         prompt = (
@@ -180,9 +196,10 @@ class OpenAILLM(LLMPort):
         drug_grounding: str | None,
         history: list[ConversationTurn],
         user_message: str,
+        locale: str,
     ) -> str:
         hist_lines = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
-        loc = self._locale
+        loc = locale or self._locale
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
         prompt = (
             f"{system_persona}\n\n"
@@ -202,6 +219,7 @@ class OpenAILLM(LLMPort):
         drug_grounding: str | None,
         history: list[ConversationTurn],
         user_message: str,
+        locale: str,
     ) -> str:
         return await asyncio.to_thread(
             self._compose_sync,
@@ -210,15 +228,16 @@ class OpenAILLM(LLMPort):
             drug_grounding=drug_grounding,
             history=history,
             user_message=user_message,
+            locale=locale,
         )
 
-    def _simplify_sync(self, raw_label: str) -> str:
-        loc = self._locale
+    def _simplify_sync(self, raw_label: str, *, locale: str) -> str:
+        loc = locale or self._locale
         prompt = f"{t('gemini.simplify_intro', locale=loc)}{raw_label}"
         return self._generate_sync(self._model, prompt)
 
-    async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str:
-        return await asyncio.to_thread(self._simplify_sync, raw_label)
+    async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str:
+        return await asyncio.to_thread(self._simplify_sync, raw_label, locale=locale)
 
     def _extract_medication_sync(self, user_text: str, locale: str) -> MedicationDraft | None:
         loc = locale
@@ -354,6 +373,7 @@ class OpenAILLM(LLMPort):
         prompt = (
             f"{persona}\n\n"
             f"{t('gemini.medication_companion_interactions', locale=loc)}\n\n"
+            f"{t('gemini.interaction_structured_output_note', locale=loc)}\n\n"
             f"Patient context:\n{patient_context}\n\n"
             f"Current medications:\n{med_list}\n\n"
             f"Drug reference data:\n{grounding}\n\n"
