@@ -12,6 +12,23 @@ This document summarizes behaviors the codebase implements today: what the user 
 
 **Process:** The webhook ensures a user record exists (`get_or_create_user`), then sends a fixed welcome string from i18n (not the full assistant turn).
 
+**Welcome copy (English, example):**
+
+> Welcome to MedBuddy! I'll help you remember your medications and answer any medication-related questions (this does not replace doctor's or pharmacist's instructions). Please also let me know what you'd like to hear in one sentence: your preferred name, age (optional), family contact information, or any allergies/important health conditions—just type it out and send it to me; I can add it later.
+
+**Welcome copy (简体中文, example):**
+
+> 欢迎使用 MedBuddy！我会帮您记住用药安排，并回答与用药相关的问题（不能替代医生或药师的医嘱）。请用一句话告诉我您希望我了解的内容，例如：您希望我怎么称呼您、年龄（选填）、家属联系方式，或过敏史 / 重要健康状况——直接打字发给我即可，我稍后可以帮您录入。
+
+**One-line user replies (简体中文 examples):**
+
+- 叫我老王就行，今年 62 岁。
+- 请叫我李阿姨；有事联系我儿子张伟，手机 138-xxxx-xxxx。
+- 我对青霉素过敏，吃头孢要小心。
+- 我有糖尿病和高血压，平时吃二甲双胍和缬沙坦。
+- 叫我小陈，30 岁；家属电话：我爱人 139-xxxx-xxxx；我对海鲜过敏，有哮喘。
+- 叫我张叔；儿子电话 138-xxxx-xxxx；无过敏。
+
 ---
 
 ### LINE: text message
@@ -120,8 +137,19 @@ Classification is done by the configured **LLM** (e.g. Gemini) or **mock rules**
 | Turns | `conversation_turns` | Recent dialogue for the LLM |
 | Reference | `drug_reference_cache` | Shared label snippets per `source` + normalized `query_key` |
 | Personalization | `drug_personalization_cache` | Per-user LLM answer for explain/interaction fingerprints; **`llm_meta.source`** is **`openfda`** / **`tfda`** when label snippets were used, else the **LLM model id** (model-only grounding) |
+| Dose reminders | `dose_events`, **`users.timezone`** | Prototype LINE **push** at **`scheduled_at`** via **arq** + **`REDIS_URL`** after add/remove medication; see **[`docs/reminders.md`](reminders.md)** |
 
 Without Supabase, users/conversations stay in memory and **drug_caches** / **CachingDrugData** are not wired.
+
+---
+
+## LINE: dose reminder pushes (prototype)
+
+**Trigger:** Successful **add medication** or **remove medication** via [`try_medication_intents`](../apps/backend/src/medbuddy/application/medication_intents.py) (LINE text/voice and any channel that uses the same handler).
+
+**Behavior (Supabase + Redis):** Upcoming **`dose_events`** rows are recreated; deferred **arq** jobs send a **LINE push** around each **`scheduled_at`**, then set **`reminder_sent_at`**. Free-text **`schedule`** is echoed in the message but does not drive multiple times per day in v1.
+
+**Full reference:** architecture, schema, env vars, Render worker, Compose profile, reconcile endpoint — **[`docs/reminders.md`](reminders.md)**.
 
 ---
 

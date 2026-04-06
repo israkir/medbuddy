@@ -101,6 +101,24 @@ With `MOCK_EXTERNAL_SERVICES=true`, HMAC verification is skipped if `LINE_CHANNE
 Protocol definitions: [`src/medbuddy/protocols/ports.py`](src/medbuddy/protocols/ports.py).
 Intent overrides without changing routing: [`src/medbuddy/extensibility/intent_hooks.py`](src/medbuddy/extensibility/intent_hooks.py).
 
+## LINE dose reminders (prototype)
+
+When **Supabase** backs users/medications, **add** and **remove** medication intents call **`sync_upcoming_dose_events`**: future **`dose_events`** are recreated from each medication using a **once-daily local time** (**`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`**, default `09:00`) in the user’s **`timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default `14`). If **`REDIS_URL`** is set and **arq** is installed (`pip install -e ".[reminders]"`; the [repo-root `Dockerfile`](../../Dockerfile) includes this extra), the API enqueues **`send_reminder_for_dose`** jobs with **`_defer_until = scheduled_at`** (UTC). A **separate worker process** must run:
+
+```bash
+# After pip install -e ".[dev,reminders,supabase]" or production equivalents
+export REDIS_URL=redis://127.0.0.1:6379
+arq medbuddy.reminders.worker.WorkerSettings
+```
+
+The worker runs [`deliver_dose_reminder`](src/medbuddy/reminders/deliver.py) (**LINE push**, then **`reminder_sent_at`**). **Push copy** comes from **`reminder.line_push`** in locale JSON.
+
+**Container image:** production worker image is built from the repo-root **[`Dockerfile.reminder-worker`](../../Dockerfile.reminder-worker)** (same Python deps as the API image; **`CMD`** is **`arq medbuddy.reminders.worker.WorkerSettings`**). Local stack: **`podman compose --profile reminders up --build`** (see root [`compose.yaml`](../../compose.yaml)) and set **`REDIS_URL=redis://redis:6379`** for **`medbuddy-api`** when that profile is active so the API can enqueue jobs.
+
+Optional safety net: **`POST /internal/reminders/reconcile`** with header **`X-Cron-Secret`** matching **`MEDBUDDY_CRON_SECRET`** re-enqueues jobs for rows that are due but never marked sent (e.g. after Redis or worker restarts). See [`.env.example`](.env.example).
+
+**Long-form doc:** [`docs/reminders.md`](../../docs/reminders.md) (architecture, schema, operations, code map).
+
 ## Quick start (Podman)
 
 From the **repository root**:
@@ -123,14 +141,16 @@ LINE webhook: `POST http://localhost:8000/v1/line/webhook`
 
 The repo includes a [**Blueprint**](https://render.com/docs/infrastructure-as-code) at [`render.yaml`](../../render.yaml) and a repo-root **[`Dockerfile`](../../Dockerfile)** — Render’s default **Dockerfile path** is **`./Dockerfile`** relative to the repo root; the **build context** must be the **repository root** (so `COPY apps/backend/...` works). [Render](https://render.com/) injects **`PORT`** at runtime and **`RENDER=true`**; the image listens on **`${PORT:-8000}`** and uses **`GET /health`** for health checks. When **`RENDER`** is set, [`Settings`](src/medbuddy/config.py) **always** uses real integrations (`MOCK_EXTERNAL_SERVICES=false`), turns **`DEBUG`** off, and treats **`MEDBUDDY_INTEGRATION=mock`** as **`real`** so a mis-set dashboard env cannot enable mocks.
 
-1. **Create the service** — Render Dashboard → **New** → **Blueprint** → connect the repo and apply `render.yaml`, or **New** → **Web Service** → **Docker** → leave **Dockerfile Path** as **`Dockerfile`** and use the **repo root** as context (do not set **Root Directory** to `apps/backend` for the Docker build).
-2. **Environment** — In the service **Environment** tab, set **`PUBLIC_BASE_URL`** to your HTTPS base URL (e.g. `https://medbuddy-api.onrender.com`). Fill in **`LINE_CHANNEL_*`**, **`GEMINI_API_KEY`**, optional Supabase and Whisper URLs, **`MEDBUDDY_MOBILE_BEARER_TOKEN`**, etc. (see [`.env.example`](.env.example)). Keys marked `sync: false` in `render.yaml` are intentionally set only in the dashboard.
-3. **LINE** — Webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
-4. **Mobile / clients** — Point API calls at the same **`PUBLIC_BASE_URL`**; use **`GET /v1/app/health`** or **`GET /health`** for checks.
+1. **Create services** — Render Dashboard → **New** → **Blueprint** → connect the repo and apply [`render.yaml`](../../render.yaml). That defines **`medbuddy-api`** (web, **`Dockerfile`**) and **`medbuddy-reminder-worker`** (background worker, **`Dockerfile.reminder-worker`**). Workers cannot use Render’s **free** instance type; the blueprint uses **`plan: starter`** for the worker.
+2. **Redis** — Create **Render Key Value** (or use Upstash) and set the same **`REDIS_URL`** on **both** the web service and the worker so the API can enqueue arq jobs and the worker can consume them.
+3. **Environment** — For **each** service, set dashboard secrets (`sync: false` in the blueprint): **`PUBLIC_BASE_URL`**, **`LINE_CHANNEL_*`**, **`GEMINI_API_KEY`**, Supabase keys, **`MEDBUDDY_MOBILE_BEARER_TOKEN`**, **`REDIS_URL`**, optional **`MEDBUDDY_CRON_SECRET`** for **`POST /internal/reminders/reconcile`**, etc. (see [`.env.example`](.env.example)).
+4. **LINE** — Webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
+5. **Mobile / clients** — Point API calls at the same **`PUBLIC_BASE_URL`**; use **`GET /v1/app/health`** or **`GET /health`** for checks.
 
 **Without Docker:** use a **Python** runtime with **root directory** `apps/backend`, build command
-`pip install --upgrade pip && pip install ".[llm,supabase,tts]"`, and start command
-`uvicorn medbuddy.main:app --host 0.0.0.0 --port $PORT`.
+`pip install --upgrade pip && pip install ".[llm,supabase,tts,reminders]"`, start command
+`uvicorn medbuddy.main:app --host 0.0.0.0 --port $PORT`, and a **second** service or task running
+`arq medbuddy.reminders.worker.WorkerSettings` with the same env (**`REDIS_URL`**, Supabase keys, **`LINE_CHANNEL_ACCESS_TOKEN`**).
 
 ## Development (without Make)
 

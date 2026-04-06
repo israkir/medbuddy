@@ -4,9 +4,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
+  View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +18,15 @@ import { Text } from '@/components/Themed';
 import { fontSize, MIN_TOUCH } from '@/constants/accessibility';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { submitOnboarding } from '@/lib/companionApi';
+import { submitOnboarding, type ProfileGender } from '@/lib/companionApi';
+
+const GENDER_OPTIONS: ProfileGender[] = [
+  'female',
+  'male',
+  'non_binary',
+  'other',
+  'prefer_not_say',
+];
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
@@ -26,6 +36,7 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [ageText, setAgeText] = useState('');
+  const [gender, setGender] = useState<ProfileGender | null>(null);
   const [contact, setContact] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,6 +57,7 @@ export default function OnboardingScreen() {
       await submitOnboarding({
         preferred_name: trimmedName,
         age_years,
+        gender,
         emergency_contact: contact.trim(),
         health_notes: notes.trim(),
       });
@@ -56,7 +68,7 @@ export default function OnboardingScreen() {
     } finally {
       setBusy(false);
     }
-  }, [ageText, busy, contact, name, notes, router, t]);
+  }, [ageText, busy, contact, gender, name, notes, router, t]);
 
   return (
     <>
@@ -119,6 +131,42 @@ export default function OnboardingScreen() {
             ]}
             accessibilityLabel={t('onboarding.ageLabel')}
           />
+
+          <Text style={[styles.label, { color: palette.text }]} maxFontSizeMultiplier={1.45}>
+            {t('onboarding.genderLabel')}
+          </Text>
+          <Text
+            style={[styles.genderHint, { color: palette.textSecondary }]}
+            maxFontSizeMultiplier={1.45}>
+            {t('onboarding.genderHint')}
+          </Text>
+          <View style={styles.genderRow}>
+            {GENDER_OPTIONS.map((g) => {
+              const selected = gender === g;
+              return (
+                <Pressable
+                  key={g}
+                  onPress={() => setGender((prev) => (prev === g ? null : g))}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={t(`onboarding.genderOption.${g}`)}
+                  style={({ pressed }) => [
+                    styles.genderChip,
+                    {
+                      borderColor: palette.dockBorder,
+                      backgroundColor: selected ? palette.selectedBackground : palette.background,
+                      opacity: pressed ? 0.85 : 1,
+                    },
+                  ]}>
+                  <Text
+                    style={[styles.genderChipText, { color: palette.text }]}
+                    maxFontSizeMultiplier={1.45}>
+                    {t(`onboarding.genderOption.${g}`)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           <Text style={[styles.label, { color: palette.text }]} maxFontSizeMultiplier={1.45}>
             {t('onboarding.contactLabel')}
@@ -200,6 +248,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     marginTop: 14,
+  },
+  genderHint: {
+    fontSize: fontSize.caption - 1,
+    lineHeight: 22,
+    marginBottom: 10,
+    marginTop: -4,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  genderChip: {
+    minHeight: MIN_TOUCH - 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+  },
+  genderChipText: {
+    fontSize: fontSize.caption,
+    fontWeight: '600',
   },
   input: {
     minHeight: MIN_TOUCH,

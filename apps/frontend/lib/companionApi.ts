@@ -9,10 +9,19 @@ import {
 
 const ONBOARDING_STORAGE_KEY = 'medbuddy.onboarding_profile.v1';
 
+/** Mirrors backend `ProfileGender` (onboarding / profile patch). */
+export type ProfileGender =
+  | 'female'
+  | 'male'
+  | 'non_binary'
+  | 'prefer_not_say'
+  | 'other';
+
 export type MeProfile = {
   app_user_id: string;
   preferred_name?: string | null;
   age_years?: number | null;
+  gender?: ProfileGender | string | null;
   emergency_contact?: string | null;
   health_notes?: string | null;
   onboarding_completed_at?: string | null;
@@ -36,6 +45,7 @@ function emptyProfile(): MeProfile {
     app_user_id: appUserId,
     preferred_name: null,
     age_years: null,
+    gender: null,
     emergency_contact: null,
     health_notes: null,
     onboarding_completed_at: null,
@@ -72,6 +82,7 @@ export async function fetchMeProfile(): Promise<MeProfile> {
 export type OnboardingPayload = {
   preferred_name: string;
   age_years: number | null;
+  gender: ProfileGender | null;
   emergency_contact: string;
   health_notes: string;
 };
@@ -80,6 +91,7 @@ export async function submitOnboarding(payload: OnboardingPayload): Promise<MePr
   const body = {
     preferred_name: payload.preferred_name.trim(),
     age_years: payload.age_years,
+    gender: payload.gender,
     emergency_contact: payload.emergency_contact.trim() || null,
     health_notes: payload.health_notes.trim() || null,
   };

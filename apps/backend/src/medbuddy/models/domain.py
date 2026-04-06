@@ -53,6 +53,19 @@ class MedicationRecord:
     raw_metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class DoseEventReminderPayload:
+    """Fields needed to send a LINE push for one scheduled dose."""
+
+    dose_event_id: str
+    line_user_id: str
+    medication_name: str
+    dosage: str
+    schedule: str
+    scheduled_at: datetime
+    user_timezone: str
+
+
 @dataclass
 class ConversationTurn:
     role: str  # "user" | "assistant"

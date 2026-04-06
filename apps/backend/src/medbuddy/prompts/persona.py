@@ -4,6 +4,25 @@ from typing import Any
 
 from medbuddy.i18n import t
 
+_PROFILE_GENDER_I18N: dict[str, str] = {
+    "female": "prompts.gender_option_female",
+    "male": "prompts.gender_option_male",
+    "non_binary": "prompts.gender_option_non_binary",
+    "prefer_not_say": "prompts.gender_option_prefer_not_say",
+    "other": "prompts.gender_option_other",
+}
+
+
+def normalized_profile_gender(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    g = value.strip().lower()
+    return g if g in _PROFILE_GENDER_I18N else None
+
+
+def gender_option_label(gender_key: str, *, locale: str) -> str:
+    return t(_PROFILE_GENDER_I18N[gender_key], locale=locale)
+
 
 def _age_band_label(age: int, *, locale: str) -> str:
     if age >= 90:
@@ -38,6 +57,7 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
     """Plain-language facts from light onboarding (name, age, notes). Empty if unset."""
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
+    gender_key = normalized_profile_gender(user_row.get("gender"))
     notes = user_row.get("health_notes")
     contact = user_row.get("emergency_contact")
     parts: list[str] = []
@@ -45,6 +65,14 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
         parts.append(t("prompts.demographics_name", locale=locale, name=name.strip()))
     if isinstance(age, int):
         parts.append(t("prompts.demographics_age", locale=locale, age=age))
+    if gender_key:
+        parts.append(
+            t(
+                "prompts.demographics_gender",
+                locale=locale,
+                label=gender_option_label(gender_key, locale=locale),
+            )
+        )
     if isinstance(notes, str) and notes.strip():
         parts.append(t("prompts.demographics_notes", locale=locale, notes=notes.strip()))
     if isinstance(contact, str) and contact.strip():
@@ -59,6 +87,7 @@ def format_patient_profile_signals_for_llm(user_row: dict[str, Any], *, locale: 
     """Coarse cues for the model without names, free-text health data, or contact strings."""
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
+    gender_key = normalized_profile_gender(user_row.get("gender"))
     notes = user_row.get("health_notes")
     contact = user_row.get("emergency_contact")
     parts: list[str] = []
@@ -70,6 +99,14 @@ def format_patient_profile_signals_for_llm(user_row: dict[str, Any], *, locale: 
                 "prompts.llm_signal_age_band",
                 locale=locale,
                 band=_age_band_label(age, locale=locale),
+            )
+        )
+    if gender_key:
+        parts.append(
+            t(
+                "prompts.llm_signal_gender",
+                locale=locale,
+                label=gender_option_label(gender_key, locale=locale),
             )
         )
     if isinstance(notes, str) and notes.strip():
@@ -86,6 +123,7 @@ def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
     """List profile dimensions not stored yet (so the model can ask when helpful)."""
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
+    gender_key = normalized_profile_gender(user_row.get("gender"))
     notes = user_row.get("health_notes")
     contact = user_row.get("emergency_contact")
     gaps: list[str] = []
@@ -93,6 +131,8 @@ def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
         gaps.append(t("prompts.gap_preferred_name", locale=locale))
     if not isinstance(age, int):
         gaps.append(t("prompts.gap_age", locale=locale))
+    if not gender_key:
+        gaps.append(t("prompts.gap_gender", locale=locale))
     if not (isinstance(contact, str) and contact.strip()):
         gaps.append(t("prompts.gap_contact", locale=locale))
     if not (isinstance(notes, str) and notes.strip()):

@@ -7,6 +7,7 @@ from medbuddy.i18n import t
 from medbuddy.models.domain import Intent
 from medbuddy.privacy.profile_parse import parse_profile_patch_from_text
 from medbuddy.protocols.ports import ProfilePatch
+from medbuddy.prompts.persona import gender_option_label, normalized_profile_gender
 
 
 def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
@@ -27,6 +28,16 @@ def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
         n = patch["health_notes"]
         if isinstance(n, str) and n.strip():
             parts.append(t("profile.ack_notes", locale=locale, notes=n.strip()))
+    if "gender" in patch:
+        gk = normalized_profile_gender(patch.get("gender"))
+        if gk:
+            parts.append(
+                t(
+                    "profile.ack_gender",
+                    locale=locale,
+                    label=gender_option_label(gk, locale=locale),
+                )
+            )
     sep = t("profile.ack_sep", locale=locale)
     return sep.join(parts)
 
@@ -43,7 +54,8 @@ async def try_profile_intent_reply(
         return None
     raw_patch = parse_profile_patch_from_text(user_text)
     patch: ProfilePatch = {}
-    for key in ("preferred_name", "age_years", "emergency_contact", "health_notes"):
+    allowed_gender = {"female", "male", "non_binary", "prefer_not_say", "other"}
+    for key in ("preferred_name", "age_years", "gender", "emergency_contact", "health_notes"):
         if key not in raw_patch:
             continue
         val = raw_patch[key]
@@ -56,6 +68,13 @@ async def try_profile_intent_reply(
                 ai = int(val)
                 if 0 <= ai <= 120:
                     patch[key] = ai
+        elif key == "gender":
+            if isinstance(val, str):
+                g = val.strip().lower().replace("-", "_")
+                if g == "nonbinary":
+                    g = "non_binary"
+                if g in allowed_gender:
+                    patch[key] = g
         elif isinstance(val, str) and val.strip():
             patch[key] = val.strip()
     if not patch:

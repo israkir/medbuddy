@@ -135,6 +135,35 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MEDBUDDY_MOBILE_BEARER_TOKEN", "mobile_bearer_token"),
     )
 
+    redis_url: str = Field(
+        default="",
+        description="Redis DSN for arq reminder jobs (e.g. redis://localhost:6379)",
+        validation_alias=AliasChoices("REDIS_URL", "redis_url"),
+    )
+
+    cron_secret: str = Field(
+        default="",
+        description="Shared secret for POST /internal/reminders/reconcile (X-Cron-Secret header)",
+        validation_alias=AliasChoices("MEDBUDDY_CRON_SECRET", "cron_secret"),
+    )
+
+    reminder_default_local_time: str = Field(
+        default="09:00",
+        description="Local clock time (HH:MM) for once-daily dose reminder instants",
+        validation_alias=AliasChoices(
+            "MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME",
+            "reminder_default_local_time",
+        ),
+    )
+
+    reminder_horizon_days: int = Field(
+        default=14,
+        ge=1,
+        le=90,
+        description="Calendar days ahead to materialize dose_events per medication",
+        validation_alias=AliasChoices("MEDBUDDY_REMINDER_HORIZON_DAYS", "reminder_horizon_days"),
+    )
+
     @model_validator(mode="after")
     def _apply_integration_switch(self) -> Self:
         """MEDBUDDY_INTEGRATION wins over MOCK_EXTERNAL_SERVICES when set."""

@@ -1,4 +1,5 @@
 # Podman Compose: `podman compose up --build` (from repository root)
+# Reminder worker + Redis: `podman compose --profile reminders up --build`
 services:
   medbuddy-api:
     build:
@@ -13,3 +14,28 @@ services:
       PUBLIC_BASE_URL: "http://localhost:8000"
       LINE_CHANNEL_SECRET: ""
       LINE_CHANNEL_ACCESS_TOKEN: ""
+      REDIS_URL: "${REDIS_URL:-}"
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    profiles: ["reminders"]
+    ports:
+      - "6379:6379"
+
+  medbuddy-reminder-worker:
+    profiles: ["reminders"]
+    build:
+      context: .
+      dockerfile: Dockerfile.reminder-worker
+    environment:
+      MEDBUDDY_INTEGRATION: "${MEDBUDDY_INTEGRATION:-mock}"
+      MOCK_EXTERNAL_SERVICES: "${MOCK_EXTERNAL_SERVICES:-true}"
+      PUBLIC_BASE_URL: "http://localhost:8000"
+      LINE_CHANNEL_SECRET: "${LINE_CHANNEL_SECRET:-}"
+      LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_PUBLISHABLE_KEY: "${SUPABASE_PUBLISHABLE_KEY:-}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
+      MEDBUDDY_LOCALE: "${MEDBUDDY_LOCALE:-zh-TW}"
+    depends_on:
+      - redis

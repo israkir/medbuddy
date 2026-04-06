@@ -43,18 +43,23 @@
     "removed": "Removed from your list: {name}.",
     "remove_not_found": "I could not find that medication. Say the name or ask for your list."
   },
+  "reminder": {
+    "line_push": "Reminder ({time_local}): time for {name} ({dosage}). On your schedule: {schedule}. If unsure, check with your pharmacist or clinician."
+  },
   "prompts": {
-    "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.\nProfile “signals” may appear: whether a preferred name is stored, an approximate age band (not exact age), and whether health notes or an emergency contact exist—the underlying text is **not** shown to you. Never use or guess names, phone numbers, addresses, IDs, or note contents; greet generically (e.g. a polite “您好”). For safety, if signals indicate allergy/health notes on file, remind in general terms to follow clinician advice and known allergies—do not fabricate specifics.\nIf items are listed as not yet on file, you may gently ask for one relevant missing piece when it helps safety or care—one question at a time.",
+    "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.\nProfile “signals” may appear: whether a preferred name is stored, an approximate age band (not exact age), a self-reported sex/gender category (for general medication context), and whether health notes or an emergency contact exist—the underlying text of notes and contacts is **not** shown to you. Never use or guess names, phone numbers, addresses, IDs, or note contents; greet generically (e.g. a polite “您好”). For safety, if signals indicate allergy/health notes on file, remind in general terms to follow clinician advice and known allergies—do not fabricate specifics.\nIf items are listed as not yet on file, you may gently ask for one relevant missing piece when it helps safety or care—one question at a time.",
     "no_medications": "(No medication list on file yet.)",
     "medication_line": "- {name}: dose {dosage}; schedule {schedule}",
     "demographics_header": "About this person (from their profile):",
     "demographics_name": "- They asked to be called: {name}",
     "demographics_age": "- Age: {age}",
+    "demographics_gender": "- Sex / gender: {label}",
     "demographics_notes": "- Health notes they shared: {notes}",
     "demographics_contact": "- Family / emergency contact: {contact}",
     "profile_gaps_intro": "(Profile not yet on file; when relevant to safety or personalization, you may gently ask for one item at a time)",
     "gap_preferred_name": "- Preferred name / how to address them: not stored yet",
     "gap_age": "- Age: not stored yet",
+    "gap_gender": "- Sex / gender: not stored yet",
     "gap_contact": "- Family or emergency contact: not stored yet",
     "gap_health_notes": "- Allergies or important health notes: not stored yet",
     "llm_profile_signals_header": "Profile signals (no name, phone, raw notes, or exact age; for tone and safety only):",
@@ -63,7 +68,13 @@
     "llm_signal_age_band_range": "about {low}–{high} years",
     "llm_signal_age_band_90_plus": "about 90 or older",
     "llm_signal_has_health_notes": "Health/allergy notes are on file (text not shared—give high-level safety guidance; do not invent details)",
-    "llm_signal_has_emergency_contact": "Emergency / family contact is on file (details not shared)"
+    "llm_signal_has_emergency_contact": "Emergency / family contact is on file (details not shared)",
+    "llm_signal_gender": "Self-reported sex / gender: {label} (general context only—not a full clinical history)",
+    "gender_option_female": "Female",
+    "gender_option_male": "Male",
+    "gender_option_non_binary": "Non-binary",
+    "gender_option_prefer_not_say": "Prefer not to say",
+    "gender_option_other": "Other / self-described"
   },
   "profile": {
     "ack_sep": ", ",
@@ -71,8 +82,9 @@
     "ack_age": "age {age}",
     "ack_contact": "emergency contact “{contact}”",
     "ack_notes": "health notes “{notes}”",
+    "ack_gender": "sex/gender “{label}”",
     "updated": "Got it—I have saved: {summary}. You can update anytime.",
-    "update_unclear": "Could you share in one short message: what to call you, your age (optional), a family or emergency contact, or allergies / important health notes? For example: “My name is Mei, I’m 72.”"
+    "update_unclear": "Could you share in one short message: what to call you, your age (optional), sex or gender if you like, a family or emergency contact, or allergies / important health notes? For example: “My name is Mei, I’m 72.”"
   },
   "tests": {
     "intent_hook_reply": "(hook) Doctor summary will be available later."
