@@ -47,10 +47,7 @@ def build_app_services(settings: Settings) -> AppServices:
         msg = "LINE channel access token is required when MOCK_EXTERNAL_SERVICES=false"
         raise ValueError(msg)
 
-    line = LineHttpClient(
-        channel_access_token=settings.line_channel_access_token,
-        locale=settings.locale,
-    )
+    line = LineHttpClient(channel_access_token=settings.line_channel_access_token)
     storage: LocalPublicObjectStorage | MockObjectStorage
     if settings.public_base_url:
         storage = LocalPublicObjectStorage(public_base_url=settings.public_base_url)

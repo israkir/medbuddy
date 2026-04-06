@@ -13,7 +13,7 @@ from medbuddy.integrations.supabase_stores import (
     _parse_ts,
     _user_row_to_dict,
 )
-from medbuddy.models.domain import ConversationTurn
+from medbuddy.models.domain import ConversationTurn, MedicationDraft
 
 
 def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
@@ -21,12 +21,10 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
         {
             "id": "11111111-1111-1111-1111-111111111111",
             "external_user_id": "U-line",
-            "consent_accepted": True,
         }
     )
     assert d["id"] == "11111111-1111-1111-1111-111111111111"
     assert d["line_user_id"] == "U-line"
-    assert d["consent_accepted"] is True
 
 
 def test_parse_ts_iso_z() -> None:
@@ -47,7 +45,6 @@ async def test_get_or_create_user_uses_existing_row() -> None:
             {
                 "id": "00000000-0000-0000-0000-000000000001",
                 "external_user_id": "ext-1",
-                "consent_accepted": False,
             }
         ]
     )
@@ -75,7 +72,6 @@ async def test_get_or_create_user_inserts_when_missing() -> None:
                 {
                     "id": "00000000-0000-0000-0000-000000000002",
                     "external_user_id": "ext-2",
-                    "consent_accepted": False,
                 }
             ]
         ),
@@ -99,7 +95,6 @@ async def test_append_turn_inserts_with_resolved_user_id() -> None:
             {
                 "id": "00000000-0000-0000-0000-000000000003",
                 "external_user_id": "ext-3",
-                "consent_accepted": True,
             }
         ]
     )
@@ -127,3 +122,90 @@ async def test_append_turn_inserts_with_resolved_user_id() -> None:
     assert call_kw["user_id"] == "00000000-0000-0000-0000-000000000003"
     assert call_kw["role"] == "user"
     assert call_kw["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_add_medication_inserts_row() -> None:
+    user_builder = MagicMock()
+    user_builder.select.return_value = user_builder
+    user_builder.eq.return_value = user_builder
+    user_builder.limit.return_value = user_builder
+    user_builder.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": "00000000-0000-0000-0000-000000000010",
+                "external_user_id": "ext-med",
+            }
+        ]
+    )
+
+    med_builder = MagicMock()
+    med_builder.insert.return_value = med_builder
+    med_builder.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "name": "Aspirin",
+                "dosage": "100mg",
+                "schedule": "after meal",
+                "instructions_zh": None,
+                "raw_metadata": {},
+            }
+        ]
+    )
+
+    def table(name: str) -> MagicMock:
+        if name == "users":
+            return user_builder
+        if name == "medications":
+            return med_builder
+        return MagicMock()
+
+    client = MagicMock()
+    client.table.side_effect = table
+
+    ud = SupabaseUserData(client)
+    rec = await ud.add_medication(
+        "ext-med",
+        MedicationDraft(name="Aspirin", dosage="100mg", schedule="after meal"),
+    )
+    assert rec.name == "Aspirin"
+    med_builder.insert.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_medication_deletes_when_match() -> None:
+    user_builder = MagicMock()
+    user_builder.select.return_value = user_builder
+    user_builder.eq.return_value = user_builder
+    user_builder.limit.return_value = user_builder
+    user_builder.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": "00000000-0000-0000-0000-000000000011",
+                "external_user_id": "ext-del",
+            }
+        ]
+    )
+
+    med_builder = MagicMock()
+    med_builder.delete.return_value = med_builder
+    med_builder.eq.return_value = med_builder
+    med_builder.execute.return_value = MagicMock(
+        data=[{"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}]
+    )
+
+    def table(name: str) -> MagicMock:
+        if name == "users":
+            return user_builder
+        if name == "medications":
+            return med_builder
+        return MagicMock()
+
+    client = MagicMock()
+    client.table.side_effect = table
+
+    ud = SupabaseUserData(client)
+    ok = await ud.delete_medication("ext-del", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    assert ok is True
+    med_builder.delete.assert_called_once()

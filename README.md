@@ -13,8 +13,8 @@ End users may interact through **LINE** and/or the mobile app; the backend separ
 
 | Layer | Role |
 |------|------|
-| **LINE Messaging API** | `POST /v1/line/webhook`; replies, quick-reply consent, audio messages |
-| **Standalone app HTTP** | `GET /v1/app/health`, `GET /v1/app/info` (public); `GET /v1/app/me`, `POST /v1/app/consent`, `POST /v1/app/messages` (Bearer + `X-App-User-Id`); shared assistant logic with LINE via `application/assistant_turn` |
+| **LINE Messaging API** | `POST /v1/line/webhook`; text/audio replies |
+| **Standalone app HTTP** | `GET /v1/app/health`, `GET /v1/app/info` (public); `GET /v1/app/me`, `POST /v1/app/messages` (Bearer + `X-App-User-Id`); shared assistant logic with LINE via `application/assistant_turn` |
 | **LLM** | Mock (tests) or **Google Gemini** when `GEMINI_API_KEY` is set and mocks are off |
 | **STT** | Mock or **Whisper HTTP** service when `WHISPER_SERVICE_URL` is set |
 | **TTS** | **edge-tts** with local temp URLs, or mock |

@@ -42,14 +42,36 @@ async def line_webhook(
     try:
         events = parser.parse(body_text, sig)
     except InvalidSignatureError as e:
+        log.warning("LINE webhook: invalid signature (check LINE_CHANNEL_SECRET vs console)")
         raise HTTPException(status_code=401, detail="invalid signature") from e
     except json.JSONDecodeError as e:
+        log.warning("LINE webhook: JSON parse failed: %s", e)
         raise HTTPException(status_code=400, detail="invalid json") from e
 
-    if _skip_line_signature_verification(settings):
-        log.debug("LINE signature verification skipped (mock without channel secret)")
+    skip_sig = _skip_line_signature_verification(settings)
+    if skip_sig:
+        log.warning(
+            "LINE webhook: signature verification skipped (mock mode without channel secret)"
+        )
+
+    log.info("LINE webhook: accepted batch, event_count=%d", len(events))
+    for i, event in enumerate(events):
+        payload = event.to_dict()
+        et = payload.get("type")
+        detail = ""
+        if et == "message":
+            m = payload.get("message") or {}
+            detail = f" message_type={m.get('type')!r}"
+        log.info(
+            "LINE webhook: event[%d] type=%s webhook_event_id=%r%s",
+            i,
+            et,
+            payload.get("webhookEventId"),
+            detail,
+        )
 
     for event in events:
         await handle_line_event(event.to_dict(), svc)
 
+    log.info("LINE webhook: batch completed OK")
     return {"status": "ok"}

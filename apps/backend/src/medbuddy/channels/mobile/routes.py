@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.channels.mobile.auth import MobileAuthContext, require_mobile_auth
-from medbuddy.channels.mobile.schemas import ConsentBody, MeResponse, MessageCreate, MessageReply
+from medbuddy.channels.mobile.schemas import MeResponse, MessageCreate, MessageReply
 from medbuddy.deps import get_services
 from medbuddy.engine.types import AppServices
 
@@ -43,22 +43,8 @@ async def app_me(
     svc: AppServices = Depends(get_services),
 ) -> MeResponse:
     """Current app user profile (backed by the same user store key as LINE ``userId``-style ids)."""
-    u = await svc.users.get_or_create_user(ctx.app_user_id)
-    return MeResponse(
-        app_user_id=ctx.app_user_id,
-        consent_accepted=bool(u.get("consent_accepted")),
-    )
-
-
-@router.post("/consent", status_code=204)
-async def app_consent(
-    body: ConsentBody,
-    ctx: MobileAuthContext = Depends(require_mobile_auth),
-    svc: AppServices = Depends(get_services),
-) -> Response:
-    """Record consent for this app user (required before ``POST /messages``)."""
-    await svc.users.set_consent(ctx.app_user_id, body.accepted)
-    return Response(status_code=204)
+    await svc.users.get_or_create_user(ctx.app_user_id)
+    return MeResponse(app_user_id=ctx.app_user_id)
 
 
 @router.post("/messages", response_model=MessageReply)
@@ -68,15 +54,7 @@ async def app_post_message(
     svc: AppServices = Depends(get_services),
 ) -> MessageReply:
     """Run one assistant turn (same core logic as LINE text messages)."""
-    u = await svc.users.get_or_create_user(ctx.app_user_id)
-    if not u.get("consent_accepted"):
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "consent_required",
-                "message": "Accept consent via POST /v1/app/consent first",
-            },
-        )
+    await svc.users.get_or_create_user(ctx.app_user_id)
     reply = await run_assistant_text_turn(
         svc,
         user_key=ctx.app_user_id,
