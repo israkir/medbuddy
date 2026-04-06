@@ -72,7 +72,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | Port | Mock (`MEDBUDDY_INTEGRATION=mock` or `MOCK_EXTERNAL_SERVICES=true`) | Real (`MEDBUDDY_INTEGRATION=real` or `MOCK_EXTERNAL_SERVICES=false`) |
 |------|----------------------------------------|------------------|
 | **LINE** | [`integrations/mocks/line.py`](src/medbuddy/integrations/mocks/line.py) — records replies | [`integrations/line_client.py`](src/medbuddy/integrations/line_client.py) — needs `LINE_CHANNEL_ACCESS_TOKEN` |
-| **LLM** | [`integrations/mocks/llm.py`](src/medbuddy/integrations/mocks/llm.py) | [`integrations/gemini_llm.py`](src/medbuddy/integrations/gemini_llm.py) — needs `GEMINI_API_KEY` (install with `pip install 'medbuddy-api[llm]'`) |
+| **LLM** | [`integrations/mocks/llm.py`](src/medbuddy/integrations/mocks/llm.py) | [`integrations/gemini_llm.py`](src/medbuddy/integrations/gemini_llm.py) (**`GEMINI_API_KEY`**, default) or [`integrations/openai_llm.py`](src/medbuddy/integrations/openai_llm.py) (**`LLM_PROVIDER=openai`**, **`OPENAI_API_KEY`**, optional **`OPENAI_MODEL`**) — install with `pip install 'medbuddy-api[llm]'` |
 | **STT** | [`integrations/mocks/stt.py`](src/medbuddy/integrations/mocks/stt.py) | [`integrations/stt_whisper.py`](src/medbuddy/integrations/stt_whisper.py) — needs `WHISPER_SERVICE_URL` |
 | **TTS** | [`integrations/mocks/tts.py`](src/medbuddy/integrations/mocks/tts.py) | [`integrations/edge_tts_service.py`](src/medbuddy/integrations/edge_tts_service.py) — optional `edge-tts` extra |
 | **Drugs** | [`integrations/mocks/drugs.py`](src/medbuddy/integrations/mocks/drugs.py) | [`integrations/drugs_http.py`](src/medbuddy/integrations/drugs_http.py) — OpenFDA HTTP + TFDA stub |
@@ -84,7 +84,8 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 - **`MOCK_EXTERNAL_SERVICES`** — default **`false`** (real adapters). Use **`true`** (or **`make be-dev-mock`**) for local dev without LINE tokens; tests set mocks explicitly.
 - **`LINE_CHANNEL_SECRET`**, **`LINE_CHANNEL_ACCESS_TOKEN`** — required for real LINE when mocks are off.
 - **`PUBLIC_BASE_URL`** — HTTPS base for audio URLs LINE can fetch.
-- **`GEMINI_API_KEY`**, **`WHISPER_SERVICE_URL`** — optional real LLM/STT when not using mocks.
+- **`GEMINI_API_KEY`**, **`LLM_PROVIDER`** (**`gemini`** | **`openai`**), **`OPENAI_API_KEY`**, **`OPENAI_MODEL`** — optional real LLM when not using mocks.
+- **`WHISPER_SERVICE_URL`** — optional real STT when not using mocks.
 - **`SUPABASE_URL`**, **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_KEY`**) — optional Postgres persistence via the low-privilege key; never use **`service_role`** in app code ([API keys](https://supabase.com/docs/guides/api/api-keys)).
 
 With `MOCK_EXTERNAL_SERVICES=true`, HMAC verification is skipped if `LINE_CHANNEL_SECRET` is empty. Set real LINE secrets and `MOCK_EXTERNAL_SERVICES=false` for integration against LINE APIs.

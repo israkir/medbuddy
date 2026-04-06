@@ -69,9 +69,7 @@ class InteractionCheckResult(BaseModel):
     overall_severity: str = Field(
         description="Worst severity across all interactions: none, mild, moderate, severe"
     )
-    summary: str = Field(
-        description="One-paragraph plain-language summary for the patient"
-    )
+    summary: str = Field(description="One-paragraph plain-language summary for the patient")
     disclaimer: str = Field(
         description="Standard disclaimer reminding patient to consult their doctor"
     )
