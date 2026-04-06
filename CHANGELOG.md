@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **`docs/features.md`**, **`docs/architecture.md`**, **`docs/reminders.md`**, **`docs/use-cases.md`**, **`README.md`**, **`apps/backend/README.md`**, **`apps/frontend/README.md`**, **`apps/backend/.env.example`**: document **`users.timezone`**, **`GET/POST /v1/app/onboarding`** **`timezone`**, and reminder scheduling vs env vars (**`MEDBUDDY_REMINDER_*`** are local clock + horizon only).
+
 ### Added
 
+- **User timezone**: Shared helpers in **`medbuddy.user_timezone`** (default **`Asia/Taipei`**); **`POST /v1/app/onboarding`** accepts optional **`timezone`** (validated IANA); **`GET /v1/app/me`** returns **`timezone`**. Supabase **`users.timezone`** column comment documents reminder use (existing default **`Asia/Taipei`**).
 - **LINE reminders**: Medication extraction now returns structured **reminder preferences** (first reminder in N minutes, whether to materialize daily rows, explicit horizon days 1–90, whether to ask the user for horizon, optional daily HH:MM). Values are stored in **`medications.raw_metadata.reminder`** and drive **`dose_events`** materialization (e.g. “in 5 minutes” → a single upcoming event ~5 minutes ahead without fanning 14 days). The **compose** prompt receives appendix text so the model can confirm one-off timing or ask how many days of daily reminders the user wants. **`MEDBUDDY_REMINDER_*`** env defaults apply when the LLM leaves fields unset; updating prefs from a follow-up user message is not implemented yet.
 - **OpenAI**: optional Chat Completions LLM adapter (`OpenAILLM`, default model `gpt-4.1-mini`) implementing the same `LLMPort` contract as Gemini. Set **`LLM_PROVIDER=openai`**, **`OPENAI_API_KEY`**, and optionally **`OPENAI_MODEL`**; **`Settings.active_llm_model_id`** supplies drug-cache provenance. The **`llm`** optional dependency group now includes **`openai`**.
 
 ### Changed
 
+- **Profile / reminders**: **`users.timezone`** (IANA, default **`Asia/Taipei`** in Supabase) is set on **`POST /v1/app/onboarding`** (optional **`timezone`**; standalone app sends the device zone) and drives **`dose_events`** scheduling and LINE reminder clock text. **`GET /v1/app/me`** includes **`timezone`**. **`MEDBUDDY_REMINDER_TIMEZONE`** was removed; use per-user **`users.timezone`** (and **`patch_user_profile`** / **`timezone`**) for travel.
 - **Deploy**: **`render.yaml`** blueprint default **`LLM_PROVIDER`** is **`openai`** (set **`OPENAI_API_KEY`** in Render secrets; use **`gemini`** here if the service should use **`GEMINI_API_KEY`** instead).
 - **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).
 
@@ -94,9 +100,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with Pydantic validation; **Bearer** auth (`MEDBUDDY_MOBILE_BEARER_TOKEN`) and **`X-App-User-Id`**
   header (optional Bearer when `MOCK_EXTERNAL_SERVICES=true` for local dev).
 - **Standalone app onboarding**: First-launch screen (`app/onboarding.tsx`, gate in `app/_layout.tsx`)
-  with large-type fields; **`GET /v1/app/me`** returns profile fields; **`POST /v1/app/onboarding`**
-  saves **`preferred_name`**, optional **`age_years`**, **`emergency_contact`**, **`health_notes`**,
-  and **`onboarding_completed_at`**. **`UserDataPort.save_onboarding_profile`** (Supabase +
+  with large-type fields; **`GET /v1/app/me`** returns profile fields (including **`timezone`** since
+  per-user IANA support); **`POST /v1/app/onboarding`** saves **`preferred_name`**, optional
+  **`age_years`**, **`emergency_contact`**, **`health_notes`**, optional **`timezone`**, and
+  **`onboarding_completed_at`**. **`UserDataPort.save_onboarding_profile`** (Supabase +
   **`MockUserData`**). Supabase **`users`** gains matching columns with idempotent **`ALTER`** in
   **`schema.sql`**. Expo mock mode persists the same shape via AsyncStorage (**`companionApi`**).
 - **Assistant patient context**: **`build_patient_context_for_llm`** prepends onboarding demographics

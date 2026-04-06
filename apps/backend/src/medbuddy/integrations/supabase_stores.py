@@ -20,6 +20,7 @@ from medbuddy.reminders.prefs import (
     reminder_prefs_from_metadata,
 )
 from medbuddy.protocols.ports import ConversationStorePort, UserDataPort
+from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +136,7 @@ class SupabaseUserData(UserDataPort):
         gender: str | None,
         emergency_contact: str | None,
         health_notes: str | None,
+        timezone: str | None = None,
     ) -> dict[str, Any]:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
@@ -146,6 +148,7 @@ class SupabaseUserData(UserDataPort):
             "emergency_contact": (emergency_contact or "").strip() or None,
             "health_notes": (health_notes or "").strip() or None,
             "onboarding_completed_at": now.isoformat(),
+            "timezone": effective_user_timezone(timezone),
         }
 
         def upd() -> Any:
@@ -192,6 +195,12 @@ class SupabaseUserData(UserDataPort):
                     payload[key] = None
                 elif isinstance(raw, str):
                     payload[key] = raw.strip() or None
+        if "timezone" in fields:
+            norm = normalize_timezone_patch(fields["timezone"])
+            if norm is not None:
+                payload["timezone"] = norm
+            elif fields["timezone"] is None:
+                payload["timezone"] = None
         if not payload:
             return user
 
@@ -265,7 +274,7 @@ class SupabaseUserData(UserDataPort):
     async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
-        tz_name = str(user.get("timezone") or "Asia/Taipei")
+        tz_name = effective_user_timezone(str(user["timezone"]) if user.get("timezone") else None)
         meds = await self.list_medications(line_user_id)
         now = datetime.now(UTC)
         cutoff = now.isoformat()
@@ -352,7 +361,8 @@ class SupabaseUserData(UserDataPort):
         if not urows:
             return None
         line_uid = str(urows[0]["external_user_id"])
-        tz_name = str(urows[0].get("timezone") or "Asia/Taipei")
+        tz_raw = urows[0].get("timezone")
+        tz_name = effective_user_timezone(str(tz_raw) if tz_raw else None)
 
         def q_med() -> Any:
             return (

@@ -94,8 +94,8 @@ All protected routes require **`X-App-User-Id`** (4–128 chars) and, in product
 |----------|------|-------------|
 | `GET /v1/app/health` | None | JSON health check |
 | `GET /v1/app/info` | None | Public service metadata |
-| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes) |
-| `POST /v1/app/onboarding` | Bearer + User-Id | First-run profile save |
+| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes, **timezone**) |
+| `POST /v1/app/onboarding` | Bearer + User-Id | First-run profile save (optional **timezone** IANA; default **Asia/Taipei**) |
 | `POST /v1/app/messages` | Bearer + User-Id | Chat turn — `{"text":"…"}` → `{"reply":"…"}` |
 | `GET /v1/app/summary` | Bearer + User-Id | Doctor-ready structured health summary |
 
@@ -189,7 +189,7 @@ Intent overrides: [`src/medbuddy/extensibility/intent_hooks.py`](src/medbuddy/ex
 
 ## LINE dose reminders (prototype)
 
-When **Supabase** is configured, successful add/remove medication calls `sync_upcoming_dose_events`: future `dose_events` rows are rebuilt (once daily at `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`, in the user's `timezone`, default `Asia/Taipei`) for `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, max 90). With **`REDIS_URL`** set and `[reminders]` installed, the API enqueues `send_reminder_for_dose` arq jobs.
+When **Supabase** is configured, successful add/remove medication calls `sync_upcoming_dose_events`: future `dose_events` rows are rebuilt (once daily at `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`, in the **`users.timezone`** IANA column — default **`Asia/Taipei`** at insert; standalone **`POST /v1/app/onboarding`** sets **`timezone`**; **`patch_user_profile`** can update it) for `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, max 90). With **`REDIS_URL`** set and `[reminders]` installed, the API enqueues `send_reminder_for_dose` arq jobs.
 
 The repo-root `Dockerfile` runs [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh): **uvicorn** + **`arq medbuddy.reminders.worker.WorkerSettings`** when `REDIS_URL` is non-empty.
 
