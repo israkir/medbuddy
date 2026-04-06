@@ -244,6 +244,58 @@ async def test_save_onboarding_profile_updates_row() -> None:
 
 
 @pytest.mark.asyncio
+async def test_patch_user_profile_merges_fields() -> None:
+    user_builder = MagicMock()
+    user_builder.select.return_value = user_builder
+    user_builder.eq.return_value = user_builder
+    user_builder.limit.return_value = user_builder
+    user_builder.update.return_value = user_builder
+    user_builder.execute.side_effect = [
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000088",
+                    "external_user_id": "ext-patch",
+                    "preferred_name": None,
+                    "age_years": None,
+                    "emergency_contact": None,
+                    "health_notes": None,
+                    "onboarding_completed_at": None,
+                }
+            ]
+        ),
+        MagicMock(data=[{"id": "00000000-0000-0000-0000-000000000088"}]),
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000088",
+                    "external_user_id": "ext-patch",
+                    "preferred_name": "Lin",
+                    "age_years": 68,
+                    "emergency_contact": None,
+                    "health_notes": None,
+                    "onboarding_completed_at": None,
+                }
+            ]
+        ),
+    ]
+
+    client = MagicMock()
+    client.table.return_value = user_builder
+
+    ud = SupabaseUserData(client)
+    out = await ud.patch_user_profile(
+        "ext-patch",
+        {"preferred_name": "Lin", "age_years": 68},
+    )
+    assert out["preferred_name"] == "Lin"
+    assert out["age_years"] == 68
+    user_builder.update.assert_called_once()
+    upd = user_builder.update.call_args[0][0]
+    assert upd == {"preferred_name": "Lin", "age_years": 68}
+
+
+@pytest.mark.asyncio
 async def test_delete_medication_deletes_when_match() -> None:
     user_builder = MagicMock()
     user_builder.select.return_value = user_builder

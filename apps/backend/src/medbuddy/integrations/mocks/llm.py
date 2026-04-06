@@ -26,7 +26,16 @@ class MockLLM(LLMPort):
         self.last_classify_input = user_text
         if self._intent is not None:
             return self._intent
-        lowered = user_text.lower()
+        ut = user_text.strip()
+        lowered = ut.lower()
+        med_add = "新增" in ut or "加入" in ut or lowered.startswith("add ")
+        if not med_add and re.search(
+            r"我叫|叫我|今年\s*\d{1,3}|\d{1,3}\s*歲|歲了|電話|手機|聯絡|過敏|備註|"
+            r"my name is|call me|\d{1,3}\s*years old|emergency|allerg",
+            ut,
+            re.I,
+        ):
+            return Intent.UPDATE_PROFILE
         if any(k in user_text for k in ("清單", "哪些藥", "有什麼藥")) or (
             "我的藥" in user_text and "加" not in user_text and "新增" not in user_text
         ):

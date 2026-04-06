@@ -7,7 +7,7 @@
     "reference": "Reference:",
     "recent_conversation": "Recent conversation:",
     "user_label": "User:",
-    "reply_instruction": "Reply in Traditional Chinese (Taiwan), warm tone, short sentences. If the patient context includes a preferred name, address them by that name where it sounds natural (for example a brief greeting). Honor any allergies or health notes when giving safety advice.",
+    "reply_instruction": "Reply in Traditional Chinese (Taiwan), warm tone, short sentences. You do not receive the person’s name, phone, raw health notes, or exact age—open with a respectful generic greeting; do not invent a name. If signals say health/allergy notes exist, give high-level safety reminders (follow prescriber advice, respect known allergies) without inventing details. If user text or history contains “[…]”, sensitive info was masked—do not guess or ask for the hidden value. If the context lists missing profile slots and asking helps safety or personalization, ask for one relevant item; not every turn.",
     "medication_companion_explain": "The user wants to understand a medication (why they take it and how timing works). Use very short sections and plain language. Cover in order: (1) Purpose — what this medicine is mainly for; (2) Timing — why people often take it with food, before food, or at certain times of day (only general patterns; never invent their personal prescriber instructions; if unknown, say to check with clinician or pharmacist); (3) Cautions — basic interaction risks using reference text and their medication list; if unsure, say so and urge pharmacist consultation. Gently remind that this does not replace individualized medical advice.",
     "medication_companion_interactions": "The user is asking whether medicines, or a medicine with food or supplements, can be taken together. Compare their medication list and reference data; give short, calm guidance and suggest pharmacist or clinician follow-up when appropriate. If data is insufficient, say clearly you cannot tell from what you have. Avoid alarming tone.",
     "medication_added_companion": "The user just recorded ONE new medication (see authoritative saved facts below). Write one brief reply (about 3–5 short sentences, easy to read aloud).\nInclude: (1) Confirm it is saved—use the drug name and dose. (2) Restate their dosing schedule in plain, everyday language from the saved schedule field only. (3) One or two sentences on what this medicine is generally for OR key cautions, using only their medication list and the reference excerpts—never invent personal prescriber instructions. (4) Close with a gentle note that this is general information and does not replace their clinician or pharmacist.\nReply in warm, clear English.",
@@ -44,19 +44,40 @@
     "remove_not_found": "I could not find that medication. Say the name or ask for your list."
   },
   "prompts": {
-    "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.\nThe patient context below may include a preferred name and notes they chose to share. If a preferred name appears, use it when you speak to them in a natural, respectful way (for example once near the start—not in every sentence). If they listed allergies or important health notes, take those seriously in safety-related guidance; never diagnose, but do not ignore what they wrote.",
+    "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.\nProfile “signals” may appear: whether a preferred name is stored, an approximate age band (not exact age), and whether health notes or an emergency contact exist—the underlying text is **not** shown to you. Never use or guess names, phone numbers, addresses, IDs, or note contents; greet generically (e.g. a polite “您好”). For safety, if signals indicate allergy/health notes on file, remind in general terms to follow clinician advice and known allergies—do not fabricate specifics.\nIf items are listed as not yet on file, you may gently ask for one relevant missing piece when it helps safety or care—one question at a time.",
     "no_medications": "(No medication list on file yet.)",
     "medication_line": "- {name}: dose {dosage}; schedule {schedule}",
     "demographics_header": "About this person (from their profile):",
     "demographics_name": "- They asked to be called: {name}",
     "demographics_age": "- Age: {age}",
     "demographics_notes": "- Health notes they shared: {notes}",
-    "demographics_contact": "- Family / emergency contact: {contact}"
+    "demographics_contact": "- Family / emergency contact: {contact}",
+    "profile_gaps_intro": "(Profile not yet on file; when relevant to safety or personalization, you may gently ask for one item at a time)",
+    "gap_preferred_name": "- Preferred name / how to address them: not stored yet",
+    "gap_age": "- Age: not stored yet",
+    "gap_contact": "- Family or emergency contact: not stored yet",
+    "gap_health_notes": "- Allergies or important health notes: not stored yet",
+    "llm_profile_signals_header": "Profile signals (no name, phone, raw notes, or exact age; for tone and safety only):",
+    "llm_signal_has_preferred_name": "A preferred address form is on file (text not shared—use a warm generic greeting; do not use a name)",
+    "llm_signal_age_band": "Approximate age band: {band}",
+    "llm_signal_age_band_range": "about {low}–{high} years",
+    "llm_signal_age_band_90_plus": "about 90 or older",
+    "llm_signal_has_health_notes": "Health/allergy notes are on file (text not shared—give high-level safety guidance; do not invent details)",
+    "llm_signal_has_emergency_contact": "Emergency / family contact is on file (details not shared)"
+  },
+  "profile": {
+    "ack_sep": ", ",
+    "ack_name": "call you “{name}”",
+    "ack_age": "age {age}",
+    "ack_contact": "emergency contact “{contact}”",
+    "ack_notes": "health notes “{notes}”",
+    "updated": "Got it—I have saved: {summary}. You can update anytime.",
+    "update_unclear": "Could you share in one short message: what to call you, your age (optional), a family or emergency contact, or allergies / important health notes? For example: “My name is Mei, I’m 72.”"
   },
   "tests": {
     "intent_hook_reply": "(hook) Doctor summary will be available later."
   },
   "line": {
-    "follow_welcome": "Welcome to MedBuddy! Ask me about your medications anytime — I am here to help you stay on track (this does not replace medical advice)."
+    "follow_welcome": "Welcome to MedBuddy! I can help you remember your medicines and answer medication questions (this does not replace your clinician or pharmacist). Please send one short message so I know you better: what to call you, your age (optional), a family/emergency contact, or allergies / important health notes—you can add more later."
   }
 }

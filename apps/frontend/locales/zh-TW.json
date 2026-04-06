@@ -3,10 +3,10 @@
   "onboarding": {
     "title": "歡迎使用",
     "lead": "簡單幾項資料，能讓 MedBuddy 更懂怎麼跟您說話。字大、步驟少，慢慢填沒關係。",
-    "hintSkip": "只有「怎麼稱呼您」一定要填，其他可略過。",
+    "hintSkip": "請至少填「怎麼稱呼您」。也建議填年齡，提醒會更安全、貼心；家人聯絡與健康備註可之後再補。",
     "nameLabel": "怎麼稱呼您？",
     "namePlaceholder": "姓名或慣用的稱呼",
-    "ageLabel": "年齡（選填）",
+    "ageLabel": "年齡（建議填寫）",
     "agePlaceholder": "例：72",
     "contactLabel": "家人或緊急聯絡人（選填）",
     "contactPlaceholder": "稱呼與電話",

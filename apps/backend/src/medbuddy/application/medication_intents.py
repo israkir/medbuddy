@@ -7,7 +7,11 @@ import logging
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
 from medbuddy.models.domain import Intent, MedicationRecord
-from medbuddy.prompts.persona import build_patient_context_for_llm
+from medbuddy.privacy.redact import redact_pii_text
+from medbuddy.prompts.persona import (
+    build_patient_context_for_chat_display,
+    build_patient_context_for_llm,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,12 +44,13 @@ async def try_medication_intent_reply(
     if intent == Intent.LIST_MEDICATIONS:
         if not medications:
             return t("medication.list_empty", locale=locale)
-        body = build_patient_context_for_llm(user_row, medications, locale=locale)
+        body = build_patient_context_for_chat_display(user_row, medications, locale=locale)
         intro = t("medication.list_intro", locale=locale)
         return f"{intro}\n{body}"
 
     if intent == Intent.ADD_MEDICATION:
-        draft = await svc.llm.extract_medication_draft(user_text, locale=locale)
+        safe_text = redact_pii_text(user_text)
+        draft = await svc.llm.extract_medication_draft(safe_text, locale=locale)
         if draft is None or not draft.name.strip():
             return t("medication.add_incomplete", locale=locale)
         saved = await svc.users.add_medication(user_key, draft)
@@ -57,7 +62,7 @@ async def try_medication_intent_reply(
                 patient_context=patient_ctx,
                 drug_grounding=drug_grounding,
                 saved=saved,
-                user_message=user_text,
+                user_message=safe_text,
                 locale=locale,
             )
         except Exception:
@@ -73,7 +78,9 @@ async def try_medication_intent_reply(
     if intent == Intent.REMOVE_MEDICATION:
         if not medications:
             return t("medication.remove_not_found", locale=locale)
-        mid = await svc.llm.resolve_medication_removal_id(user_text, medications, locale=locale)
+        mid = await svc.llm.resolve_medication_removal_id(
+            redact_pii_text(user_text), medications, locale=locale
+        )
         if not mid:
             return t("medication.remove_not_found", locale=locale)
         target = next((m for m in medications if m.id == mid), None)

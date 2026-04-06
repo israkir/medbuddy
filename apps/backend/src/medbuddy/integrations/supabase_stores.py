@@ -143,6 +143,44 @@ class SupabaseUserData(UserDataPort):
             raise RuntimeError(msg)
         return _user_row_to_dict(row)
 
+    async def patch_user_profile(self, line_user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        payload: dict[str, Any] = {}
+        if "preferred_name" in fields:
+            pn = fields["preferred_name"]
+            if isinstance(pn, str) and pn.strip():
+                payload["preferred_name"] = pn.strip()
+        if "age_years" in fields:
+            age = fields["age_years"]
+            if age is None:
+                payload["age_years"] = None
+            elif isinstance(age, int) and 0 <= age <= 120:
+                payload["age_years"] = age
+            elif isinstance(age, float) and age.is_integer():
+                ai = int(age)
+                if 0 <= ai <= 120:
+                    payload["age_years"] = ai
+        for key in ("emergency_contact", "health_notes"):
+            if key in fields:
+                raw = fields[key]
+                if raw is None:
+                    payload[key] = None
+                elif isinstance(raw, str):
+                    payload[key] = raw.strip() or None
+        if not payload:
+            return user
+
+        def upd() -> Any:
+            return self._client.table("users").update(payload).eq("id", uid).execute()
+
+        await _run_q(upd)
+        row = await self._select_user_row(line_user_id)
+        if not row:
+            msg = "Supabase user row missing after profile patch"
+            raise RuntimeError(msg)
+        return _user_row_to_dict(row)
+
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]

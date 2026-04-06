@@ -110,6 +110,32 @@ async def test_messages_remove_medication(mock_settings) -> None:
 
 
 @pytest.mark.asyncio
+async def test_messages_update_profile(mock_settings) -> None:
+    mock_settings.mock_external_services = True
+    mock_settings.mobile_bearer_token = ""
+    uid = "user-profile-1"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "我叫陳阿姨，今年72歲"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    reply = r.json()["reply"]
+    assert "72" in reply
+    row = await svc.users.get_or_create_user(uid)
+    assert row["preferred_name"] == "陳阿姨"
+    assert row["age_years"] == 72
+
+
+@pytest.mark.asyncio
 async def test_messages_explain_medication_replies(mock_settings) -> None:
     """Explain-medication intent runs compose path (mock LLM) and returns text."""
     mock_settings.mock_external_services = True

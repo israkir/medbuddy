@@ -12,6 +12,9 @@ from medbuddy.models.domain import (
     MedicationRecord,
 )
 
+# Keys: ``preferred_name``, ``age_years``, ``emergency_contact``, ``health_notes`` (subset allowed).
+ProfilePatch = dict[str, Any]
+
 
 @runtime_checkable
 class LineMessagingPort(Protocol):
@@ -109,6 +112,10 @@ class UserDataPort(Protocol):
         age_years: int | None,
         emergency_contact: str | None,
         health_notes: str | None,
+    ) -> dict[str, Any]: ...
+
+    async def patch_user_profile(
+        self, line_user_id: str, fields: ProfilePatch
     ) -> dict[str, Any]: ...
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]: ...

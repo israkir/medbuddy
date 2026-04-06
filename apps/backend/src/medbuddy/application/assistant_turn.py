@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 from medbuddy.application.medication_intents import try_medication_intent_reply
+from medbuddy.application.profile_intents import try_profile_intent_reply
 from medbuddy.drug_cache_keys import (
     DRUG_REFERENCE_SOURCE_OPENFDA,
     DRUG_REFERENCE_SOURCE_TFDA,
@@ -18,6 +19,7 @@ from medbuddy.engine.types import AppServices
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
+from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
 from medbuddy.prompts.persona import (
     build_patient_context_for_llm,
     get_system_persona,
@@ -68,7 +70,8 @@ async def run_assistant_text_turn(
 
     ``user_key`` is the persistence id for users/conversations (LINE user id or app scoped id).
     """
-    intent = await svc.llm.classify_intent(user_text)
+    text_for_llm = redact_pii_text(user_text)
+    intent = await svc.llm.classify_intent(text_for_llm)
     log.info(
         "assistant_turn: user_key=%s intent=%s user_chars=%d",
         user_key,
@@ -87,7 +90,7 @@ async def run_assistant_text_turn(
         Intent.INTERACTION_CHECK,
     ):
         fp = personalization_fingerprint(
-            intent=intent, user_text=user_text, patient_context=patient_ctx
+            intent=intent, user_text=text_for_llm, patient_context=patient_ctx
         )
         cached_reply = await svc.drug_caches.get_personalized_reply(
             user_uuid=user_row["id"],
@@ -150,6 +153,14 @@ async def run_assistant_text_turn(
     reply_text = await try_intent_hooks(intent, svc, user_text)
     composed_via_llm = False
     if reply_text is None:
+        reply_text = await try_profile_intent_reply(
+            svc,
+            user_key=user_key,
+            intent=intent,
+            user_text=user_text,
+            locale=loc,
+        )
+    if reply_text is None:
         reply_text = await try_medication_intent_reply(
             svc,
             user_key=user_key,
@@ -169,12 +180,13 @@ async def run_assistant_text_turn(
             system_persona = (
                 f"{system_persona}\n\n{t('gemini.medication_companion_interactions', locale=loc)}"
             )
+        history_llm = redact_conversation_turns_for_llm(history)
         reply_text = await svc.llm.compose_reply(
             system_persona=system_persona,
             patient_context=patient_ctx,
             drug_grounding=drug_grounding,
-            history=history,
-            user_message=user_text,
+            history=history_llm,
+            user_message=text_for_llm,
         )
         composed_via_llm = True
 
@@ -189,7 +201,7 @@ async def run_assistant_text_turn(
         and intent in (Intent.EXPLAIN_MEDICATION, Intent.INTERACTION_CHECK)
     ):
         fp = personalization_fingerprint(
-            intent=intent, user_text=user_text, patient_context=patient_ctx
+            intent=intent, user_text=text_for_llm, patient_context=patient_ctx
         )
         med_cache_id = resolve_medication_id_for_personalization(meds, user_text)
         prov_source = _personalization_provenance_source(
