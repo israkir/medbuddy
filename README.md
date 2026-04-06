@@ -4,16 +4,17 @@ Monorepo layout:
 
 | Path | Role |
 |------|------|
-| [`apps/backend/`](apps/backend/) | FastAPI LINE webhook API (`medbuddy` package) |
+| [`apps/backend/`](apps/backend/) | FastAPI API: **LINE** webhooks (`/v1/line/...`) and **standalone app** JSON (`/v1/app/...`); shared integrations in one process (`medbuddy` package) |
 | [`apps/frontend/`](apps/frontend/) | Expo (React Native) app for **iOS & Android** — patient UI prototype |
 
-End users may interact through **LINE** and/or the mobile app; the backend receives webhooks and can drive STT, LLM, and TTS.
+End users may interact through **LINE** and/or the mobile app; the backend separates **channel** HTTP surfaces while reusing the same wired services (STT, LLM, TTS, drugs, storage).
 
 ## Integrations (overview)
 
 | Layer | Role |
 |------|------|
-| **LINE Messaging API** | Webhook at `POST /v1/line/webhook`; replies, quick-reply consent, audio messages |
+| **LINE Messaging API** | `POST /v1/line/webhook`; replies, quick-reply consent, audio messages |
+| **Standalone app HTTP** | `GET /v1/app/health`, `GET /v1/app/info` (public); `GET /v1/app/me`, `POST /v1/app/consent`, `POST /v1/app/messages` (Bearer + `X-App-User-Id`); shared assistant logic with LINE via `application/assistant_turn` |
 | **LLM** | Mock (tests) or **Google Gemini** when `GEMINI_API_KEY` is set and mocks are off |
 | **STT** | Mock or **Whisper HTTP** service when `WHISPER_SERVICE_URL` is set |
 | **TTS** | **edge-tts** with local temp URLs, or mock |
@@ -21,6 +22,8 @@ End users may interact through **LINE** and/or the mobile app; the backend recei
 | **Storage** | Mock object store or local public URLs for LINE-accessible audio |
 
 Details, environment variables, and mock vs real wiring: [`apps/backend/README.md`](apps/backend/README.md).
+
+**Hosted deploy:** [`render.yaml`](render.yaml) on [**Render**](https://render.com/) — see [Deploy on Render](apps/backend/README.md#deploy-on-render).
 
 ## Mock vs real data
 
@@ -45,7 +48,7 @@ Details: backend [Localization](apps/backend/README.md#localization) · frontend
 From the repository root, [GNU Make](https://www.gnu.org/software/make/) targets are separated by app:
 
 - **Backend** — `be-*` (for example `make be-install`, `make be-dev`, `make be-test`, `make be-compose`).
-- **Frontend** — `fe-install`, `fe-dev` / `fe-dev-mock`, `fe-dev-api`, `fe-build` (TypeScript only), **`fe-lint`** / **`fe-check`** (ESLint + TypeScript via `npm run check` in `apps/frontend/`), `fe-test` (placeholder).
+- **Frontend** — `fe-install`, `fe-dev` / `fe-dev-mock`, `fe-dev-api`, `fe-build` (TypeScript only), **`fe-run-ios`** / **`fe-run-android`** (native simulator/emulator builds), **`fe-lint`** / **`fe-check`** (ESLint + TypeScript via `npm run check` in `apps/frontend/`), `fe-test` (placeholder).
 
 Run **`make`** or **`make help`** for grouped targets.
 

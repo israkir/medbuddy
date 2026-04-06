@@ -16,12 +16,12 @@ from medbuddy.integrations.mocks import (
     MockTextToSpeech,
     MockUserData,
 )
-from medbuddy.integrations.real.drugs_http import HttpDrugData
-from medbuddy.integrations.real.edge_tts_service import EdgeTtsService
-from medbuddy.integrations.real.gemini_llm import GeminiLLM
-from medbuddy.integrations.real.line_client import LineHttpClient
-from medbuddy.integrations.real.local_public_storage import LocalPublicObjectStorage
-from medbuddy.integrations.real.stt_whisper import WhisperHttpSTT
+from medbuddy.integrations.drugs_http import HttpDrugData
+from medbuddy.integrations.edge_tts_service import EdgeTtsService
+from medbuddy.integrations.gemini_llm import GeminiLLM
+from medbuddy.integrations.line_client import LineHttpClient
+from medbuddy.integrations.local_public_storage import LocalPublicObjectStorage
+from medbuddy.integrations.stt_whisper import WhisperHttpSTT
 
 log = logging.getLogger(__name__)
 
@@ -76,9 +76,34 @@ def build_app_services(settings: Settings) -> AppServices:
         log.warning("WHISPER_SERVICE_URL missing; using MockSpeechToText for STT")
         stt = MockSpeechToText(locale=settings.locale)
 
-    log.warning(
-        "Real mode uses in-memory user/session stores; connect Supabase in production.",
-    )
+    if settings.supabase_url and settings.supabase_publishable_key:
+        try:
+            from medbuddy.integrations.supabase_stores import (
+                SupabaseConversationStore,
+                SupabaseUserData,
+                create_supabase_client,
+            )
+        except ImportError:
+            log.warning(
+                "SUPABASE_URL and a publishable/anon key are set but the supabase "
+                "package is not installed; install with pip install 'medbuddy-api[supabase]'. "
+                "Using in-memory user and conversation stores.",
+            )
+            user_data = MockUserData()
+            conversations_store = InMemoryConversationStore()
+        else:
+            sb_client = create_supabase_client(settings)
+            user_data = SupabaseUserData(sb_client)
+            conversations_store = SupabaseConversationStore(sb_client, user_data)
+    else:
+        log.warning(
+            "Real mode without Supabase: user and conversation data stay in memory. "
+            "Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY; run "
+            "supabase/schema.sql for RLS) for Postgres-backed persistence.",
+        )
+        user_data = MockUserData()
+        conversations_store = InMemoryConversationStore()
+
     return AppServices(
         line=line,
         stt=stt,
@@ -86,7 +111,7 @@ def build_app_services(settings: Settings) -> AppServices:
         llm=llm,
         drugs=HttpDrugData(locale=settings.locale),
         storage=storage,
-        users=MockUserData(),
-        conversations=InMemoryConversationStore(),
+        users=user_data,
+        conversations=conversations_store,
         settings=settings,
     )
