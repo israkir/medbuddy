@@ -2,11 +2,20 @@
 
 You are preparing a **git commit** for the MedBuddy monorepo. Pre-commit runs **full backend tests + lint** and **frontend eslint + tsc**, and **requires `CHANGELOG.md` to be staged** whenever any other file is staged.
 
-## Before committing
+## Approval-first (default)
+
+**Do not** run `git add` or `git commit` on the first response. The user invokes this command to **review a proposal** and approve before anything is recorded.
+
+1. **Apply edits** only as needed to prepare the commit content (e.g. update `CHANGELOG.md` under `## [Unreleased]` if that is part of the work). It is fine to write those file changes in the workspace so the user can see the diff.
+2. **Do not** stage or commit until the user **explicitly approves** (e.g. “commit it”, “looks good, go ahead”, “run git commit”). After approval, stage and commit per the rules below.
+
+If the user’s message already clearly says to commit now (not just to prepare), treat that as approval and proceed with staging + commit.
+
+## Before committing (and for the proposal)
 
 1. Show `git status -sb` and summarize what will be included.
 2. **`CHANGELOG.md`**: Under `## [Unreleased]`, add a concise bullet describing the user-visible or repo-relevant change (match [Keep a Changelog](https://keepachangelog.com/) style: Added / Changed / Fixed / Removed as appropriate). If the user says the change is internal-only, still add a brief line under the right subsection.
-3. Ensure **both** code changes **and** `CHANGELOG.md` are staged together (pre-commit fails if anything is staged without `CHANGELOG.md`).
+3. In the **proposal**, state that **both** code changes **and** `CHANGELOG.md` must be staged together (pre-commit fails if anything is staged without `CHANGELOG.md`). List suggested `git add` paths or `git add -p` guidance if helpful.
 
 ## Quality checks (suggest; hooks also run on `git commit`)
 
@@ -45,7 +54,7 @@ From repo root, when dependencies are installed:
    - Do **not** paste or suggest a commit shell line that contains `--trailer`. Cursor or other tools may offer this; **omit it entirely**.
    - Do **not** end the message with Git trailer lines (`Key: value` blocks after the body). A normal prose body is fine; GitHub closing lines like `Fixes #123` in the body are fine.
 
-5. When the user confirms, stage files (`git add …`) and create the commit with **only** `-m` or `-F` — **no other `git commit` flags** except `--no-verify` if the user explicitly bypasses hooks.
+5. **After explicit user approval**, stage files (`git add …`) and create the commit with **only** `-m` or `-F` — **no other `git commit` flags** except `--no-verify` if the user explicitly bypasses hooks.
 
    **Single-line subject + paragraph body (two arguments):**
 
@@ -71,4 +80,6 @@ From repo root, when dependencies are installed:
 
 ## Output
 
-After a successful commit, show the full message with `git log -1` (or `git log -1 --format=medium`) and remind them they can use **`/draft-pr-message`** next for the PR description if needed.
+**Proposal (default response):** status summary, proposed `CHANGELOG` line (or confirm it is already in the file), full proposed commit subject + body, and **copy-paste-ready** example commands (`git add …`, then `git commit …`) so the user can run them locally. End with a short line inviting approval to run staging + commit from the agent if they prefer.
+
+**After an approved commit:** show the full message with `git log -1` (or `git log -1 --format=medium`) and remind them they can use **`/draft-pr-message`** next for the PR description if needed.

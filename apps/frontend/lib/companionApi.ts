@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18next from '@/i18n';
 import {
   apiBaseUrl,
@@ -5,6 +6,107 @@ import {
   mobileBearerToken,
   useMockData,
 } from '@/constants/integration';
+
+const ONBOARDING_STORAGE_KEY = 'medbuddy.onboarding_profile.v1';
+
+export type MeProfile = {
+  app_user_id: string;
+  preferred_name?: string | null;
+  age_years?: number | null;
+  emergency_contact?: string | null;
+  health_notes?: string | null;
+  onboarding_completed_at?: string | null;
+};
+
+function mobileHeaders(contentTypeJson: boolean): Record<string, string> {
+  const headers: Record<string, string> = {
+    'X-App-User-Id': appUserId,
+  };
+  if (contentTypeJson) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (mobileBearerToken) {
+    headers.Authorization = `Bearer ${mobileBearerToken}`;
+  }
+  return headers;
+}
+
+function emptyProfile(): MeProfile {
+  return {
+    app_user_id: appUserId,
+    preferred_name: null,
+    age_years: null,
+    emergency_contact: null,
+    health_notes: null,
+    onboarding_completed_at: null,
+  };
+}
+
+/** Current user profile + onboarding status (standalone app / same user key as LINE). */
+export async function fetchMeProfile(): Promise<MeProfile> {
+  if (useMockData) {
+    await Promise.resolve();
+    const raw = await AsyncStorage.getItem(ONBOARDING_STORAGE_KEY);
+    if (!raw) {
+      return emptyProfile();
+    }
+    try {
+      const parsed = JSON.parse(raw) as MeProfile;
+      return { ...emptyProfile(), ...parsed, app_user_id: appUserId };
+    } catch {
+      return emptyProfile();
+    }
+  }
+
+  const r = await fetch(`${apiBaseUrl}/v1/app/me`, {
+    headers: mobileHeaders(false),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(body || `${r.status} ${r.statusText}`);
+  }
+  const data = (await r.json()) as MeProfile;
+  return { ...emptyProfile(), ...data };
+}
+
+export type OnboardingPayload = {
+  preferred_name: string;
+  age_years: number | null;
+  emergency_contact: string;
+  health_notes: string;
+};
+
+export async function submitOnboarding(payload: OnboardingPayload): Promise<MeProfile> {
+  const body = {
+    preferred_name: payload.preferred_name.trim(),
+    age_years: payload.age_years,
+    emergency_contact: payload.emergency_contact.trim() || null,
+    health_notes: payload.health_notes.trim() || null,
+  };
+
+  if (useMockData) {
+    await Promise.resolve();
+    const completed: MeProfile = {
+      ...emptyProfile(),
+      ...body,
+      onboarding_completed_at: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(completed));
+    return completed;
+  }
+
+  const r = await fetch(`${apiBaseUrl}/v1/app/onboarding`, {
+    method: 'POST',
+    headers: mobileHeaders(true),
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const errBody = await r.text();
+    throw new Error(errBody || `${r.status} ${r.statusText}`);
+  }
+  const data = (await r.json()) as MeProfile;
+  return { ...emptyProfile(), ...data };
+}
 
 function mockReply(userText: string): string {
   const t = i18next.t.bind(i18next);
@@ -45,17 +147,9 @@ export async function sendCompanionMessage(text: string): Promise<string> {
     return mockReply(trimmed);
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-App-User-Id': appUserId,
-  };
-  if (mobileBearerToken) {
-    headers.Authorization = `Bearer ${mobileBearerToken}`;
-  }
-
   const r = await fetch(`${apiBaseUrl}/v1/app/messages`, {
     method: 'POST',
-    headers,
+    headers: mobileHeaders(true),
     body: JSON.stringify({ text: trimmed }),
   });
 

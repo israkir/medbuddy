@@ -14,6 +14,10 @@ class DrugCachesPort(Protocol):
         query_fingerprint: str,
     ) -> str | None: ...
 
+    async def get_reference_cache_id(self, *, source: str, query_key: str) -> str | None:
+        """Return id of a non-expired ``drug_reference_cache`` row, if any."""
+        ...
+
     async def save_personalized_reply(
         self,
         *,
@@ -23,4 +27,6 @@ class DrugCachesPort(Protocol):
         personalized_text: str,
         locale: str,
         llm_meta: dict[str, Any],
+        medication_id: str | None = None,
+        reference_cache_id: str | None = None,
     ) -> None: ...

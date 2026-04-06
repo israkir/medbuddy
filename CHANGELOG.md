@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`drug_personalization_cache`**: `save_personalized_reply` now stores **`medication_id`** when exactly
+  one list medication name matches the user message (normalized substring), and **`reference_cache_id`**
+  when a TFDA/OpenFDA grounding row exists in **`drug_reference_cache`** (OpenFDA preferred if both).
+  **`llm_meta.source`** is **`openfda`** / **`tfda`** when that registry grounding was present, otherwise
+  the **Gemini model id** from settings (or **`mock_llm`** when mocks are on), marking model-only replies.
+- **`drug_reference_cache`**: OpenFDA fetches now persist **`indications_and_usage`**, **`dosage_and_administration`**,
+  **`warnings`**, and **`raw_payload`** (`{"label": <fda label object>}`) via **`DrugGrounding`** and
+  **`CachingDrugData`**. **`HttpDrugData.fetch_tfda_snippet`** returns **`None`** (no live TFDA client), so
+  **`source=tfda`** rows are not created from placeholder copy; only real adapters (e.g. OpenFDA) populate the cache until TFDA is implemented.
+
 ### Added
 
 - **Supabase `drug_reference_cache`**: global table to cache drug usage / label text
@@ -51,6 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Standalone app API** under `/v1/app/`: **`GET /me`**, **`POST /messages`**
   with Pydantic validation; **Bearer** auth (`MEDBUDDY_MOBILE_BEARER_TOKEN`) and **`X-App-User-Id`**
   header (optional Bearer when `MOCK_EXTERNAL_SERVICES=true` for local dev).
+- **Standalone app onboarding**: First-launch screen (`app/onboarding.tsx`, gate in `app/_layout.tsx`)
+  with large-type fields; **`GET /v1/app/me`** returns profile fields; **`POST /v1/app/onboarding`**
+  saves **`preferred_name`**, optional **`age_years`**, **`emergency_contact`**, **`health_notes`**,
+  and **`onboarding_completed_at`**. **`UserDataPort.save_onboarding_profile`** (Supabase +
+  **`MockUserData`**). Supabase **`users`** gains matching columns with idempotent **`ALTER`** in
+  **`schema.sql`**. Expo mock mode persists the same shape via AsyncStorage (**`companionApi`**).
+- **Assistant patient context**: **`build_patient_context_for_llm`** prepends onboarding demographics
+  to the medication list for **`run_assistant_text_turn`**, medication intents, and drug-cache
+  fingerprinting; **`prompts.system_persona`** / **`gemini.reply_instruction`** tell the model to
+  address users by preferred name and weigh stated allergies or health notes in safety guidance.
 
 ### Changed
 

@@ -7,8 +7,20 @@ create extension if not exists "pgcrypto";
 
 create table if not exists public.users (
     id uuid primary key default gen_random_uuid(),
-    external_user_id text not null unique
+    external_user_id text not null unique,
+    preferred_name text,
+    age_years integer,
+    emergency_contact text,
+    health_notes text,
+    onboarding_completed_at timestamptz
 );
+
+-- Existing projects: add profile columns if the table was created before onboarding.
+alter table public.users add column if not exists preferred_name text;
+alter table public.users add column if not exists age_years integer;
+alter table public.users add column if not exists emergency_contact text;
+alter table public.users add column if not exists health_notes text;
+alter table public.users add column if not exists onboarding_completed_at timestamptz;
 
 create table if not exists public.medications (
     id uuid primary key default gen_random_uuid(),

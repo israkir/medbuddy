@@ -109,11 +109,24 @@ class SupabaseDrugCaches(DrugCachesPort):
             log.warning("drug_reference_cache upsert failed: %s", e)
 
     def grounding_from_row(self, row: dict[str, Any]) -> DrugGrounding:
+        raw = row.get("raw_payload")
+        raw_obj = raw if isinstance(raw, dict) else None
         return DrugGrounding(
             source=str(row.get("source") or "reference"),
             title=str(row.get("title") or ""),
             body_zh=str(row.get("usage_text") or ""),
+            indications_and_usage=row.get("indications_and_usage"),
+            dosage_and_administration=row.get("dosage_and_administration"),
+            warnings=row.get("warnings"),
+            raw_payload=raw_obj,
         )
+
+    async def get_reference_cache_id(self, *, source: str, query_key: str) -> str | None:
+        row = await self.get_valid_reference(source=source, query_key=query_key)
+        if not row:
+            return None
+        rid = row.get("id")
+        return str(rid) if rid else None
 
     async def get_personalized_reply(
         self,
@@ -155,6 +168,8 @@ class SupabaseDrugCaches(DrugCachesPort):
         personalized_text: str,
         locale: str,
         llm_meta: dict[str, Any],
+        medication_id: str | None = None,
+        reference_cache_id: str | None = None,
     ) -> None:
         ttl_h = self._settings.drug_personalization_cache_ttl_hours
         now = datetime.now(UTC)
@@ -168,8 +183,8 @@ class SupabaseDrugCaches(DrugCachesPort):
             "personalized_text": personalized_text,
             "locale": locale,
             "llm_meta": llm_meta,
-            "medication_id": None,
-            "reference_cache_id": None,
+            "medication_id": medication_id,
+            "reference_cache_id": reference_cache_id,
             "updated_at": now.isoformat(),
             "expires_at": expires_at,
         }

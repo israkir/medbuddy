@@ -54,7 +54,9 @@ async def test_app_me_ok(mock_settings):
             r = await client.get("/v1/app/me", headers=_mobile_headers())
     assert r.status_code == 200
     data = r.json()
-    assert data == {"app_user_id": "app-test-user"}
+    assert data["app_user_id"] == "app-test-user"
+    assert data["onboarding_completed_at"] is None
+    assert data["preferred_name"] is None
 
 
 @pytest.mark.asyncio
@@ -100,3 +102,33 @@ async def test_app_messages_validation_empty_text(mock_settings):
                 headers=_mobile_headers(user="u-val"),
             )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_app_onboarding_saves_profile(mock_settings):
+    mock_settings.mock_external_services = True
+    mock_settings.mobile_bearer_token = ""
+    app.state.services = build_app_services(mock_settings)
+    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/v1/app/onboarding",
+                json={
+                    "preferred_name": "阿春",
+                    "age_years": 68,
+                    "emergency_contact": "女兒 0922",
+                    "health_notes": "對青黴素過敏",
+                },
+                headers=_mobile_headers(user="onboarding-user-1"),
+            )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["preferred_name"] == "阿春"
+    assert data["age_years"] == 68
+    assert data["onboarding_completed_at"] is not None
+
+    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r2 = await client.get("/v1/app/me", headers=_mobile_headers(user="onboarding-user-1"))
+    assert r2.status_code == 200
+    assert r2.json()["preferred_name"] == "阿春"

@@ -1,65 +1,74 @@
 # MedBuddy
 
-Monorepo layout:
+MedBuddy is a **patient-facing medication companion**: a FastAPI backend plus an **Expo (React Native)** app. People can interact through **LINE** and/or the **standalone mobile client**; both channels share the same assistant, drug lookup, and persistence logic.
+
+This repository is a **monorepo**. Use the docs linked below for day-to-day development; the backend and frontend READMEs hold environment variables, mocks, and deployment detail.
+
+## Prerequisites
+
+- **[GNU Make](https://www.gnu.org/software/make/)** — task runner at the repo root (`make` / `make help`).
+- **Backend:** Python **3.11+** (virtualenv created via `make be-install`).
+- **Frontend:** [Node.js](https://nodejs.org/) and npm (see `apps/frontend/`).
+
+## Quick start
+
+**Backend** (from the repository root):
+
+```bash
+make be-install   # create .venv + install backend deps
+make be-dev       # API with reload (mock integrations by default)
+make be-test      # pytest
+```
+
+**Frontend:**
+
+```bash
+make fe-install   # npm install in apps/frontend
+make fe-dev       # Expo dev server (mock data by default)
+make fe-check     # ESLint + TypeScript
+```
+
+Run **`make`** or **`make help`** for all targets (`be-*` backend, `fe-*` frontend).
+
+Switching **mock vs real** integrations (env and Make aliases): [`apps/backend/README.md`](apps/backend/README.md#mock-vs-real-integrations) · mobile flags: [`apps/frontend/.env.example`](apps/frontend/.env.example) and **`make fe-dev-api`**.
+
+## Repository layout
 
 | Path | Role |
 |------|------|
-| [`apps/backend/`](apps/backend/) | FastAPI API: **LINE** webhooks (`/v1/line/...`) and **standalone app** JSON (`/v1/app/...`); shared integrations in one process (`medbuddy` package) |
-| [`apps/frontend/`](apps/frontend/) | Expo (React Native) app for **iOS & Android** — patient UI prototype |
-
-End users may interact through **LINE** and/or the mobile app; the backend separates **channel** HTTP surfaces while reusing the same wired services (STT, LLM, TTS, drugs, storage).
+| [`apps/backend/`](apps/backend/) | FastAPI: LINE webhooks (`/v1/line/...`) and app JSON (`/v1/app/...`); shared `medbuddy` package |
+| [`apps/frontend/`](apps/frontend/) | Expo app (iOS & Android) — patient UI prototype |
+| [`compose.yaml`](compose.yaml) | Container orchestration (with repo-root `Dockerfile`) |
+| [`render.yaml`](render.yaml) | [**Render**](https://render.com/) blueprint — see [Deploy on Render](apps/backend/README.md#deploy-on-render) |
 
 ## Documentation
 
-| Doc | Contents |
-|-----|----------|
-| [`docs/use-cases.md`](docs/use-cases.md) | Product use cases the stack covers today, example utterances, and how each flow runs through the assistant (channels, intents, caches). |
+| Resource | What you’ll find |
+|----------|------------------|
+| [`docs/use-cases.md`](docs/use-cases.md) | Product flows, example utterances, channels, intents, caches |
+| [`apps/backend/README.md`](apps/backend/README.md) | Package layout, env vars, mocks, LINE/mobile auth, localization, deploy |
+| [`apps/frontend/README.md`](apps/frontend/README.md) | Expo workflow, mock vs API, i18n, simulator targets |
+| [`CHANGELOG.md`](CHANGELOG.md) | [Keep a Changelog](https://keepachangelog.com/) history and notable behavior changes |
 
 ## Integrations (overview)
 
-| Layer | Role |
-|------|------|
-| **LINE Messaging API** | `POST /v1/line/webhook`; text/audio replies |
-| **Standalone app HTTP** | `GET /v1/app/health`, `GET /v1/app/info` (public); `GET /v1/app/me`, `POST /v1/app/messages` (Bearer + `X-App-User-Id`); shared assistant logic with LINE via `application/assistant_turn` |
-| **LLM** | Mock (tests) or **Google Gemini** when `GEMINI_API_KEY` is set and mocks are off |
-| **STT** | Mock or **Whisper HTTP** service when `WHISPER_SERVICE_URL` is set |
-| **TTS** | **edge-tts** with local temp URLs, or mock |
-| **Drug data** | Mock snippets or **OpenFDA** HTTP + TFDA placeholder |
-| **Storage** | Mock object store or local public URLs for LINE-accessible audio |
-
-Details, environment variables, and mock vs real wiring: [`apps/backend/README.md`](apps/backend/README.md).
-
-**Hosted deploy:** [`render.yaml`](render.yaml) on [**Render**](https://render.com/) — see [Deploy on Render](apps/backend/README.md#deploy-on-render).
-
-## Mock vs real data
-
-| App | Quick switch |
-|-----|----------------|
-| **Backend** | **`MEDBUDDY_INTEGRATION=mock`** or **`real`** (overrides `MOCK_EXTERNAL_SERVICES`), or Makefile: **`make be-dev-mock`** / **`make be-dev-real`**. See [`apps/backend/README.md`](apps/backend/README.md#mock-vs-real-integrations). |
-| **Mobile** | **`EXPO_PUBLIC_USE_MOCK_DATA`** (see [`apps/frontend/.env.example`](apps/frontend/.env.example)); Makefile: **`make fe-dev-mock`** / **`make fe-dev-api`**. Helpers: [`constants/integration.ts`](apps/frontend/constants/integration.ts). |
+The backend can use **mock** adapters or real services: **LINE Messaging API**, **Google Gemini**, **Whisper** (HTTP STT), **edge-tts**, **OpenFDA** / TFDA placeholders, and optional **Supabase** — all driven by environment variables. For tables, defaults, and wiring, see **`apps/backend/README.md`**.
 
 ## Localization
 
-| App | Mechanism | Defaults |
-|-----|-----------|----------|
-| **Backend** | JSON bundles under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); `t("key.subkey", locale=...)` in [`medbuddy/i18n.py`](apps/backend/src/medbuddy/i18n.py) | Server locale: `MEDBUDDY_LOCALE` or `locale` in `.env` (see [`apps/backend/.env.example`](apps/backend/.env.example)), fallback `zh-TW` |
-| **Mobile** | `i18next` + [`expo-localization`](https://docs.expo.dev/guides/localization/); JSON under `apps/frontend/locales/` | Device language → `zh-TW` or `en`; `fallbackLng: 'zh-TW'` |
+- **Backend:** JSON under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); server default via `MEDBUDDY_LOCALE` / `.env` (see `apps/backend/.env.example`).
+- **Frontend:** `i18next` + JSON under `apps/frontend/locales/`.
 
-Adding a new language: add a matching `*.json` file in each app’s `locales/` folder, register it in the backend `Settings`/loader and in the frontend `i18n/index.ts` resources.
+Adding a language: add matching `*.json` in both trees and register in backend settings/loaders and `apps/frontend/i18n/index.ts` (details in the per-app READMEs).
 
-Details: backend [Localization](apps/backend/README.md#localization) · frontend [README](apps/frontend/README.md).
+## Contributing and quality
 
-## Makefile (repo root)
+- Install hooks after backend setup: **`make pre-commit-install`**. Run **`make pre-commit-run`** before a large change-set.
+- Backend: **`make be-lint`**, **`make be-fmt`**, **`make be-check`**. Frontend: **`make fe-lint`** / **`make fe-check`**.
+- User-visible or behavior changes should be reflected in [`CHANGELOG.md`](CHANGELOG.md) per repo convention.
 
-From the repository root, [GNU Make](https://www.gnu.org/software/make/) targets are separated by app:
+Pull requests are welcome. Keep secrets out of git; use `.env` files from each app’s `.env.example`.
 
-- **Backend** — `be-*` (for example `make be-install`, `make be-dev`, `make be-test`, `make be-compose`).
-- **Frontend** — `fe-install`, `fe-dev` / `fe-dev-mock`, `fe-dev-api`, `fe-build` (TypeScript only), **`fe-run-ios`** / **`fe-run-android`** (native simulator/emulator builds), **`fe-lint`** / **`fe-check`** (ESLint + TypeScript via `npm run check` in `apps/frontend/`), `fe-test` (placeholder).
+## Disclaimer
 
-Run **`make`** or **`make help`** for grouped targets.
-
-Typical backend flow: `make be-install` → `make be-dev` → `make be-test`.
-
-Typical frontend flow: `make fe-install` → `make fe-dev` → `make fe-lint` (before committing: ESLint + TypeScript).
-
-Details: [`apps/backend/README.md`](apps/backend/README.md) · [`apps/frontend/README.md`](apps/frontend/README.md).
+MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.

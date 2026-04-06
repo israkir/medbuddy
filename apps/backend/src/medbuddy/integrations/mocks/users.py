@@ -2,10 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.models.domain import MedicationDraft, MedicationRecord
 from medbuddy.protocols.ports import UserDataPort
+
+
+def _default_profile_fields() -> dict[str, Any]:
+    return {
+        "preferred_name": None,
+        "age_years": None,
+        "emergency_contact": None,
+        "health_notes": None,
+        "onboarding_completed_at": None,
+    }
 
 
 class MockUserData(UserDataPort):
@@ -19,9 +30,31 @@ class MockUserData(UserDataPort):
             self._users[line_user_id] = {
                 "id": str(uuid.uuid4()),
                 "line_user_id": line_user_id,
+                **_default_profile_fields(),
             }
             self._meds.setdefault(line_user_id, [])
-        return self._users[line_user_id]
+        row = self._users[line_user_id]
+        for k, v in _default_profile_fields().items():
+            row.setdefault(k, v)
+        return row
+
+    async def save_onboarding_profile(
+        self,
+        line_user_id: str,
+        *,
+        preferred_name: str,
+        age_years: int | None,
+        emergency_contact: str | None,
+        health_notes: str | None,
+    ) -> dict[str, Any]:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        row["preferred_name"] = preferred_name.strip()
+        row["age_years"] = age_years
+        row["emergency_contact"] = (emergency_contact or "").strip() or None
+        row["health_notes"] = (health_notes or "").strip() or None
+        row["onboarding_completed_at"] = datetime.now(UTC)
+        return row
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
         await asyncio.sleep(0)

@@ -3,11 +3,11 @@
     "extract_medication_intro": "Extract a medication to add from the user message. Use \"unspecified\" for unknown fields.",
     "resolve_remove_intro": "Which medication does the user want to stop or remove? JSON only.",
     "no_drug_data": "(No extra drug reference data.)",
-    "patient_background": "Patient medication context:",
+    "patient_background": "Patient context (profile and medication list):",
     "reference": "Reference:",
     "recent_conversation": "Recent conversation:",
     "user_label": "User:",
-    "reply_instruction": "Reply in Traditional Chinese (Taiwan), warm tone, short sentences.",
+    "reply_instruction": "Reply in Traditional Chinese (Taiwan), warm tone, short sentences. If the patient context includes a preferred name, address them by that name where it sounds natural (for example a brief greeting). Honor any allergies or health notes when giving safety advice.",
     "medication_companion_explain": "The user wants to understand a medication (why they take it and how timing works). Use very short sections and plain language. Cover in order: (1) Purpose — what this medicine is mainly for; (2) Timing — why people often take it with food, before food, or at certain times of day (only general patterns; never invent their personal prescriber instructions; if unknown, say to check with clinician or pharmacist); (3) Cautions — basic interaction risks using reference text and their medication list; if unsure, say so and urge pharmacist consultation. Gently remind that this does not replace individualized medical advice.",
     "medication_companion_interactions": "The user is asking whether medicines, or a medicine with food or supplements, can be taken together. Compare their medication list and reference data; give short, calm guidance and suggest pharmacist or clinician follow-up when appropriate. If data is insufficient, say clearly you cannot tell from what you have. Avoid alarming tone.",
     "medication_added_companion": "The user just recorded ONE new medication (see authoritative saved facts below). Write one brief reply (about 3–5 short sentences, easy to read aloud).\nInclude: (1) Confirm it is saved—use the drug name and dose. (2) Restate their dosing schedule in plain, everyday language from the saved schedule field only. (3) One or two sentences on what this medicine is generally for OR key cautions, using only their medication list and the reference excerpts—never invent personal prescriber instructions. (4) Close with a gentle note that this is general information and does not replace their clinician or pharmacist.\nReply in warm, clear English.",
@@ -44,9 +44,14 @@
     "remove_not_found": "I could not find that medication. Say the name or ask for your list."
   },
   "prompts": {
-    "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.",
+    "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.\nThe patient context below may include a preferred name and notes they chose to share. If a preferred name appears, use it when you speak to them in a natural, respectful way (for example once near the start—not in every sentence). If they listed allergies or important health notes, take those seriously in safety-related guidance; never diagnose, but do not ignore what they wrote.",
     "no_medications": "(No medication list on file yet.)",
-    "medication_line": "- {name}: dose {dosage}; schedule {schedule}"
+    "medication_line": "- {name}: dose {dosage}; schedule {schedule}",
+    "demographics_header": "About this person (from their profile):",
+    "demographics_name": "- They asked to be called: {name}",
+    "demographics_age": "- Age: {age}",
+    "demographics_notes": "- Health notes they shared: {notes}",
+    "demographics_contact": "- Family / emergency contact: {contact}"
   },
   "tests": {
     "intent_hook_reply": "(hook) Doctor summary will be available later."
