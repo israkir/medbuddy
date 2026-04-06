@@ -1,4 +1,8 @@
 -- Run in Supabase SQL Editor (or migrate via Supabase CLI) before enabling real-mode persistence.
+-- Upgrading an older DB (optional one-liners):
+--   alter table public.users drop column if exists consent_accepted;
+--   alter table public.users drop column if exists created_at;
+--   alter table public.medications drop column if exists created_at;
 -- Backend uses the publishable API key (or legacy anon JWT): PostgREST uses the ``anon`` role,
 -- so RLS policies below must allow the operations MedBuddy needs. Do not use the service_role
 -- key in clients; see https://supabase.com/docs/guides/api/api-keys
@@ -7,9 +11,7 @@ create extension if not exists "pgcrypto";
 
 create table if not exists public.users (
     id uuid primary key default gen_random_uuid(),
-    external_user_id text not null unique,
-    consent_accepted boolean not null default false,
-    created_at timestamptz not null default now()
+    external_user_id text not null unique
 );
 
 create table if not exists public.medications (
@@ -19,8 +21,7 @@ create table if not exists public.medications (
     dosage text not null,
     schedule text not null,
     instructions_zh text,
-    raw_metadata jsonb not null default '{}'::jsonb,
-    created_at timestamptz not null default now()
+    raw_metadata jsonb not null default '{}'::jsonb
 );
 
 create index if not exists medications_user_id_idx on public.medications (user_id);

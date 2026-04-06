@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 
 from medbuddy.i18n import t
-from medbuddy.models.domain import ConversationTurn, Intent
+from medbuddy.models.domain import ConversationTurn, Intent, MedicationDraft, MedicationRecord
 from medbuddy.protocols.ports import LLMPort
+
+
+def _strip_json_fence(raw: str) -> str:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
 
 
 class GeminiLLM(LLMPort):
@@ -33,8 +42,9 @@ class GeminiLLM(LLMPort):
     def _classify_sync(self, user_text: str) -> Intent:
         prompt = (
             "Classify the user message into exactly one intent: "
-            "add_medication, confirm_dose, explain_medication, interaction_check, "
-            "log_vital, request_summary, general_question. "
+            "add_medication, list_medications, remove_medication, confirm_dose, "
+            "explain_medication, interaction_check, log_vital, request_summary, "
+            "general_question. "
             "Reply with only the snake_case label.\n\n"
             f"User: {user_text}"
         )
@@ -103,3 +113,80 @@ class GeminiLLM(LLMPort):
 
     async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str:
         return await asyncio.to_thread(self._simplify_sync, raw_label)
+
+    def _extract_medication_sync(self, user_text: str, locale: str) -> MedicationDraft | None:
+        loc = locale
+        prompt = (
+            f"{t('gemini.extract_medication_intro', locale=loc)}\n"
+            "Return JSON only with keys: "
+            "name, dosage, schedule, instructions_zh (string or null).\n"
+            f"User: {user_text}"
+        )
+        model = self._genai.GenerativeModel(self._chat_model)
+        resp = model.generate_content(prompt)
+        raw = (resp.text or "").strip()
+        if not raw:
+            return None
+        try:
+            obj = json.loads(_strip_json_fence(raw))
+        except json.JSONDecodeError:
+            return None
+        name = str(obj.get("name") or "").strip()
+        if not name:
+            return None
+        un = t("medication.unspecified", locale=loc)
+        dosage = str(obj.get("dosage") or "").strip() or un
+        schedule = str(obj.get("schedule") or "").strip() or un
+        ins = obj.get("instructions_zh")
+        instructions = None if ins is None else (str(ins).strip() or None)
+        return MedicationDraft(
+            name=name,
+            dosage=dosage,
+            schedule=schedule,
+            instructions_zh=instructions,
+        )
+
+    async def extract_medication_draft(
+        self, user_text: str, *, locale: str
+    ) -> MedicationDraft | None:
+        loc = locale or self._locale
+        return await asyncio.to_thread(self._extract_medication_sync, user_text, loc)
+
+    def _resolve_remove_sync(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        locale: str,
+    ) -> str | None:
+        loc = locale
+        catalog = [{"id": m.id, "name": m.name} for m in medications]
+        prompt = (
+            f"{t('gemini.resolve_remove_intro', locale=loc)}\n"
+            f"Medications: {json.dumps(catalog, ensure_ascii=False)}\n"
+            'Return JSON only: {"medication_id":"<uuid>" or null}\n'
+            f"User: {user_text}"
+        )
+        model = self._genai.GenerativeModel(self._chat_model)
+        resp = model.generate_content(prompt)
+        raw = (resp.text or "").strip()
+        if not raw:
+            return None
+        try:
+            obj = json.loads(_strip_json_fence(raw))
+        except json.JSONDecodeError:
+            return None
+        mid = obj.get("medication_id")
+        if mid is None:
+            return None
+        s = str(mid).strip()
+        return s if s else None
+
+    async def resolve_medication_removal_id(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        *,
+        locale: str,
+    ) -> str | None:
+        loc = locale or self._locale
+        return await asyncio.to_thread(self._resolve_remove_sync, user_text, medications, loc)

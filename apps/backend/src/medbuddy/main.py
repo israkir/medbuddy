@@ -12,6 +12,7 @@ from medbuddy.channels.mobile.routes import router as mobile_router
 from medbuddy.config import get_settings
 from medbuddy.container import build_app_services
 from medbuddy.http.shared_routes import router as shared_router
+from medbuddy.logging_config import configure_logging
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -20,8 +21,15 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    configure_logging(settings.log_level)
     app.state.services = build_app_services(settings)
-    log.info("MedBuddy started mock_external=%s", settings.mock_external_services)
+    log.info(
+        "MedBuddy started mock_external=%s locale=%s log_level=%s public_base_url=%s",
+        settings.mock_external_services,
+        settings.locale,
+        settings.log_level,
+        settings.public_base_url,
+    )
     yield
 
 
