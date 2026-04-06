@@ -9,6 +9,12 @@ Monorepo layout:
 
 End users may interact through **LINE** and/or the mobile app; the backend separates **channel** HTTP surfaces while reusing the same wired services (STT, LLM, TTS, drugs, storage).
 
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [`docs/use-cases.md`](docs/use-cases.md) | Product use cases the stack covers today, example utterances, and how each flow runs through the assistant (channels, intents, caches). |
+
 ## Integrations (overview)
 
 | Layer | Role |

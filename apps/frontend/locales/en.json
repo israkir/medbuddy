@@ -41,7 +41,28 @@
     "markTaken": "I took it",
     "sampleMetformin": "Metformin (blood sugar)",
     "sampleBp": "Blood pressure medicine",
-    "sampleStatin": "Cholesterol medicine"
+    "sampleStatin": "Cholesterol medicine",
+    "companionLink": "Understand my medications",
+    "companionLinkA11y": "Open chat to learn about your medications",
+    "companionHint": "Ask in your own words: what a drug is for, why timing matters, or what might interact."
+  },
+  "companion": {
+    "title": "Medication helper",
+    "subtitle": "Short, plain answers about purpose, timing, and basic interaction cautions. Tap Read aloud on any reply. This does not replace your doctor or pharmacist.",
+    "placeholder": "Type your question… (or use dictation on your keyboard)",
+    "sendA11y": "Send question",
+    "readAloud": "Read aloud",
+    "readAloudA11y": "Read this answer aloud",
+    "suggested1": "What is metformin for?",
+    "suggested2": "Why take this pill after food?",
+    "suggested3": "Can aspirin mix with my blood thinner?",
+    "disclaimer": "Information may be incomplete. For new symptoms, dosing changes, or emergencies, contact your care team right away.",
+    "errorPrefix": "Could not reach the server.",
+    "errorAssistant": "Something went wrong reaching MedBuddy. Check your network and API settings, then try again.",
+    "errorUnknown": "Unknown error",
+    "mockGeneric": "Purpose: many daily medicines support long‑term conditions like blood pressure or blood sugar. Timing often matches food or sleep so the body absorbs meds evenly and side effects are milder—your prescriber sets the exact plan.\n\nInteractions: always tell your pharmacist everything you take, including OTC pills and herbs. This demo uses sample wording when the app is offline.",
+    "mockDrugDetail": "Purpose: this type of medicine is commonly used for the condition on your label—for example steadying blood sugar or blood pressure.\n\nTiming: «with meals» often helps stomach comfort or matches how the drug works through the day; «once daily at night» might fit how long the dose lasts. Follow the instructions on your bottle unless your clinician told you otherwise.\n\nCautions: some combinations (other prescriptions, pain relievers, or supplements) need a pharmacist review—ask before adding anything new.",
+    "mockInteraction": "When two or more drugs overlap, the main risks are extra drowsiness, bleeding, kidney stress, or one drug changing the level of another.\n\nDo not start or stop medicines on your own. Bring your full list (including over‑the‑counter) to a pharmacist or doctor visit so they can check pairings safely."
   },
   "medications": {
     "title": "My medications",

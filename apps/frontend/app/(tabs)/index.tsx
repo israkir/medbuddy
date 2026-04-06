@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet } from 'react-native';
+import { Link, type Href } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { PendingDoseCard } from '@/components/PendingDoseCard';
@@ -35,6 +36,25 @@ export default function TodayScreen() {
         </Text>
         <Text style={[styles.voiceHint, { color: palette.textSecondary }]} maxFontSizeMultiplier={1.55}>
           {t('voice.sameAsLine')}
+        </Text>
+        <Link href={'/companion' as Href} asChild>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('today.companionLinkA11y')}
+            style={({ pressed }) => [
+              styles.companionCta,
+              {
+                backgroundColor: palette.tint,
+                opacity: pressed ? 0.88 : 1,
+              },
+            ]}>
+            <Text style={[styles.companionCtaText, { color: palette.onPrimary }]} maxFontSizeMultiplier={1.5}>
+              {t('today.companionLink')}
+            </Text>
+          </Pressable>
+        </Link>
+        <Text style={[styles.companionHint, { color: palette.textSecondary }]} maxFontSizeMultiplier={1.45}>
+          {t('today.companionHint')}
         </Text>
       </View>
 
@@ -120,6 +140,26 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption - 1,
     lineHeight: 24,
     textAlign: 'center',
+  },
+  companionCta: {
+    marginTop: 18,
+    alignSelf: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    maxWidth: '100%',
+  },
+  companionCtaText: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  companionHint: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 10,
   },
   scheduleTitle: {
     fontSize: fontSize.body,

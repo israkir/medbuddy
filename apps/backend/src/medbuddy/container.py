@@ -16,6 +16,7 @@ from medbuddy.integrations.mocks import (
     MockTextToSpeech,
     MockUserData,
 )
+from medbuddy.integrations.caching_drugs import CachingDrugData
 from medbuddy.integrations.drugs_http import HttpDrugData
 from medbuddy.integrations.edge_tts_service import EdgeTtsService
 from medbuddy.integrations.gemini_llm import GeminiLLM
@@ -41,6 +42,7 @@ def build_app_services(settings: Settings) -> AppServices:
             users=MockUserData(),
             conversations=InMemoryConversationStore(),
             settings=settings,
+            drug_caches=None,
         )
 
     if not settings.line_channel_access_token:
@@ -77,8 +79,12 @@ def build_app_services(settings: Settings) -> AppServices:
         log.warning("WHISPER_SERVICE_URL missing; using MockSpeechToText for STT")
         stt = MockSpeechToText(locale=settings.locale)
 
+    drug_caches = None
+    drugs_backend: HttpDrugData | CachingDrugData = HttpDrugData(locale=settings.locale)
+
     if settings.supabase_url and settings.supabase_publishable_key:
         try:
+            from medbuddy.integrations.supabase_drug_caches import SupabaseDrugCaches
             from medbuddy.integrations.supabase_stores import (
                 SupabaseConversationStore,
                 SupabaseUserData,
@@ -96,6 +102,8 @@ def build_app_services(settings: Settings) -> AppServices:
             sb_client = create_supabase_client(settings)
             user_data = SupabaseUserData(sb_client)
             conversations_store = SupabaseConversationStore(sb_client, user_data)
+            drug_caches = SupabaseDrugCaches(sb_client, settings)
+            drugs_backend = CachingDrugData(HttpDrugData(locale=settings.locale), drug_caches)
     else:
         log.warning(
             "Real mode without Supabase: user and conversation data stay in memory. "
@@ -110,9 +118,10 @@ def build_app_services(settings: Settings) -> AppServices:
         stt=stt,
         tts=tts,
         llm=llm,
-        drugs=HttpDrugData(locale=settings.locale),
+        drugs=drugs_backend,
         storage=storage,
         users=user_data,
         conversations=conversations_store,
         settings=settings,
+        drug_caches=drug_caches,
     )

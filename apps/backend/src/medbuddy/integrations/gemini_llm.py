@@ -9,6 +9,7 @@ from typing import Any
 
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationDraft, MedicationRecord
+from medbuddy.prompts.persona import get_system_persona
 from medbuddy.protocols.ports import LLMPort
 
 
@@ -184,3 +185,58 @@ class GeminiLLM(LLMPort):
     ) -> str | None:
         loc = locale or self._locale
         return await asyncio.to_thread(self._resolve_remove_sync, user_text, medications, loc)
+
+    def _compose_medication_added_sync(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str:
+        loc = locale or self._locale
+        persona = get_system_persona(locale=loc)
+        task = t("gemini.medication_added_companion", locale=loc)
+        drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        facts = t(
+            "gemini.added_saved_facts",
+            locale=loc,
+            name=saved.name,
+            dosage=saved.dosage,
+            schedule=saved.schedule,
+        )
+        extra = ""
+        if saved.instructions_zh:
+            extra = "\n" + t(
+                "gemini.added_notes_from_user",
+                locale=loc,
+                text=saved.instructions_zh,
+            )
+        prompt = (
+            f"{persona}\n\n{task}\n\n"
+            f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
+            f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
+            f"{facts}{extra}\n\n"
+            f"{t('gemini.user_label', locale=loc)}{user_message}"
+        )
+        return self._generate_sync(self._chat_model, prompt)
+
+    async def compose_medication_added_reply(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str:
+        loc = locale or self._locale
+        return await asyncio.to_thread(
+            self._compose_medication_added_sync,
+            patient_context=patient_context,
+            drug_grounding=drug_grounding,
+            saved=saved,
+            user_message=user_message,
+            locale=loc,
+        )

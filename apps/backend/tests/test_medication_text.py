@@ -40,6 +40,7 @@ async def test_messages_add_medication(mock_settings) -> None:
     assert r.status_code == 200
     reply = r.json()["reply"]
     assert "阿斯匹靈" in reply
+    assert "每天飯後" in reply
     meds = await svc.users.list_medications(uid)
     assert len(meds) == 1
     assert meds[0].name == "阿斯匹靈"
@@ -106,3 +107,26 @@ async def test_messages_remove_medication(mock_settings) -> None:
     assert "普拿疼" in reply
     meds = await svc.users.list_medications(uid)
     assert meds == []
+
+
+@pytest.mark.asyncio
+async def test_messages_explain_medication_replies(mock_settings) -> None:
+    """Explain-medication intent runs compose path (mock LLM) and returns text."""
+    mock_settings.mock_external_services = True
+    mock_settings.mobile_bearer_token = ""
+    uid = "user-explain-1"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "解釋一下阿斯匹靈是做什麼用的"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    assert len(r.json()["reply"].strip()) > 0

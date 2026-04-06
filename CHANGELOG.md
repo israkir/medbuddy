@@ -9,7 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Supabase `drug_reference_cache`**: global table to cache drug usage / label text
+  (`source`, `query_key`, `title`, `usage_text`, optional indication/dosing/warning fields,
+  `raw_payload`, `fetched_at`, `expires_at`) with RLS for `anon`, matching other MedBuddy tables.
+- **Supabase `drug_personalization_cache`**: per-user cache for **LLM-personalized** explanations
+  (`user_id`, optional `medication_id`, optional `reference_cache_id`, `query_fingerprint`,
+  `intent`, `personalized_text`, `locale`, `llm_meta`, timestamps, `expires_at`) with unique
+  `(user_id, query_fingerprint)` and RLS for `anon`.
+- **Drug cache wiring**: With Supabase configured, **`CachingDrugData`** backs
+  **`drug_reference_cache`** (read-through for TFDA/OpenFDA snippets; TTL
+  **`MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS`**). **`run_assistant_text_turn`** uses
+  **`SupabaseDrugCaches`** for **`drug_personalization_cache`**: cache hit short-circuits before
+  remote drug fetch / LLM compose; after compose, replies are saved (fingerprint includes
+  medication-list snapshot via **`personalization_fingerprint`**; TTL
+  **`MEDBUDDY_DRUG_PERSONALIZATION_CACHE_TTL_HOURS`**).
+- **Medication comprehension prototype (Expo)**: Home links to **Medication helper** (`app/companion.tsx`) — chat with **Read aloud**, large type, suggested questions, and optional **`POST /v1/app/messages`** when `EXPO_PUBLIC_USE_MOCK_DATA` is false (headers `X-App-User-Id`, optional bearer). Offline mode uses i18n mock explanations (purpose / timing / interactions).
+- **Assistant prompts**: For `explain_medication` and `interaction_check` intents, `run_assistant_text_turn` appends locale-specific **companion** instructions so replies emphasize purpose, timing rationale, and interaction cautions without replacing clinical advice.
+- **`docs/use-cases.md`**: Documents implemented channels, assistant intents (including drug-cache behavior and **add-medication** grounding), Supabase layers, and Expo companion notes.
+- **Supabase `dose_events`**: `user_id`, `medication_id`, `scheduled_at`, optional `taken_at`, with RLS
+  policy for `anon` (see `apps/backend/supabase/schema.sql`).
 - **Text medication management** in the assistant (`list_medications`, `add_medication`, `remove_medication` intents): parse fields via LLM (Gemini JSON) or mock heuristics, persist with **`UserDataPort.add_medication` / `delete_medication`** (in-memory mock + Supabase). Wired in **`application/medication_intents.py`** for LINE and **`POST /v1/app/messages`**.
+- **Add-medication acknowledgment**: After save, reload patient list, fetch **`DrugDataPort`** snippets for the new drug name, and call **`LLMPort.compose_medication_added_reply`** (Gemini + i18n task strings; mocks use **`mocks.llm.medication_added`**) so the reply restates schedule, adds brief grounded context, and falls back to **`medication.added`** if compose fails. Does **not** use **`drug_personalization_cache`** (that remains for explain/interaction only).
 - **Observability**: `LOG_LEVEL` (default `INFO`) configures `medbuddy.*` and `uvicorn.error`
   log verbosity; LINE webhook and orchestrator emit structured INFO logs (event types, flow steps,
   reply sizes) without logging raw message text. Render blueprint sets `LOG_LEVEL=INFO`.
