@@ -1,3 +1,4 @@
+from medbuddy.protocols.drug_caches import DrugCachesPort
 from medbuddy.protocols.ports import (
     ConversationStorePort,
     DrugDataPort,
@@ -11,6 +12,7 @@ from medbuddy.protocols.ports import (
 
 __all__ = [
     "ConversationStorePort",
+    "DrugCachesPort",
     "DrugDataPort",
     "LineMessagingPort",
     "LLMPort",

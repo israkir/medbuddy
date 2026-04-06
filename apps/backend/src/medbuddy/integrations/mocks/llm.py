@@ -43,6 +43,27 @@ class MockLLM(LLMPort):
             return Intent.LIST_MEDICATIONS
         if "remove " in lowered or "stop taking" in lowered or "delete med" in lowered:
             return Intent.REMOVE_MEDICATION
+        if (
+            "interaction" in lowered
+            or "interactions" in lowered
+            or "take together" in lowered
+            or "mix with" in lowered
+        ):
+            return Intent.INTERACTION_CHECK
+        if any(
+            phrase in lowered
+            for phrase in (
+                "what is ",
+                "what's ",
+                "explain ",
+                "purpose of",
+                "why take",
+                "why do i take",
+                "what does ",
+                " for?",
+            )
+        ):
+            return Intent.EXPLAIN_MEDICATION
         if "交互" in user_text or "一起" in user_text:
             return Intent.INTERACTION_CHECK
         if "摘要" in user_text or "總結" in user_text:
@@ -118,3 +139,26 @@ class MockLLM(LLMPort):
             if med.name.lower() in lt or lt in med.name.lower():
                 return med.id
         return None
+
+    async def compose_medication_added_reply(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str:
+        await asyncio.sleep(0)
+        _ = (patient_context, user_message)
+        summary = (drug_grounding or "").replace("\n", " ").strip()[:160] or t(
+            "gemini.no_drug_data", locale=locale
+        )
+        return t(
+            "mocks.llm.medication_added",
+            locale=locale,
+            name=saved.name,
+            dosage=saved.dosage,
+            schedule=saved.schedule,
+            drug_summary=summary,
+        )

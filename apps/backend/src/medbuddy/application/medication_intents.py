@@ -2,10 +2,28 @@
 
 from __future__ import annotations
 
+import logging
+
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
 from medbuddy.models.domain import Intent, MedicationRecord
 from medbuddy.prompts.persona import format_patient_medication_context
+
+log = logging.getLogger(__name__)
+
+
+async def _drug_grounding_for_query(svc: AppServices, query: str) -> str | None:
+    q = query.strip()
+    if not q:
+        return None
+    parts: list[str] = []
+    tfda = await svc.drugs.fetch_tfda_snippet(q)
+    ofda = await svc.drugs.fetch_openfda_label_snippet(q)
+    if tfda:
+        parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
+    if ofda:
+        parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
+    return "\n\n".join(parts) if parts else None
 
 
 async def try_medication_intent_reply(
@@ -29,13 +47,26 @@ async def try_medication_intent_reply(
         if draft is None or not draft.name.strip():
             return t("medication.add_incomplete", locale=locale)
         saved = await svc.users.add_medication(user_key, draft)
-        return t(
-            "medication.added",
-            locale=locale,
-            name=saved.name,
-            dosage=saved.dosage,
-            schedule=saved.schedule,
-        )
+        meds_updated = await svc.users.list_medications(user_key)
+        patient_ctx = format_patient_medication_context(meds_updated, locale=locale)
+        drug_grounding = await _drug_grounding_for_query(svc, saved.name)
+        try:
+            return await svc.llm.compose_medication_added_reply(
+                patient_context=patient_ctx,
+                drug_grounding=drug_grounding,
+                saved=saved,
+                user_message=user_text,
+                locale=locale,
+            )
+        except Exception:
+            log.exception("compose_medication_added_reply failed; using template fallback")
+            return t(
+                "medication.added",
+                locale=locale,
+                name=saved.name,
+                dosage=saved.dosage,
+                schedule=saved.schedule,
+            )
 
     if intent == Intent.REMOVE_MEDICATION:
         if not medications:

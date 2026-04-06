@@ -66,6 +66,16 @@ class LLMPort(Protocol):
         locale: str,
     ) -> str | None: ...
 
+    async def compose_medication_added_reply(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str: ...
+
 
 @runtime_checkable
 class DrugDataPort(Protocol):

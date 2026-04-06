@@ -107,6 +107,25 @@ class Settings(BaseSettings):
     conversation_history_turns: int = 5
     audio_temp_ttl_seconds: int = 60
 
+    drug_reference_cache_ttl_hours: int = Field(
+        default=168,
+        ge=0,
+        description="TTL for drug_reference_cache expires_at; 0 = no expiry",
+        validation_alias=AliasChoices(
+            "MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS",
+            "drug_reference_cache_ttl_hours",
+        ),
+    )
+    drug_personalization_cache_ttl_hours: int = Field(
+        default=72,
+        ge=0,
+        description="TTL for drug_personalization_cache expires_at; 0 = no expiry",
+        validation_alias=AliasChoices(
+            "MEDBUDDY_DRUG_PERSONALIZATION_CACHE_TTL_HOURS",
+            "drug_personalization_cache_ttl_hours",
+        ),
+    )
+
     mobile_bearer_token: str = Field(
         default="",
         description=(
