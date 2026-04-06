@@ -10,7 +10,7 @@ Paths below are relative to **`apps/frontend/`**.
 
 | Screen | File | Description |
 |--------|------|-------------|
-| **Onboarding** | `app/onboarding.tsx` | First-run form — name, age, gender, emergency contact, health notes. Gated in `app/_layout.tsx` until completed. |
+| **Onboarding** | `app/onboarding.tsx` | First-run form — name, age, gender, emergency contact, health notes. **`lib/companionApi.ts`** submits **`timezone`** (device IANA via `Intl.DateTimeFormat().resolvedOptions().timeZone`) with **`POST /v1/app/onboarding`**. Gated in `app/_layout.tsx` until completed. |
 | **Today** | `app/(tabs)/index.tsx` | Greeting, pending dose card, link to companion |
 | **Medications** | `app/(tabs)/medications.tsx` | Medication catalog, "Listen" (expo-speech), visit questions panel, hold-to-talk (expo-av) |
 | **Family** | `app/(tabs)/family.tsx` | Informational copy + "invite" placeholder |
@@ -51,7 +51,7 @@ When `EXPO_PUBLIC_USE_MOCK_DATA=false`, the companion and doctor-summary screens
 - `POST /v1/app/messages` — chat turns
 - `GET /v1/app/summary` — doctor-ready health summary
 
-Both require `X-App-User-Id` header (stable per-install ID) and optionally `Authorization: Bearer <token>`.
+Onboarding uses `POST /v1/app/onboarding` (includes **`timezone`** for the device zone). Both require `X-App-User-Id` header (stable per-install ID) and optionally `Authorization: Bearer <token>`.
 
 ---
 

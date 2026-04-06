@@ -102,8 +102,8 @@ make be-compose       # podman/docker compose up --build
 | `POST /v1/line/webhook` | LINE Messaging API webhook |
 | `GET /v1/app/health` | JSON health for mobile clients |
 | `GET /v1/app/info` | Public service metadata |
-| `GET /v1/app/me` | User profile |
-| `POST /v1/app/onboarding` | First-run profile save |
+| `GET /v1/app/me` | User profile (incl. IANA **`timezone`**) |
+| `POST /v1/app/onboarding` | First-run profile save (optional **`timezone`**) |
 | `POST /v1/app/messages` | Chat turn (returns `{"reply":"…"}`) |
 | `GET /v1/app/summary` | Doctor-ready health summary |
 | `POST /internal/reminders/reconcile` | Cron safety net for dose reminders |

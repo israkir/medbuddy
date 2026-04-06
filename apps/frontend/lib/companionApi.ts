@@ -24,6 +24,8 @@ export type MeProfile = {
   gender?: ProfileGender | string | null;
   emergency_contact?: string | null;
   health_notes?: string | null;
+  /** IANA timezone for reminders (server defaults to Asia/Taipei). */
+  timezone?: string | null;
   onboarding_completed_at?: string | null;
 };
 
@@ -48,6 +50,7 @@ function emptyProfile(): MeProfile {
     gender: null,
     emergency_contact: null,
     health_notes: null,
+    timezone: null,
     onboarding_completed_at: null,
   };
 }
@@ -85,15 +88,23 @@ export type OnboardingPayload = {
   gender: ProfileGender | null;
   emergency_contact: string;
   health_notes: string;
+  /** IANA timezone; defaults to device zone when omitted. */
+  timezone?: string | null;
 };
 
 export async function submitOnboarding(payload: OnboardingPayload): Promise<MeProfile> {
+  const tz =
+    payload.timezone?.trim() ||
+    (typeof Intl !== 'undefined'
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : null);
   const body = {
     preferred_name: payload.preferred_name.trim(),
     age_years: payload.age_years,
     gender: payload.gender,
     emergency_contact: payload.emergency_contact.trim() || null,
     health_notes: payload.health_notes.trim() || null,
+    ...(tz ? { timezone: tz } : {}),
   };
 
   if (useMockData) {
@@ -101,6 +112,7 @@ export async function submitOnboarding(payload: OnboardingPayload): Promise<MePr
     const completed: MeProfile = {
       ...emptyProfile(),
       ...body,
+      timezone: tz ?? 'Asia/Taipei',
       onboarding_completed_at: new Date().toISOString(),
     };
     await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(completed));

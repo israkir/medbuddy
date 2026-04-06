@@ -57,6 +57,7 @@ async def test_app_me_ok(mock_settings):
     assert data["app_user_id"] == "app-test-user"
     assert data["onboarding_completed_at"] is None
     assert data["preferred_name"] is None
+    assert data["timezone"] == "Asia/Taipei"
 
 
 @pytest.mark.asyncio
@@ -119,6 +120,7 @@ async def test_app_onboarding_saves_profile(mock_settings):
                     "gender": "female",
                     "emergency_contact": "女兒 0922",
                     "health_notes": "對青黴素過敏",
+                    "timezone": "Asia/Taipei",
                 },
                 headers=_mobile_headers(user="onboarding-user-1"),
             )
@@ -128,6 +130,7 @@ async def test_app_onboarding_saves_profile(mock_settings):
     assert data["age_years"] == 68
     assert data["gender"] == "female"
     assert data["onboarding_completed_at"] is not None
+    assert data["timezone"] == "Asia/Taipei"
 
     with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

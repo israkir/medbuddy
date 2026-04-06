@@ -57,7 +57,7 @@ Defined and extended in [`apps/backend/supabase/schema.sql`](../apps/backend/sup
 
 | Object | Purpose |
 |--------|---------|
-| **`users.timezone`** | IANA name for daily reminder clock (default `Asia/Taipei`). |
+| **`users.timezone`** | IANA name for daily reminder clock and LINE **`time_local`** in push copy (DB default `Asia/Taipei`). **Set by:** Postgres default on **`INSERT`** (LINE users without mobile onboarding); **`POST /v1/app/onboarding`** optional **`timezone`** (Expo sends device IANA); **`patch_user_profile`** with **`timezone`** for later changes (e.g. travel). |
 | **`dose_events.scheduled_at`** | When the dose is due (timestamptz, stored in UTC). |
 | **`dose_events.taken_at`** | Optional adherence field (not required by the reminder job). |
 | **`dose_events.reminder_sent_at`** | Set after a successful push; idempotency / reconcile. |
@@ -69,8 +69,10 @@ Apply new columns on existing projects via the same file’s **`ALTER TABLE ... 
 | Variable | Role |
 |----------|------|
 | **`REDIS_URL`** | Redis DSN for arq (API **enqueue** + worker **consume**; main **`Dockerfile`** runs both in one container when set). |
-| **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`** | `HH:MM` local time (default `09:00`). |
+| **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`** | `HH:MM` **local** time (default `09:00`) in each user’s **`users.timezone`**. |
 | **`MEDBUDDY_REMINDER_HORIZON_DAYS`** | Days ahead to materialize (default **14**, max **90** in settings). |
+
+There is **no** global reminder timezone env var — **`users.timezone`** is the source of truth.
 | **`MEDBUDDY_CRON_SECRET`** | Secret for **`POST /internal/reminders/reconcile`** (**`X-Cron-Secret`** header). |
 
 **Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root **Dockerfile** (`pip install ".[llm,supabase,tts,reminders]"`).
@@ -116,6 +118,7 @@ If Redis or the **arq** process restarts, some due rows may never get a job. A l
 | Worker entry | `apps/backend/src/medbuddy/reminders/worker.py` |
 | Hook after add/remove med | `apps/backend/src/medbuddy/reminders/lifecycle.py` · `medication_intents.py` |
 | Supabase persistence | `apps/backend/src/medbuddy/integrations/supabase_stores.py` |
+| User IANA zone helpers | `apps/backend/src/medbuddy/user_timezone.py` |
 | LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `protocols/ports.py` |
 | Reconcile route | `apps/backend/src/medbuddy/http/shared_routes.py` |
 
@@ -127,5 +130,6 @@ Push messages can count against LINE plan quotas; reminder copy is kept short. P
 
 - `apps/backend/tests/test_dose_schedule.py` — daily instant generation.
 - `apps/backend/tests/test_dose_reminder_deliver.py` — mock LINE push and idempotency.
+- `apps/backend/tests/test_user_timezone.py` — IANA validation / defaults.
 
 Run **`make be-test`** from the repository root.

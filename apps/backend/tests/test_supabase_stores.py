@@ -251,6 +251,7 @@ async def test_save_onboarding_profile_updates_row() -> None:
     assert upd["preferred_name"] == "May"
     assert upd["age_years"] == 72
     assert upd["gender"] == "female"
+    assert upd["timezone"] == "Asia/Taipei"
 
 
 @pytest.mark.asyncio

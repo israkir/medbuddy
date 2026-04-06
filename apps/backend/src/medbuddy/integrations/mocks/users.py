@@ -13,6 +13,7 @@ from medbuddy.reminders.prefs import (
     reminder_prefs_from_metadata,
 )
 from medbuddy.protocols.ports import UserDataPort
+from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
 
 def _default_profile_fields() -> dict[str, Any]:
@@ -61,6 +62,7 @@ class MockUserData(UserDataPort):
         gender: str | None,
         emergency_contact: str | None,
         health_notes: str | None,
+        timezone: str | None = None,
     ) -> dict[str, Any]:
         await asyncio.sleep(0)
         row = await self.get_or_create_user(line_user_id)
@@ -70,6 +72,7 @@ class MockUserData(UserDataPort):
         row["emergency_contact"] = (emergency_contact or "").strip() or None
         row["health_notes"] = (health_notes or "").strip() or None
         row["onboarding_completed_at"] = datetime.now(UTC)
+        row["timezone"] = effective_user_timezone(timezone)
         return row
 
     async def patch_user_profile(self, line_user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
@@ -105,6 +108,12 @@ class MockUserData(UserDataPort):
                     row[key] = None
                 elif isinstance(raw, str):
                     row[key] = raw.strip() or None
+        if "timezone" in fields:
+            norm = normalize_timezone_patch(fields["timezone"])
+            if norm is not None:
+                row["timezone"] = norm
+            elif fields["timezone"] is None:
+                row["timezone"] = None
         return row
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
@@ -141,7 +150,8 @@ class MockUserData(UserDataPort):
         await asyncio.sleep(0)
         row = await self.get_or_create_user(line_user_id)
         uid = row["id"]
-        tz_name = str(row.get("timezone") or "Asia/Taipei")
+        rem = self._reminder_settings()
+        tz_name = effective_user_timezone(str(row.get("timezone")) if row.get("timezone") else None)
         meds = list(self._meds.get(line_user_id, []))
         now = datetime.now(UTC)
         to_del = [
@@ -152,7 +162,6 @@ class MockUserData(UserDataPort):
         for did in to_del:
             del self._doses[did]
 
-        rem = self._reminder_settings()
         if not meds:
             return []
         out: list[tuple[str, datetime]] = []

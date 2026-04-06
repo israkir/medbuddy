@@ -137,7 +137,7 @@ Classification is done by the configured **LLM** (e.g. Gemini) or **mock rules**
 | Turns | `conversation_turns` | Recent dialogue for the LLM |
 | Reference | `drug_reference_cache` | Shared label snippets per `source` + normalized `query_key` |
 | Personalization | `drug_personalization_cache` | Per-user LLM answer for explain/interaction fingerprints; **`llm_meta.source`** is **`openfda`** / **`tfda`** when label snippets were used, else the **LLM model id** (model-only grounding) |
-| Dose reminders | `dose_events`, **`users.timezone`** | Prototype LINE **push** at **`scheduled_at`** via **arq** + **`REDIS_URL`** after add/remove medication; see **[`docs/reminders.md`](reminders.md)** |
+| Dose reminders | `dose_events`, **`users.timezone`** (IANA; default **Asia/Taipei**; app onboarding or **`patch_user_profile`** can set it) | Prototype LINE **push** at **`scheduled_at`** via **arq** + **`REDIS_URL`** after add/remove medication; see **[`docs/reminders.md`](reminders.md)** |
 
 Without Supabase, users/conversations stay in memory and **drug_caches** / **CachingDrugData** are not wired.
 

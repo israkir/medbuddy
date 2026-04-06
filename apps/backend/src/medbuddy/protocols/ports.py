@@ -143,6 +143,7 @@ class UserDataPort(Protocol):
         gender: str | None,
         emergency_contact: str | None,
         health_notes: str | None,
+        timezone: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def patch_user_profile(

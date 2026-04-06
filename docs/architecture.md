@@ -383,7 +383,7 @@ conversation_turns             dose_events
 | `gender` | `text` | `female` / `male` / `non_binary` / `prefer_not_say` / `other` |
 | `emergency_contact` | `text` | Free text (not sent to LLM) |
 | `health_notes` | `text` | Patient-entered notes (not sent to LLM) |
-| `timezone` | `text` | IANA timezone (default `Asia/Taipei`) |
+| `timezone` | `text` | IANA timezone for medication reminder local times and LINE push clock text (DB default `Asia/Taipei`; standalone app sets it on **`POST /v1/app/onboarding`**; **`patch_user_profile`** may update it) |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
 | `created_at` | `timestamptz` | Row creation |
 | `updated_at` | `timestamptz` | Last update |
@@ -540,6 +540,7 @@ Auth required. Returns user profile.
   "gender": "female",
   "emergency_contact": "...",
   "health_notes": "...",
+  "timezone": "Asia/Taipei",
   "onboarding_completed_at": "2026-04-01T10:00:00Z"
 }
 ```
@@ -555,7 +556,8 @@ Auth required. Saves first-run profile.
   "age_years": 68,               // optional
   "gender": "female",            // optional: female|male|non_binary|prefer_not_say|other
   "emergency_contact": "...",    // optional
-  "health_notes": "..."          // optional
+  "health_notes": "...",         // optional
+  "timezone": "Asia/Taipei"      // optional IANA; omit → Asia/Taipei
 }
 ```
 
@@ -893,9 +895,11 @@ All settings are in `config.py` (Pydantic `BaseSettings`). Sources, in priority 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `REDIS_URL` | — | DSN for arq; enables worker when set |
-| `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` | `09:00` | `HH:MM` local time for daily reminders |
+| `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` | `09:00` | `HH:MM` **local** time for daily reminders — interpreted in **`users.timezone`** (per-user IANA in Postgres, not a global env) |
 | `MEDBUDDY_REMINDER_HORIZON_DAYS` | `14` | Days ahead to materialize dose events (max 90) |
 | `MEDBUDDY_CRON_SECRET` | — | Header secret for reconcile endpoint |
+
+Per-user **calendar timezone** for scheduling and LINE push copy is stored in **`users.timezone`** (default **`Asia/Taipei`**). The standalone app sets it during **`POST /v1/app/onboarding`**; **`patch_user_profile`** can change it later.
 
 ### 13.7 Caching
 

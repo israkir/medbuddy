@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from zoneinfo import ZoneInfo
 
 
 class ProfileGender(str, Enum):
@@ -26,6 +27,25 @@ class OnboardingSubmit(BaseModel):
     gender: ProfileGender | None = None
     emergency_contact: str | None = Field(None, max_length=200)
     health_notes: str | None = Field(None, max_length=1000)
+    timezone: str | None = Field(
+        None,
+        max_length=64,
+        description="IANA timezone (e.g. Asia/Taipei); omit for default Asia/Taipei",
+    )
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            ZoneInfo(s)
+        except Exception as e:
+            raise ValueError("timezone must be a valid IANA timezone name") from e
+        return s
 
 
 class MessageCreate(BaseModel):
@@ -43,6 +63,10 @@ class MeResponse(BaseModel):
     gender: str | None = None
     emergency_contact: str | None = None
     health_notes: str | None = None
+    timezone: str = Field(
+        default="Asia/Taipei",
+        description="IANA timezone used for medication reminders (default Asia/Taipei)",
+    )
     onboarding_completed_at: str | None = None
 
 

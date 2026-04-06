@@ -26,8 +26,8 @@ All routes below use **`X-App-User-Id`** (stable id per install or account, 4–
 |----------|---------|
 | **`GET /v1/app/health`** | JSON health for mobile clients. |
 | **`GET /v1/app/info`** | Public service metadata (non-secret). |
-| **`GET /v1/app/me`** | Returns **`app_user_id`** and profile: **`preferred_name`**, **`age_years`**, **`gender`**, **`emergency_contact`**, **`health_notes`**, **`onboarding_completed_at`**. |
-| **`POST /v1/app/onboarding`** | Body: **`preferred_name`** (required), optional **`age_years`**, **`gender`** (`female` \| `male` \| `non_binary` \| `prefer_not_say` \| `other`), **`emergency_contact`**, **`health_notes`**. Persists via **`UserDataPort.save_onboarding_profile`**; response mirrors **`GET /me`**. |
+| **`GET /v1/app/me`** | Returns **`app_user_id`** and profile: **`preferred_name`**, **`age_years`**, **`gender`**, **`emergency_contact`**, **`health_notes`**, **`timezone`** (IANA, default **`Asia/Taipei`**), **`onboarding_completed_at`**. |
+| **`POST /v1/app/onboarding`** | Body: **`preferred_name`** (required), optional **`age_years`**, **`gender`** (`female` \| `male` \| `non_binary` \| `prefer_not_say` \| `other`), **`emergency_contact`**, **`health_notes`**, **`timezone`** (optional IANA name; omitted → **`Asia/Taipei`**). The Expo client sends the **device zone** (`Intl…resolvedOptions().timeZone`) via **`companionApi`**. Persists via **`UserDataPort.save_onboarding_profile`**; response mirrors **`GET /me`**. |
 | **`POST /v1/app/messages`** | Body: **`text`** (1–8000 chars). Resolves auth → **`run_assistant_text_turn(user_key=app_user_id, user_text)`** → **`{"reply":"…"}`**. |
 | **`GET /v1/app/summary`** | Returns a structured doctor-ready health summary (main concern, symptoms, optional vitals, med changes, questions, carer note). Backed by `GenerateHealthSummaryTool` via the agent; the Expo app also stores a local draft in AsyncStorage. |
 
@@ -177,7 +177,7 @@ When **`SUPABASE_URL`** and **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_
 | Feature | Detail |
 |--------|--------|
 | **Trigger** | Successful **`add_medication`** or **`remove_medication`** via **`try_medication_intents`** (any channel using that handler). |
-| **Scheduling** | **`UserDataPort.sync_upcoming_dose_events`** replaces **future** **`dose_events`** for the user: **one local time per day** (**`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`**, default `09:00`) in **`users.timezone`** (default `Asia/Taipei`), for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**, cap **90**). **Free-text `schedule` on the med does not** expand to multiple daily times in v1 (it may still appear in copy). |
+| **Scheduling** | **`UserDataPort.sync_upcoming_dose_events`** replaces **future** **`dose_events`** for the user: **one local time per day** (**`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`**, default `09:00`) in **`users.timezone`** (IANA). **Source:** DB default **`Asia/Taipei`** at user creation; standalone **`POST /v1/app/onboarding`** sets **`timezone`**; **`patch_user_profile`** can update **`timezone`** (e.g. travel). LINE-only users keep the default until changed in DB. Horizon: **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**, cap **90**). **Free-text `schedule` on the med does not** expand to multiple daily times in v1 (it may still appear in copy). |
 | **Delivery** | With **Redis**, **`enqueue_reminder_jobs`** schedules **arq** **`send_reminder_for_dose`** with **`_defer_until = scheduled_at`**. Worker runs **`deliver_dose_reminder`** → **LINE `push_message`**, then **`reminder_sent_at`** for idempotency. |
 | **Copy** | Locale key **`reminder.line_push`** (`zh-TW`, `en`). |
 | **Scope** | **LINE push only** for users whose key is a LINE `userId`; **no** Expo local notifications in this slice. **No** Flex cards or “mark taken” postback in v1. **`dose_events.taken_at`** exists for future adherence use but is not required for the push job. |
@@ -193,7 +193,7 @@ Paths relative to **`apps/frontend/`**.
 
 | Feature | Detail |
 |--------|--------|
-| **Onboarding** | First-run screen **`app/onboarding.tsx`**, gated in **`app/_layout.tsx`**. Large-type fields align with **`POST /v1/app/onboarding`**. In **`EXPO_PUBLIC_USE_MOCK_DATA=true`**, AsyncStorage-backed mock (**`companionApi`**) can persist the same shape locally. |
+| **Onboarding** | First-run screen **`app/onboarding.tsx`**, gated in **`app/_layout.tsx`**. Large-type fields align with **`POST /v1/app/onboarding`**; **`lib/companionApi.ts`** submits the device IANA **`timezone`** with the profile (see **`submitOnboarding`**). In **`EXPO_PUBLIC_USE_MOCK_DATA=true`**, AsyncStorage-backed mock (**`companionApi`**) can persist the same shape locally. |
 | **Tabs** | **Today** (`(tabs)/index.tsx`) — greeting, link to companion, **`PendingDoseCard`**, accessibility-minded typography. **Medications** — catalog **`MEDICATION_LIST`**, **`MedicationListCard`**, visit questions, **`MedicationQuestionsPanel`**, quick jump, **expo-speech** “listen” via **`MedicationExplanationContext`**. **Family** — informational copy + placeholder “invite” alert (no backend). **Settings** — language (**繁體中文（台灣）** / **English**), persisted in AsyncStorage, applied before splash hides. |
 | **Medication helper** | **`app/companion.tsx`** — chat UI, **suggested prompts**, **read aloud** (on-device TTS). With **`EXPO_PUBLIC_USE_MOCK_DATA=false`**, **`POST /v1/app/messages`** with **`X-App-User-Id`** and optional bearer; mock mode returns i18n-only explanations. |
 | **Voice prototype** | Tab / medications flow may use **expo-av** hold-to-talk; baseline shows an alert after recording — **not** wired to backend STT (LINE voice is the primary voice path). |
