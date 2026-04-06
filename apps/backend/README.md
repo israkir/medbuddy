@@ -166,12 +166,10 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 
 ## Localization
 
-User-facing strings live in JSON files, not hardcoded in Python:
+- **Backend:** JSON under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); server default via `MEDBUDDY_LOCALE` / `.env` (see `apps/backend/.env.example`).
+- **Frontend:** `i18next` + JSON under `apps/frontend/locales/`.
 
-- `src/medbuddy/locales/zh-TW.json` — primary locale (Taiwan Traditional Chinese).
-- `src/medbuddy/locales/en.json` — English mirror.
-
-Use `medbuddy.i18n.t("key.path", locale=...)`. Missing keys fall back to `zh-TW`. For tests that reload locale files, call `clear_i18n_cache()`.
+Adding a language: add matching `*.json` in both trees and register in backend settings/loaders and `apps/frontend/i18n/index.ts` (details in the per-app READMEs).
 
 ---
 

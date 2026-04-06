@@ -58,9 +58,7 @@ class HealthSummaryResponse(BaseModel):
     """Doctor-ready health summary returned by ``GET /v1/app/summary``."""
 
     generated_at: datetime
-    summary_for_doctor: str = Field(
-        description="Concise clinical paragraph suitable for a doctor."
-    )
+    summary_for_doctor: str = Field(description="Concise clinical paragraph suitable for a doctor.")
     medications: list[MedicationSummaryItemResponse]
     key_concerns: list[str]
     reported_symptoms: list[str]

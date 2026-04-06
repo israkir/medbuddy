@@ -141,5 +141,7 @@ class RemoveMedicationTool:
             return ToolResult(reply=t("medication.remove_not_found", locale=locale))
 
         await sync_and_enqueue_reminders(svc, user_key)
-        log.info("remove_medication: user_key=%s removed med_id=%s name=%r", user_key, mid, target.name)
+        log.info(
+            "remove_medication: user_key=%s removed med_id=%s name=%r", user_key, mid, target.name
+        )
         return ToolResult(reply=t("medication.removed", locale=locale, name=target.name))

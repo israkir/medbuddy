@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAI**: optional Chat Completions LLM adapter (`OpenAILLM`, default model `gpt-4.1-mini`) implementing the same `LLMPort` contract as Gemini. Set **`LLM_PROVIDER=openai`**, **`OPENAI_API_KEY`**, and optionally **`OPENAI_MODEL`**; **`Settings.active_llm_model_id`** supplies drug-cache provenance. The **`llm`** optional dependency group now includes **`openai`**.
+
 ### Changed
 
 - **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).

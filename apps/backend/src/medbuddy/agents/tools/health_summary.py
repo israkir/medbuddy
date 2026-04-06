@@ -15,12 +15,11 @@ always well-structured regardless of model variation.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
 from medbuddy.engine.types import AppServices
-from medbuddy.models.domain import HealthSummary, MedicationRecord
+from medbuddy.models.domain import MedicationRecord
 from medbuddy.prompts.persona import build_patient_context_for_llm
 
 log = logging.getLogger(__name__)

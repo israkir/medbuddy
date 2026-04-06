@@ -14,6 +14,7 @@ from medbuddy.drug_cache_keys import (
     resolve_medication_id_for_personalization,
 )
 from medbuddy.engine.types import AppServices
+from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
@@ -87,7 +88,9 @@ class ExplainMedicationTool:
                 patient_context=patient_ctx,
             )
             med_cache_id = resolve_medication_id_for_personalization(medications, user_text)
-            prov_source = grounding_source or svc.settings.gemini_model
+            prov_source = grounding_source or (
+                "mock_llm" if isinstance(svc.llm, MockLLM) else svc.settings.active_llm_model_id
+            )
             await svc.drug_caches.save_personalized_reply(
                 user_uuid=user_row["id"],
                 query_fingerprint=fp,
