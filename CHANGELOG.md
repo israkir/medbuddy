@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Deploy**: **`render.yaml`** blueprint default **`LLM_PROVIDER`** is **`openai`** (set **`OPENAI_API_KEY`** in Render secrets; use **`gemini`** here if the service should use **`GEMINI_API_KEY`** instead).
 - **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).
 
 ### Fixed
