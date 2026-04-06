@@ -109,6 +109,7 @@ function RootLayoutNav() {
             options={{ headerShown: true, gestureEnabled: false }}
           />
           <Stack.Screen name="companion" options={{ headerShown: true }} />
+          <Stack.Screen name="doctor-summary" options={{ headerShown: true }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
         {onboardingGate === 'pending' ? (

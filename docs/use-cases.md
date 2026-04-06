@@ -149,7 +149,7 @@ Without Supabase, users/conversations stay in memory and **drug_caches** / **Cac
 
 **Behavior (Supabase + Redis):** Upcoming **`dose_events`** rows are recreated; deferred **arq** jobs send a **LINE push** around each **`scheduled_at`**, then set **`reminder_sent_at`**. Free-text **`schedule`** is echoed in the message but does not drive multiple times per day in v1.
 
-**Full reference:** architecture, schema, env vars, Render worker, Compose profile, reconcile endpoint — **[`docs/reminders.md`](reminders.md)**.
+**Full reference:** architecture, schema, env vars, Render (API + arq in one service when **`REDIS_URL`** is set), Compose profile, reconcile endpoint — **[`docs/reminders.md`](reminders.md)**.
 
 ---
 

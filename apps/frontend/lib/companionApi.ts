@@ -131,6 +131,29 @@ function mockReply(userText: string): string {
     return t('companion.mockInteraction');
   }
   if (
+    /list (my )?med|what am i taking|my medications|藥品清單|我吃哪些藥|有哪些藥|我的藥/i.test(
+      low + userText
+    )
+  ) {
+    return t('companion.mockListMeds');
+  }
+  if (
+    /doctor|visit summary|health summary|看診|給醫師|診間|回診要說/i.test(low + userText) ||
+    (/摘要|重點/.test(userText) && /醫|診|藥/.test(userText))
+  ) {
+    return t('companion.mockDoctorSummary');
+  }
+  if (
+    /family|caregiver|carer|monitor|家人|照顧者|家屬|同步|一起看/i.test(low + userText)
+  ) {
+    return t('companion.mockFamilyView');
+  }
+  if (
+    /mandarin|chinese voice|中文.*語音|語音.*中文|line.*語音|唸出|朗讀/i.test(low + userText)
+  ) {
+    return t('companion.mockMandarinVoice');
+  }
+  if (
     /metformin|二甲|雙胍|血糖|aspirin|阿斯匹靈|血壓|statin|膽固醇|cholesterol|bp\b/i.test(
       low + userText
     )

@@ -10,9 +10,12 @@ WORKDIR /app
 
 COPY apps/backend/pyproject.toml apps/backend/README.md /app/
 COPY apps/backend/src/medbuddy /app/src/medbuddy
+COPY docker-entrypoint-web.sh /app/docker-entrypoint-web.sh
 
-RUN pip install --no-cache-dir ".[llm,supabase,tts,reminders]"
+RUN pip install --no-cache-dir ".[llm,supabase,tts,reminders]" \
+    && chmod +x /app/docker-entrypoint-web.sh
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "exec uvicorn medbuddy.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# With REDIS_URL set, docker-entrypoint-web.sh runs uvicorn + arq (see script).
+CMD ["/app/docker-entrypoint-web.sh"]
