@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **LINE reminders**: Medication extraction now returns structured **reminder preferences** (first reminder in N minutes, whether to materialize daily rows, explicit horizon days 1–90, whether to ask the user for horizon, optional daily HH:MM). Values are stored in **`medications.raw_metadata.reminder`** and drive **`dose_events`** materialization (e.g. “in 5 minutes” → a single upcoming event ~5 minutes ahead without fanning 14 days). The **compose** prompt receives appendix text so the model can confirm one-off timing or ask how many days of daily reminders the user wants. **`MEDBUDDY_REMINDER_*`** env defaults apply when the LLM leaves fields unset; updating prefs from a follow-up user message is not implemented yet.
 - **OpenAI**: optional Chat Completions LLM adapter (`OpenAILLM`, default model `gpt-4.1-mini`) implementing the same `LLMPort` contract as Gemini. Set **`LLM_PROVIDER=openai`**, **`OPENAI_API_KEY`**, and optionally **`OPENAI_MODEL`**; **`Settings.active_llm_model_id`** supplies drug-cache provenance. The **`llm`** optional dependency group now includes **`openai`**.
 
 ### Changed

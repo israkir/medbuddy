@@ -60,6 +60,12 @@ class MedicationDraft:
     dosage: str
     schedule: str
     instructions_zh: str | None = None
+    # Reminder materialization (see medications.raw_metadata["reminder"] when saved)
+    first_reminder_in_minutes: int | None = None
+    materialize_daily_reminders: bool = True
+    reminder_horizon_days: int | None = None
+    needs_horizon_confirmation: bool = False
+    daily_reminder_local_hhmm: str | None = None
 
 
 @dataclass

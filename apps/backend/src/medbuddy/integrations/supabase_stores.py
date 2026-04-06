@@ -14,7 +14,11 @@ from medbuddy.models.domain import (
     MedicationDraft,
     MedicationRecord,
 )
-from medbuddy.reminders.dose_schedule import iter_scheduled_dose_times_utc
+from medbuddy.reminders.prefs import (
+    iter_dose_instants_for_medication,
+    reminder_blob_from_draft,
+    reminder_prefs_from_metadata,
+)
 from medbuddy.protocols.ports import ConversationStorePort, UserDataPort
 
 log = logging.getLogger(__name__)
@@ -228,7 +232,7 @@ class SupabaseUserData(UserDataPort):
             "dosage": draft.dosage.strip(),
             "schedule": draft.schedule.strip(),
             "instructions_zh": ins or None,
-            "raw_metadata": {},
+            "raw_metadata": {"reminder": reminder_blob_from_draft(draft)},
         }
 
         def insert() -> Any:
@@ -277,17 +281,19 @@ class SupabaseUserData(UserDataPort):
 
         await _run_q(delete_future)
 
-        instants = iter_scheduled_dose_times_utc(
-            tz_name=tz_name,
-            local_hhmm=self._settings.reminder_default_local_time,
-            horizon_days=self._settings.reminder_horizon_days,
-            now_utc=now,
-        )
-        if not meds or not instants:
+        if not meds:
             return []
 
         rows: list[dict[str, Any]] = []
         for med in meds:
+            prefs = reminder_prefs_from_metadata(med.raw_metadata)
+            instants = iter_dose_instants_for_medication(
+                prefs,
+                tz_name=tz_name,
+                default_local_hhmm=self._settings.reminder_default_local_time,
+                default_horizon_days=self._settings.reminder_horizon_days,
+                now_utc=now,
+            )
             for at in instants:
                 rows.append(
                     {
@@ -296,6 +302,8 @@ class SupabaseUserData(UserDataPort):
                         "scheduled_at": at.isoformat(),
                     }
                 )
+        if not rows:
+            return []
 
         def insert() -> Any:
             return self._client.table("dose_events").insert(rows).execute()

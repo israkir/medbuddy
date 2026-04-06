@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 
 from medbuddy.exceptions import LLMParseError
 from medbuddy.i18n import t
+from medbuddy.llm.medication_draft_build import medication_draft_from_extraction
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
     IntentClassification,
@@ -36,6 +37,7 @@ from medbuddy.models.domain import (
 )
 from medbuddy.prompts.persona import get_system_persona
 from medbuddy.protocols.ports import LLMPort
+from medbuddy.reminders.prefs import reminder_compose_appendix
 
 log = logging.getLogger(__name__)
 
@@ -192,9 +194,10 @@ class OpenAILLM(LLMPort):
         loc = locale
         prompt = (
             f"{t('gemini.extract_medication_intro', locale=loc)}\n"
-            "Return JSON only with keys: "
-            "name (string), dosage (string), schedule (string), "
-            "instructions_zh (string or null).\n"
+            f"{t('gemini.extract_medication_reminder_rules', locale=loc)}\n"
+            "Return JSON only with keys: name, dosage, schedule, instructions_zh, "
+            "first_reminder_in_minutes, materialize_daily_reminders, reminder_horizon_days, "
+            "needs_horizon_confirmation, daily_reminder_local_hhmm.\n"
             f"User: {user_text}"
         )
         try:
@@ -205,16 +208,8 @@ class OpenAILLM(LLMPort):
             log.warning("extract_medication: structured parse failed, skipping")
             return None
 
-        name = extracted.name.strip()
-        if not name:
-            return None
         un = t("medication.unspecified", locale=loc)
-        return MedicationDraft(
-            name=name,
-            dosage=extracted.dosage.strip() or un,
-            schedule=extracted.schedule.strip() or un,
-            instructions_zh=extracted.instructions_zh,
-        )
+        return medication_draft_from_extraction(extracted, unspecified=un)
 
     async def extract_medication_draft(
         self, user_text: str, *, locale: str
@@ -284,11 +279,12 @@ class OpenAILLM(LLMPort):
                 locale=loc,
                 text=saved.instructions_zh,
             )
+        appendix = reminder_compose_appendix(saved, loc)
         prompt = (
             f"{persona}\n\n{task}\n\n"
             f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
             f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
-            f"{facts}{extra}\n\n"
+            f"{facts}{extra}{appendix}\n\n"
             f"{t('gemini.user_label', locale=loc)}{user_message}"
         )
         return self._generate_sync(self._model, prompt)
