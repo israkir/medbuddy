@@ -9,7 +9,9 @@ from medbuddy.models.domain import (
     ConversationTurn,
     DoseEventReminderPayload,
     DrugGrounding,
+    HealthSummary,
     Intent,
+    InteractionResult,
     MedicationDraft,
     MedicationRecord,
 )
@@ -82,6 +84,30 @@ class LLMPort(Protocol):
         user_message: str,
         locale: str,
     ) -> str: ...
+
+    async def check_interactions_structured(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+    ) -> InteractionResult:
+        """Structured drug-interaction analysis.  Default impl returns a text-only stub."""
+        ...
+
+    async def generate_health_summary(
+        self,
+        *,
+        user_row: dict[str, Any],
+        medications: list[MedicationRecord],
+        recent_conversation: list[ConversationTurn],
+        patient_context: str,
+        locale: str,
+    ) -> HealthSummary:
+        """Generate a doctor-ready health summary for the patient."""
+        ...
 
 
 @runtime_checkable

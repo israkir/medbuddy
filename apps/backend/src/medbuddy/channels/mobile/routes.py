@@ -6,18 +6,24 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
+from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.channels.mobile.auth import MobileAuthContext, require_mobile_auth
 from medbuddy.channels.mobile.schemas import (
+    HealthSummaryResponse,
     MeResponse,
+    MedicationSummaryItemResponse,
     MessageCreate,
     MessageReply,
     OnboardingSubmit,
 )
 from medbuddy.deps import get_services
 from medbuddy.engine.types import AppServices
+from medbuddy.exceptions import MedBuddyError
+
+_summary_tool = GenerateHealthSummaryTool()
 
 router = APIRouter(prefix="/v1/app", tags=["standalone-app"])
 
@@ -111,3 +117,55 @@ async def app_post_message(
         user_text=body.text,
     )
     return MessageReply(reply=reply)
+
+
+@router.get("/summary", response_model=HealthSummaryResponse)
+async def app_get_health_summary(
+    ctx: MobileAuthContext = Depends(require_mobile_auth),
+    svc: AppServices = Depends(get_services),
+) -> HealthSummaryResponse:
+    """Generate a doctor-ready health summary for the current user.
+
+    Aggregates the patient's medication list, anonymised profile signals,
+    and recent conversation history to produce a structured summary
+    suitable for sharing with a physician at the next appointment.
+    """
+    user_row = await svc.users.get_or_create_user(ctx.app_user_id)
+    medications = await svc.users.list_medications(ctx.app_user_id)
+    locale = svc.settings.locale
+
+    try:
+        result = await _summary_tool.run(
+            svc=svc,
+            user_key=ctx.app_user_id,
+            user_row=user_row,
+            medications=medications,
+            locale=locale,
+        )
+    except MedBuddyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
+
+    summary = result.structured  # HealthSummary domain object
+    r = summary.result
+
+    med_responses = [
+        MedicationSummaryItemResponse(
+            name=item.name,
+            dosage=item.dosage,
+            schedule=item.schedule,
+            purpose=item.purpose,
+            notes=item.notes,
+        )
+        for item in summary.medications
+    ]
+
+    return HealthSummaryResponse(
+        generated_at=summary.generated_at,
+        summary_for_doctor=r.summary_for_doctor,
+        medications=med_responses,
+        key_concerns=r.key_concerns,
+        reported_symptoms=r.reported_symptoms,
+        medication_adherence_notes=r.medication_adherence_notes,
+        recommended_questions=r.recommended_questions,
+        plain_text=result.reply,
+    )

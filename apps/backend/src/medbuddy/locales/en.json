@@ -19,6 +19,9 @@
     "pending_title": "Not connected",
     "pending_body": "(Connect info.fda.gov.tw cache layer in MVP.)"
   },
+  "agent": {
+    "generic_error": "The system could not complete your request right now. Please try again later or ask a family member for help."
+  },
   "mocks": {
     "drugs": {
       "tfda_title": "Query: {query}",
@@ -28,7 +31,14 @@
     "llm": {
       "reply_template": "(test mode) Got it: {user_message}",
       "simplify_prefix": "(plain language) Key excerpt: {excerpt}",
-      "medication_added": "(test mode) Saved {name} ({dosage}). Remember: take it on this schedule: {schedule}. Quick reference: {drug_summary}"
+      "medication_added": "(test mode) Saved {name} ({dosage}). Remember: take it on this schedule: {schedule}. Quick reference: {drug_summary}",
+      "interaction_disclaimer": "(test mode) This is sample information only — always consult your clinician or pharmacist.",
+      "summary_purpose_placeholder": "(purpose to be confirmed with clinician)",
+      "summary_no_meds": "no medications on file",
+      "health_summary_doctor": "(test summary) Patient current medications: {med_list}. Please review in person.",
+      "summary_concern_placeholder": "Confirm current medications remain appropriate at next visit",
+      "summary_adherence_placeholder": "(test mode) No adherence issues recorded",
+      "summary_question_placeholder": "Are there any interactions I should know about with my current medications?"
     },
     "stt": {
       "default_transcript": "Did I take my medicine today?"

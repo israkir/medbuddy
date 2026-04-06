@@ -1,8 +1,22 @@
 import asyncio
 import re
+from datetime import UTC, datetime
+from typing import Any
 
 from medbuddy.i18n import t
-from medbuddy.models.domain import ConversationTurn, Intent, MedicationDraft, MedicationRecord
+from medbuddy.llm.schemas import (
+    HealthSummaryResult,
+    InteractionCheckResult,
+    MedicationSummaryItem,
+)
+from medbuddy.models.domain import (
+    ConversationTurn,
+    HealthSummary,
+    Intent,
+    InteractionResult,
+    MedicationDraft,
+    MedicationRecord,
+)
 from medbuddy.protocols.ports import LLMPort
 
 
@@ -75,7 +89,7 @@ class MockLLM(LLMPort):
             return Intent.EXPLAIN_MEDICATION
         if "交互" in user_text or "一起" in user_text:
             return Intent.INTERACTION_CHECK
-        if "摘要" in user_text or "總結" in user_text:
+        if "摘要" in user_text or "總結" in user_text or "summary" in lowered:
             return Intent.REQUEST_SUMMARY
         if "解釋" in user_text or "說明" in user_text:
             return Intent.EXPLAIN_MEDICATION
@@ -170,4 +184,72 @@ class MockLLM(LLMPort):
             dosage=saved.dosage,
             schedule=saved.schedule,
             drug_summary=summary,
+        )
+
+    async def check_interactions_structured(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+    ) -> InteractionResult:
+        await asyncio.sleep(0)
+        med_names = [m.name for m in medications]
+        result = InteractionCheckResult(
+            medications_checked=med_names,
+            interactions=[],
+            overall_severity="none",
+            summary=t("mocks.llm.reply_template", locale=locale).format(
+                user_message=user_message
+            ),
+            disclaimer=t("mocks.llm.interaction_disclaimer", locale=locale),
+        )
+        return InteractionResult(query=user_message, result=result)
+
+    async def generate_health_summary(
+        self,
+        *,
+        user_row: dict[str, Any],
+        medications: list[MedicationRecord],
+        recent_conversation: list[ConversationTurn],
+        patient_context: str,
+        locale: str,
+    ) -> HealthSummary:
+        await asyncio.sleep(0)
+        med_items = [
+            MedicationSummaryItem(
+                name=m.name,
+                dosage=m.dosage,
+                schedule=m.schedule,
+                purpose=t("mocks.llm.summary_purpose_placeholder", locale=locale),
+                notes=m.instructions_zh,
+            )
+            for m in medications
+        ]
+        med_names = [m.name for m in medications] or [
+            t("mocks.llm.summary_no_meds", locale=locale)
+        ]
+        result = HealthSummaryResult(
+            summary_for_doctor=t(
+                "mocks.llm.health_summary_doctor",
+                locale=locale,
+                med_list=", ".join(med_names),
+            ),
+            key_concerns=[t("mocks.llm.summary_concern_placeholder", locale=locale)],
+            reported_symptoms=[],
+            medication_adherence_notes=t(
+                "mocks.llm.summary_adherence_placeholder", locale=locale
+            ),
+            recommended_questions=[
+                t("mocks.llm.summary_question_placeholder", locale=locale)
+            ],
+        )
+        return HealthSummary(
+            generated_at=datetime.now(UTC),
+            user_key="",
+            locale=locale,
+            medications=med_items,
+            result=result,
         )

@@ -66,7 +66,7 @@ async def try_medication_intent_reply(
                 user_message=safe_text,
                 locale=locale,
             )
-        except Exception:
+        except (OSError, ValueError, RuntimeError):
             log.exception("compose_medication_added_reply failed; using template fallback")
             reply = t(
                 "medication.added",
