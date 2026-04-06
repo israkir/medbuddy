@@ -1,8 +1,9 @@
 -- Run in Supabase SQL Editor (or migrate via Supabase CLI) before enabling real-mode persistence.
--- Upgrading an older DB (optional one-liners):
---   alter table public.users drop column if exists consent_accepted;
---   alter table public.users drop column if exists created_at;
---   alter table public.medications drop column if exists created_at;
+-- Upgrading: drop legacy consent column if present — alter table public.users
+--   drop column if exists consent_accepted;
+--   alter table public.conversation_turns rename column at to created_at;
+--   alter table public.conversation_turns drop column if exists updated_at;
+--   drop index if exists conversation_turns_user_at_idx;
 -- Backend uses the publishable API key (or legacy anon JWT): PostgREST uses the ``anon`` role,
 -- so RLS policies below must allow the operations MedBuddy needs. Do not use the service_role
 -- key in clients; see https://supabase.com/docs/guides/api/api-keys
@@ -31,11 +32,11 @@ create table if not exists public.conversation_turns (
     user_id uuid not null references public.users (id) on delete cascade,
     role text not null,
     content text not null,
-    at timestamptz not null
+    created_at timestamptz not null default now()
 );
 
-create index if not exists conversation_turns_user_at_idx
-    on public.conversation_turns (user_id, at);
+create index if not exists conversation_turns_user_created_at_idx
+    on public.conversation_turns (user_id, created_at);
 
 alter table public.users enable row level security;
 alter table public.medications enable row level security;

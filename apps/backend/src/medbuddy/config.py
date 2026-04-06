@@ -80,6 +80,14 @@ class Settings(BaseSettings):
 
     # Real integrations (optional when mock_external_services is False)
     gemini_api_key: str = ""
+    gemini_model: str = Field(
+        default="gemini-2.5-flash",
+        description=(
+            "Gemini model id for google-genai generate_content (e.g. gemini-2.5-flash). "
+            "Override if Google deprecates the default."
+        ),
+        validation_alias=AliasChoices("GEMINI_MODEL", "gemini_model"),
+    )
     supabase_url: str = ""
     supabase_publishable_key: str = Field(
         default="",

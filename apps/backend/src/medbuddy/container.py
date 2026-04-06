@@ -65,7 +65,11 @@ def build_app_services(settings: Settings) -> AppServices:
         log.warning("GEMINI_API_KEY missing; using MockLLM")
         llm = MockLLM(locale=settings.locale)
     else:
-        llm = GeminiLLM(api_key=settings.gemini_api_key, locale=settings.locale)
+        llm = GeminiLLM(
+            api_key=settings.gemini_api_key,
+            locale=settings.locale,
+            intent_model=settings.gemini_model,
+        )
 
     if settings.whisper_service_url:
         stt = WhisperHttpSTT(base_url=settings.whisper_service_url)
