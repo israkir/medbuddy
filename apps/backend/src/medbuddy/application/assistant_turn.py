@@ -6,14 +6,35 @@ import logging
 from datetime import UTC, datetime
 
 from medbuddy.application.medication_intents import try_medication_intent_reply
-from medbuddy.drug_cache_keys import personalization_fingerprint
+from medbuddy.drug_cache_keys import (
+    DRUG_REFERENCE_SOURCE_OPENFDA,
+    DRUG_REFERENCE_SOURCE_TFDA,
+    normalize_query_key,
+    personalization_fingerprint,
+    resolve_medication_id_for_personalization,
+)
+from medbuddy.config import Settings
 from medbuddy.engine.types import AppServices
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
-from medbuddy.prompts.persona import format_patient_medication_context, get_system_persona
+from medbuddy.prompts.persona import (
+    build_patient_context_for_llm,
+    get_system_persona,
+)
 
 log = logging.getLogger(__name__)
+
+
+def _personalization_provenance_source(
+    drug_grounding_source: str | None, settings: Settings
+) -> str:
+    """``drug_personalization_cache.llm_meta.source``: registry API id or LLM model id."""
+    if drug_grounding_source:
+        return drug_grounding_source
+    if settings.mock_external_services:
+        return "mock_llm"
+    return settings.gemini_model
 
 
 def _log_medications_flat(user_key: str, meds: list[MedicationRecord]) -> None:
@@ -55,10 +76,11 @@ async def run_assistant_text_turn(
         len(user_text),
     )
 
+    user_row = await svc.users.get_or_create_user(user_key)
     meds = await svc.users.list_medications(user_key)
     _log_medications_flat(user_key, meds)
     loc = svc.settings.locale
-    patient_ctx = format_patient_medication_context(meds, locale=loc)
+    patient_ctx = build_patient_context_for_llm(user_row, meds, locale=loc)
 
     if svc.drug_caches is not None and intent in (
         Intent.EXPLAIN_MEDICATION,
@@ -67,7 +89,6 @@ async def run_assistant_text_turn(
         fp = personalization_fingerprint(
             intent=intent, user_text=user_text, patient_context=patient_ctx
         )
-        user_row = await svc.users.get_or_create_user(user_key)
         cached_reply = await svc.drug_caches.get_personalized_reply(
             user_uuid=user_row["id"],
             query_fingerprint=fp,
@@ -89,15 +110,32 @@ async def run_assistant_text_turn(
             return cached_reply
 
     drug_grounding: str | None = None
+    personalization_reference_cache_id: str | None = None
+    personalization_drug_grounding_source: str | None = None
     if intent in (Intent.EXPLAIN_MEDICATION, Intent.INTERACTION_CHECK):
-        tfda = await svc.drugs.fetch_tfda_snippet(user_text.strip())
-        ofda = await svc.drugs.fetch_openfda_label_snippet(user_text.strip())
+        qstrip = user_text.strip()
+        tfda = await svc.drugs.fetch_tfda_snippet(qstrip)
+        ofda = await svc.drugs.fetch_openfda_label_snippet(qstrip)
         parts = []
         if tfda:
             parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
         if ofda:
             parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
         drug_grounding = "\n\n".join(parts) if parts else None
+        if ofda:
+            personalization_drug_grounding_source = DRUG_REFERENCE_SOURCE_OPENFDA
+        elif tfda:
+            personalization_drug_grounding_source = DRUG_REFERENCE_SOURCE_TFDA
+        if svc.drug_caches is not None:
+            cache_key = normalize_query_key(qstrip)
+            if ofda:
+                personalization_reference_cache_id = await svc.drug_caches.get_reference_cache_id(
+                    source=DRUG_REFERENCE_SOURCE_OPENFDA, query_key=cache_key
+                )
+            elif tfda:
+                personalization_reference_cache_id = await svc.drug_caches.get_reference_cache_id(
+                    source=DRUG_REFERENCE_SOURCE_TFDA, query_key=cache_key
+                )
 
     history = await svc.conversations.get_recent_turns(
         user_key,
@@ -121,8 +159,7 @@ async def run_assistant_text_turn(
             locale=loc,
         )
     if reply_text is None:
-        meds = await svc.users.list_medications(user_key)
-        patient_ctx = format_patient_medication_context(meds, locale=loc)
+        patient_ctx = build_patient_context_for_llm(user_row, meds, locale=loc)
         system_persona = get_system_persona(locale=loc)
         if intent == Intent.EXPLAIN_MEDICATION:
             system_persona = (
@@ -154,14 +191,22 @@ async def run_assistant_text_turn(
         fp = personalization_fingerprint(
             intent=intent, user_text=user_text, patient_context=patient_ctx
         )
-        user_row = await svc.users.get_or_create_user(user_key)
+        med_cache_id = resolve_medication_id_for_personalization(meds, user_text)
+        prov_source = _personalization_provenance_source(
+            personalization_drug_grounding_source, svc.settings
+        )
         await svc.drug_caches.save_personalized_reply(
             user_uuid=user_row["id"],
             query_fingerprint=fp,
             intent=intent.value,
             personalized_text=reply_text,
             locale=loc,
-            llm_meta={"cached_turn": True},
+            llm_meta={
+                "cached_turn": True,
+                "source": prov_source,
+            },
+            medication_id=med_cache_id,
+            reference_cache_id=personalization_reference_cache_id,
         )
 
     return reply_text

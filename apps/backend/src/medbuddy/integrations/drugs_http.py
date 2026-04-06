@@ -3,12 +3,38 @@
 from __future__ import annotations
 
 import urllib.parse
+from typing import Any
 
 import httpx
 
-from medbuddy.i18n import t
 from medbuddy.models.domain import DrugGrounding
 from medbuddy.protocols.ports import DrugDataPort
+
+_LABEL_SECTION_MAX = 2000
+
+
+def _stringify_label_section(block: object, *, max_len: int = _LABEL_SECTION_MAX) -> str | None:
+    if block is None:
+        return None
+    if isinstance(block, list):
+        text = "\n".join(str(x) for x in block)
+    else:
+        text = str(block)
+    text = text.strip()
+    if not text:
+        return None
+    return text[:max_len]
+
+
+def _openfda_display_title(first: dict[str, Any], fallback: str) -> str:
+    openfda = first.get("openfda") if isinstance(first.get("openfda"), dict) else {}
+    for key in ("brand_name", "generic_name"):
+        names = openfda.get(key)
+        if isinstance(names, list) and names:
+            pick = str(names[0]).strip()
+            if pick:
+                return pick
+    return fallback
 
 
 class HttpDrugData(DrugDataPort):
@@ -31,20 +57,29 @@ class HttpDrugData(DrugDataPort):
         if not results:
             return None
         first = results[0]
-        text_bits: list[str] = []
-        for key in ("indications_and_usage", "dosage_and_administration", "warnings"):
-            block = first.get(key)
-            if isinstance(block, list):
-                text_bits.append("\n".join(block)[:2000])
-        body = "\n".join(text_bits) or str(first)[:2000]
-        return DrugGrounding(source="OpenFDA", title=query, body_zh=body)
+        if not isinstance(first, dict):
+            return None
+        indications = _stringify_label_section(first.get("indications_and_usage"))
+        dosage = _stringify_label_section(first.get("dosage_and_administration"))
+        warnings = _stringify_label_section(first.get("warnings"))
+        text_bits = [x for x in (indications, dosage, warnings) if x]
+        body = "\n".join(text_bits) if text_bits else str(first)[:_LABEL_SECTION_MAX]
+        title = _openfda_display_title(first, query)
+        return DrugGrounding(
+            source="OpenFDA",
+            title=title,
+            body_zh=body,
+            indications_and_usage=indications,
+            dosage_and_administration=dosage,
+            warnings=warnings,
+            raw_payload={"label": first},
+        )
 
     async def fetch_tfda_snippet(self, query: str) -> DrugGrounding | None:
-        """TFDA has no stable public JSON API in prototype — extend with scraper/cache."""
+        """No live TFDA fetch yet — do not impersonate ``source=tfda`` or cache placeholder rows.
+
+        Use :meth:`fetch_openfda_label_snippet` for US label text. Return ``None`` here until a real
+        TFDA client exists, so ``drug_reference_cache.source`` stays accurate.
+        """
         _ = query
-        loc = self._locale
-        return DrugGrounding(
-            source="TFDA",
-            title=t("tfda.pending_title", locale=loc),
-            body_zh=t("tfda.pending_body", locale=loc),
-        )
+        return None

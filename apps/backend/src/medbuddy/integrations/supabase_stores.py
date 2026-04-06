@@ -29,6 +29,11 @@ def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
         "line_user_id": row["external_user_id"],
+        "preferred_name": row.get("preferred_name"),
+        "age_years": row.get("age_years"),
+        "emergency_contact": row.get("emergency_contact"),
+        "health_notes": row.get("health_notes"),
+        "onboarding_completed_at": row.get("onboarding_completed_at"),
     }
 
 
@@ -67,7 +72,10 @@ class SupabaseUserData(UserDataPort):
         def q() -> Any:
             return (
                 self._client.table("users")
-                .select("id, external_user_id")
+                .select(
+                    "id, external_user_id, preferred_name, age_years, "
+                    "emergency_contact, health_notes, onboarding_completed_at"
+                )
                 .eq("external_user_id", external_user_id)
                 .limit(1)
                 .execute()
@@ -104,6 +112,36 @@ class SupabaseUserData(UserDataPort):
                 raise RuntimeError(msg)
             return _user_row_to_dict(row)
         return _user_row_to_dict(rows[0])
+
+    async def save_onboarding_profile(
+        self,
+        line_user_id: str,
+        *,
+        preferred_name: str,
+        age_years: int | None,
+        emergency_contact: str | None,
+        health_notes: str | None,
+    ) -> dict[str, Any]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        now = datetime.now(UTC)
+        payload: dict[str, Any] = {
+            "preferred_name": preferred_name.strip(),
+            "age_years": age_years,
+            "emergency_contact": (emergency_contact or "").strip() or None,
+            "health_notes": (health_notes or "").strip() or None,
+            "onboarding_completed_at": now.isoformat(),
+        }
+
+        def upd() -> Any:
+            return self._client.table("users").update(payload).eq("id", uid).execute()
+
+        await _run_q(upd)
+        row = await self._select_user_row(line_user_id)
+        if not row:
+            msg = "Supabase user row missing after onboarding update"
+            raise RuntimeError(msg)
+        return _user_row_to_dict(row)
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
         user = await self.get_or_create_user(line_user_id)

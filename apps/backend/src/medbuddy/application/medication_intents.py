@@ -7,7 +7,7 @@ import logging
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
 from medbuddy.models.domain import Intent, MedicationRecord
-from medbuddy.prompts.persona import format_patient_medication_context
+from medbuddy.prompts.persona import build_patient_context_for_llm
 
 log = logging.getLogger(__name__)
 
@@ -35,10 +35,12 @@ async def try_medication_intent_reply(
     medications: list[MedicationRecord],
     locale: str,
 ) -> str | None:
+    user_row = await svc.users.get_or_create_user(user_key)
+
     if intent == Intent.LIST_MEDICATIONS:
         if not medications:
             return t("medication.list_empty", locale=locale)
-        body = format_patient_medication_context(medications, locale=locale)
+        body = build_patient_context_for_llm(user_row, medications, locale=locale)
         intro = t("medication.list_intro", locale=locale)
         return f"{intro}\n{body}"
 
@@ -48,7 +50,7 @@ async def try_medication_intent_reply(
             return t("medication.add_incomplete", locale=locale)
         saved = await svc.users.add_medication(user_key, draft)
         meds_updated = await svc.users.list_medications(user_key)
-        patient_ctx = format_patient_medication_context(meds_updated, locale=locale)
+        patient_ctx = build_patient_context_for_llm(user_row, meds_updated, locale=locale)
         drug_grounding = await _drug_grounding_for_query(svc, saved.name)
         try:
             return await svc.llm.compose_medication_added_reply(

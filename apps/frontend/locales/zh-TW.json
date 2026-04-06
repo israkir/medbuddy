@@ -1,5 +1,22 @@
 {
   "appName": "MedBuddy",
+  "onboarding": {
+    "title": "歡迎使用",
+    "lead": "簡單幾項資料，能讓 MedBuddy 更懂怎麼跟您說話。字大、步驟少，慢慢填沒關係。",
+    "hintSkip": "只有「怎麼稱呼您」一定要填，其他可略過。",
+    "nameLabel": "怎麼稱呼您？",
+    "namePlaceholder": "姓名或慣用的稱呼",
+    "ageLabel": "年齡（選填）",
+    "agePlaceholder": "例：72",
+    "contactLabel": "家人或緊急聯絡人（選填）",
+    "contactPlaceholder": "稱呼與電話",
+    "notesLabel": "過敏或重要身體狀況（選填）",
+    "notesPlaceholder": "例：對青黴素過敏、曾跌倒…",
+    "continue": "進入 MedBuddy",
+    "saving": "儲存中…",
+    "errorPrefix": "無法儲存。",
+    "errorUnknown": "發生錯誤。"
+  },
   "tabs": {
     "today": "首頁",
     "medicationsDock": "藥品",

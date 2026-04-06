@@ -25,7 +25,17 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
     )
     assert d["id"] == "11111111-1111-1111-1111-111111111111"
     assert d["line_user_id"] == "U-line"
-    assert set(d.keys()) == {"id", "line_user_id"}
+    assert d["preferred_name"] is None
+    assert d["onboarding_completed_at"] is None
+    assert set(d.keys()) == {
+        "id",
+        "line_user_id",
+        "preferred_name",
+        "age_years",
+        "emergency_contact",
+        "health_notes",
+        "onboarding_completed_at",
+    }
 
 
 def test_parse_ts_iso_z() -> None:
@@ -175,6 +185,62 @@ async def test_add_medication_inserts_row() -> None:
     )
     assert rec.name == "Aspirin"
     med_builder.insert.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_save_onboarding_profile_updates_row() -> None:
+    user_builder = MagicMock()
+    user_builder.select.return_value = user_builder
+    user_builder.eq.return_value = user_builder
+    user_builder.limit.return_value = user_builder
+    user_builder.update.return_value = user_builder
+    user_builder.execute.side_effect = [
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000099",
+                    "external_user_id": "ext-onb",
+                    "preferred_name": None,
+                    "age_years": None,
+                    "emergency_contact": None,
+                    "health_notes": None,
+                    "onboarding_completed_at": None,
+                }
+            ]
+        ),
+        MagicMock(data=[{"id": "00000000-0000-0000-0000-000000000099"}]),
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000099",
+                    "external_user_id": "ext-onb",
+                    "preferred_name": "May",
+                    "age_years": 72,
+                    "emergency_contact": "son 0912",
+                    "health_notes": "DM",
+                    "onboarding_completed_at": "2026-04-07T12:00:00+00:00",
+                }
+            ]
+        ),
+    ]
+
+    client = MagicMock()
+    client.table.return_value = user_builder
+
+    ud = SupabaseUserData(client)
+    out = await ud.save_onboarding_profile(
+        "ext-onb",
+        preferred_name="May",
+        age_years=72,
+        emergency_contact="son 0912",
+        health_notes="DM",
+    )
+    assert out["preferred_name"] == "May"
+    assert out["age_years"] == 72
+    user_builder.update.assert_called_once()
+    upd = user_builder.update.call_args[0][0]
+    assert upd["preferred_name"] == "May"
+    assert upd["age_years"] == 72
 
 
 @pytest.mark.asyncio

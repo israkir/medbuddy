@@ -1,5 +1,22 @@
 {
   "appName": "MedBuddy",
+  "onboarding": {
+    "title": "Welcome",
+    "lead": "A few simple details help MedBuddy speak to you more clearly. Large fields and short steps—take your time.",
+    "hintSkip": "Only your name is required. Other boxes are optional.",
+    "nameLabel": "What should we call you?",
+    "namePlaceholder": "Your name or preferred name",
+    "ageLabel": "Age (optional)",
+    "agePlaceholder": "e.g. 72",
+    "contactLabel": "Family or emergency contact (optional)",
+    "contactPlaceholder": "Name and phone number",
+    "notesLabel": "Allergies or important health notes (optional)",
+    "notesPlaceholder": "Example: allergic to penicillin, history of falls…",
+    "continue": "Continue to MedBuddy",
+    "saving": "Saving…",
+    "errorPrefix": "Could not save.",
+    "errorUnknown": "Something went wrong."
+  },
   "tabs": {
     "today": "Home",
     "medicationsDock": "Medications",

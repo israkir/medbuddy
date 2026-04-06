@@ -101,6 +101,16 @@ class ObjectStoragePort(Protocol):
 class UserDataPort(Protocol):
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]: ...
 
+    async def save_onboarding_profile(
+        self,
+        line_user_id: str,
+        *,
+        preferred_name: str,
+        age_years: int | None,
+        emergency_contact: str | None,
+        health_notes: str | None,
+    ) -> dict[str, Any]: ...
+
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]: ...
 
     async def add_medication(

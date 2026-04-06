@@ -64,3 +64,7 @@ class DrugGrounding:
     source: str
     title: str
     body_zh: str
+    indications_and_usage: str | None = None
+    dosage_and_administration: str | None = None
+    warnings: str | None = None
+    raw_payload: dict[str, Any] | None = None
