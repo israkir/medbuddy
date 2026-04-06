@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from medbuddy.config import Settings
 from medbuddy.integrations.supabase_stores import (
     SupabaseConversationStore,
     SupabaseUserData,
@@ -26,16 +27,20 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
     assert d["id"] == "11111111-1111-1111-1111-111111111111"
     assert d["line_user_id"] == "U-line"
     assert d["preferred_name"] is None
+    assert d["gender"] is None
     assert d["onboarding_completed_at"] is None
     assert set(d.keys()) == {
         "id",
         "line_user_id",
         "preferred_name",
         "age_years",
+        "gender",
         "emergency_contact",
         "health_notes",
         "onboarding_completed_at",
+        "timezone",
     }
+    assert d["timezone"] == "Asia/Taipei"
 
 
 def test_parse_ts_iso_z() -> None:
@@ -61,7 +66,7 @@ async def test_get_or_create_user_uses_existing_row() -> None:
     )
     client.table.return_value = builder
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     out = await ud.get_or_create_user("ext-1")
     assert out["id"] == "00000000-0000-0000-0000-000000000001"
     client.table.assert_called_with("users")
@@ -89,7 +94,7 @@ async def test_get_or_create_user_inserts_when_missing() -> None:
     ]
     client.table.return_value = builder
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     out = await ud.get_or_create_user("ext-2")
     assert out["id"] == "00000000-0000-0000-0000-000000000002"
     builder.insert.assert_called_once()
@@ -126,7 +131,7 @@ async def test_append_turn_inserts_with_resolved_user_id() -> None:
     client = MagicMock()
     client.table.side_effect = table
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     store = SupabaseConversationStore(client, ud)
     at = datetime(2026, 4, 7, 12, 0, tzinfo=UTC)
     await store.append_turn("ext-3", ConversationTurn(role="user", content="hi", at=at))
@@ -178,7 +183,7 @@ async def test_add_medication_inserts_row() -> None:
     client = MagicMock()
     client.table.side_effect = table
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     rec = await ud.add_medication(
         "ext-med",
         MedicationDraft(name="Aspirin", dosage="100mg", schedule="after meal"),
@@ -202,6 +207,7 @@ async def test_save_onboarding_profile_updates_row() -> None:
                     "external_user_id": "ext-onb",
                     "preferred_name": None,
                     "age_years": None,
+                    "gender": None,
                     "emergency_contact": None,
                     "health_notes": None,
                     "onboarding_completed_at": None,
@@ -216,6 +222,7 @@ async def test_save_onboarding_profile_updates_row() -> None:
                     "external_user_id": "ext-onb",
                     "preferred_name": "May",
                     "age_years": 72,
+                    "gender": "female",
                     "emergency_contact": "son 0912",
                     "health_notes": "DM",
                     "onboarding_completed_at": "2026-04-07T12:00:00+00:00",
@@ -227,20 +234,23 @@ async def test_save_onboarding_profile_updates_row() -> None:
     client = MagicMock()
     client.table.return_value = user_builder
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     out = await ud.save_onboarding_profile(
         "ext-onb",
         preferred_name="May",
         age_years=72,
+        gender="female",
         emergency_contact="son 0912",
         health_notes="DM",
     )
     assert out["preferred_name"] == "May"
     assert out["age_years"] == 72
+    assert out["gender"] == "female"
     user_builder.update.assert_called_once()
     upd = user_builder.update.call_args[0][0]
     assert upd["preferred_name"] == "May"
     assert upd["age_years"] == 72
+    assert upd["gender"] == "female"
 
 
 @pytest.mark.asyncio
@@ -283,7 +293,7 @@ async def test_patch_user_profile_merges_fields() -> None:
     client = MagicMock()
     client.table.return_value = user_builder
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     out = await ud.patch_user_profile(
         "ext-patch",
         {"preferred_name": "Lin", "age_years": 68},
@@ -327,7 +337,56 @@ async def test_delete_medication_deletes_when_match() -> None:
     client = MagicMock()
     client.table.side_effect = table
 
-    ud = SupabaseUserData(client)
+    ud = SupabaseUserData(client, Settings())
     ok = await ud.delete_medication("ext-del", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
     assert ok is True
     med_builder.delete.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_patch_user_profile_accepts_gender() -> None:
+    user_builder = MagicMock()
+    user_builder.select.return_value = user_builder
+    user_builder.eq.return_value = user_builder
+    user_builder.limit.return_value = user_builder
+    user_builder.update.return_value = user_builder
+    user_builder.execute.side_effect = [
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000077",
+                    "external_user_id": "ext-g",
+                    "preferred_name": None,
+                    "age_years": None,
+                    "gender": None,
+                    "emergency_contact": None,
+                    "health_notes": None,
+                    "onboarding_completed_at": None,
+                }
+            ]
+        ),
+        MagicMock(data=[{"id": "00000000-0000-0000-0000-000000000077"}]),
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000077",
+                    "external_user_id": "ext-g",
+                    "preferred_name": None,
+                    "age_years": None,
+                    "gender": "male",
+                    "emergency_contact": None,
+                    "health_notes": None,
+                    "onboarding_completed_at": None,
+                }
+            ]
+        ),
+    ]
+
+    client = MagicMock()
+    client.table.return_value = user_builder
+
+    ud = SupabaseUserData(client, Settings())
+    out = await ud.patch_user_profile("ext-g", {"gender": "male"})
+    assert out["gender"] == "male"
+    upd = user_builder.update.call_args[0][0]
+    assert upd == {"gender": "male"}

@@ -21,6 +21,13 @@ alter table public.users add column if not exists age_years integer;
 alter table public.users add column if not exists emergency_contact text;
 alter table public.users add column if not exists health_notes text;
 alter table public.users add column if not exists onboarding_completed_at timestamptz;
+alter table public.users add column if not exists gender text;
+alter table public.users add column if not exists timezone text;
+
+alter table public.users
+    alter column timezone set default 'Asia/Taipei';
+
+update public.users set timezone = 'Asia/Taipei' where timezone is null;
 
 create table if not exists public.medications (
     id uuid primary key default gen_random_uuid(),
@@ -50,8 +57,11 @@ create table if not exists public.dose_events (
     user_id uuid not null references public.users (id) on delete cascade,
     medication_id uuid not null references public.medications (id) on delete cascade,
     scheduled_at timestamptz not null,
-    taken_at timestamptz
+    taken_at timestamptz,
+    reminder_sent_at timestamptz
 );
+
+alter table public.dose_events add column if not exists reminder_sent_at timestamptz;
 
 create index if not exists dose_events_user_id_scheduled_at_idx
     on public.dose_events (user_id, scheduled_at);

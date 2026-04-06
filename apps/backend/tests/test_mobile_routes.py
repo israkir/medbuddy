@@ -116,6 +116,7 @@ async def test_app_onboarding_saves_profile(mock_settings):
                 json={
                     "preferred_name": "阿春",
                     "age_years": 68,
+                    "gender": "female",
                     "emergency_contact": "女兒 0922",
                     "health_notes": "對青黴素過敏",
                 },
@@ -125,6 +126,7 @@ async def test_app_onboarding_saves_profile(mock_settings):
     data = r.json()
     assert data["preferred_name"] == "阿春"
     assert data["age_years"] == 68
+    assert data["gender"] == "female"
     assert data["onboarding_completed_at"] is not None
 
     with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):

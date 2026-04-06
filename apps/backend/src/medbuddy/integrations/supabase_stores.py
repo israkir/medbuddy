@@ -8,7 +8,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.config import Settings
-from medbuddy.models.domain import ConversationTurn, MedicationDraft, MedicationRecord
+from medbuddy.models.domain import (
+    ConversationTurn,
+    DoseEventReminderPayload,
+    MedicationDraft,
+    MedicationRecord,
+)
+from medbuddy.reminders.dose_schedule import iter_scheduled_dose_times_utc
 from medbuddy.protocols.ports import ConversationStorePort, UserDataPort
 
 log = logging.getLogger(__name__)
@@ -31,9 +37,11 @@ def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
         "line_user_id": row["external_user_id"],
         "preferred_name": row.get("preferred_name"),
         "age_years": row.get("age_years"),
+        "gender": row.get("gender"),
         "emergency_contact": row.get("emergency_contact"),
         "health_notes": row.get("health_notes"),
         "onboarding_completed_at": row.get("onboarding_completed_at"),
+        "timezone": row.get("timezone") or "Asia/Taipei",
     }
 
 
@@ -65,16 +73,17 @@ def _run_q(fn: Any) -> Any:
 class SupabaseUserData(UserDataPort):
     """Users + medications backed by Supabase Postgres."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, settings: Settings) -> None:
         self._client = client
+        self._settings = settings
 
     async def _select_user_row(self, external_user_id: str) -> dict[str, Any] | None:
         def q() -> Any:
             return (
                 self._client.table("users")
                 .select(
-                    "id, external_user_id, preferred_name, age_years, "
-                    "emergency_contact, health_notes, onboarding_completed_at"
+                    "id, external_user_id, preferred_name, age_years, gender, "
+                    "emergency_contact, health_notes, onboarding_completed_at, timezone"
                 )
                 .eq("external_user_id", external_user_id)
                 .limit(1)
@@ -119,6 +128,7 @@ class SupabaseUserData(UserDataPort):
         *,
         preferred_name: str,
         age_years: int | None,
+        gender: str | None,
         emergency_contact: str | None,
         health_notes: str | None,
     ) -> dict[str, Any]:
@@ -128,6 +138,7 @@ class SupabaseUserData(UserDataPort):
         payload: dict[str, Any] = {
             "preferred_name": preferred_name.strip(),
             "age_years": age_years,
+            "gender": gender,
             "emergency_contact": (emergency_contact or "").strip() or None,
             "health_notes": (health_notes or "").strip() or None,
             "onboarding_completed_at": now.isoformat(),
@@ -161,6 +172,15 @@ class SupabaseUserData(UserDataPort):
                 ai = int(age)
                 if 0 <= ai <= 120:
                     payload["age_years"] = ai
+        if "gender" in fields:
+            raw_g = fields["gender"]
+            if raw_g is None:
+                payload["gender"] = None
+            elif isinstance(raw_g, str):
+                g = raw_g.strip().lower()
+                allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
+                if g in allowed:
+                    payload["gender"] = g
         for key in ("emergency_contact", "health_notes"):
             if key in fields:
                 raw = fields[key]
@@ -237,6 +257,152 @@ class SupabaseUserData(UserDataPort):
         resp = await _run_q(q)
         rows = resp.data or []
         return len(rows) > 0
+
+    async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        tz_name = str(user.get("timezone") or "Asia/Taipei")
+        meds = await self.list_medications(line_user_id)
+        now = datetime.now(UTC)
+        cutoff = now.isoformat()
+
+        def delete_future() -> Any:
+            return (
+                self._client.table("dose_events")
+                .delete()
+                .eq("user_id", uid)
+                .gt("scheduled_at", cutoff)
+                .execute()
+            )
+
+        await _run_q(delete_future)
+
+        instants = iter_scheduled_dose_times_utc(
+            tz_name=tz_name,
+            local_hhmm=self._settings.reminder_default_local_time,
+            horizon_days=self._settings.reminder_horizon_days,
+            now_utc=now,
+        )
+        if not meds or not instants:
+            return []
+
+        rows: list[dict[str, Any]] = []
+        for med in meds:
+            for at in instants:
+                rows.append(
+                    {
+                        "user_id": uid,
+                        "medication_id": med.id,
+                        "scheduled_at": at.isoformat(),
+                    }
+                )
+
+        def insert() -> Any:
+            return self._client.table("dose_events").insert(rows).execute()
+
+        resp = await _run_q(insert)
+        inserted = resp.data or []
+        out: list[tuple[str, datetime]] = []
+        for r in inserted:
+            out.append((str(r["id"]), _parse_ts(r["scheduled_at"])))
+        return out
+
+    async def get_dose_event_for_reminder(
+        self, dose_event_id: str
+    ) -> DoseEventReminderPayload | None:
+        def q_dose() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("id, user_id, medication_id, scheduled_at, reminder_sent_at, taken_at")
+                .eq("id", dose_event_id)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q_dose)
+        drows = resp.data or []
+        if not drows:
+            return None
+        dr = drows[0]
+        if dr.get("reminder_sent_at") is not None or dr.get("taken_at") is not None:
+            return None
+        uid = str(dr["user_id"])
+        mid = str(dr["medication_id"])
+        scheduled_at = _parse_ts(dr["scheduled_at"])
+
+        def q_user() -> Any:
+            return (
+                self._client.table("users")
+                .select("external_user_id, timezone")
+                .eq("id", uid)
+                .limit(1)
+                .execute()
+            )
+
+        uresp = await _run_q(q_user)
+        urows = uresp.data or []
+        if not urows:
+            return None
+        line_uid = str(urows[0]["external_user_id"])
+        tz_name = str(urows[0].get("timezone") or "Asia/Taipei")
+
+        def q_med() -> Any:
+            return (
+                self._client.table("medications")
+                .select("name, dosage, schedule")
+                .eq("id", mid)
+                .limit(1)
+                .execute()
+            )
+
+        mresp = await _run_q(q_med)
+        mrows = mresp.data or []
+        if not mrows:
+            return None
+        m = mrows[0]
+        return DoseEventReminderPayload(
+            dose_event_id=dose_event_id,
+            line_user_id=line_uid,
+            medication_name=str(m["name"]),
+            dosage=str(m["dosage"]),
+            schedule=str(m["schedule"]),
+            scheduled_at=scheduled_at,
+            user_timezone=tz_name,
+        )
+
+    async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:
+        now = datetime.now(UTC)
+        payload = {"reminder_sent_at": now.isoformat()}
+
+        def q() -> Any:
+            return (
+                self._client.table("dose_events")
+                .update(payload)
+                .eq("id", dose_event_id)
+                .is_("reminder_sent_at", "null")
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return len(rows) > 0
+
+    async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]:
+        b = before_utc if before_utc.tzinfo else before_utc.replace(tzinfo=UTC)
+
+        def q() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("id")
+                .lte("scheduled_at", b.isoformat())
+                .is_("reminder_sent_at", "null")
+                .is_("taken_at", "null")
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return [str(r["id"]) for r in rows]
 
 
 class SupabaseConversationStore(ConversationStorePort):

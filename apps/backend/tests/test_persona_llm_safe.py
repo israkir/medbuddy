@@ -16,3 +16,15 @@ def test_llm_context_omits_raw_preferred_name() -> None:
     assert "diabetes" not in ctx
     assert "71" not in ctx
     assert "70" in ctx
+
+
+def test_llm_context_includes_gender_category_label() -> None:
+    user_row = {
+        "preferred_name": None,
+        "age_years": 60,
+        "gender": "female",
+        "emergency_contact": None,
+        "health_notes": None,
+    }
+    ctx = build_patient_context_for_llm(user_row, [], locale="en")
+    assert "Female" in ctx

@@ -34,10 +34,13 @@ def _onboarding_ts_iso(value: Any) -> str | None:
 
 
 def _me_response(app_user_id: str, row: dict[str, Any]) -> MeResponse:
+    g = row.get("gender")
+    gender_str = g if isinstance(g, str) and g.strip() else None
     return MeResponse(
         app_user_id=app_user_id,
         preferred_name=row.get("preferred_name"),
         age_years=row.get("age_years"),
+        gender=gender_str,
         emergency_contact=row.get("emergency_contact"),
         health_notes=row.get("health_notes"),
         onboarding_completed_at=_onboarding_ts_iso(row.get("onboarding_completed_at")),
@@ -82,11 +85,12 @@ async def app_complete_onboarding(
     ctx: MobileAuthContext = Depends(require_mobile_auth),
     svc: AppServices = Depends(get_services),
 ) -> MeResponse:
-    """Save first-run onboarding answers (name, age, optional notes and family contact)."""
+    """Save first-run onboarding answers (name, age, gender, optional notes and family contact)."""
     row = await svc.users.save_onboarding_profile(
         ctx.app_user_id,
         preferred_name=body.preferred_name,
         age_years=body.age_years,
+        gender=body.gender.value if body.gender is not None else None,
         emergency_contact=body.emergency_contact,
         health_notes=body.health_notes,
     )

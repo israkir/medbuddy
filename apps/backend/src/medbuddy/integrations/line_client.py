@@ -11,6 +11,7 @@ from linebot.v3.messaging import (
     AudioMessage,
     Configuration,
     Message,
+    PushMessageRequest,
     ReplyMessageRequest,
     TextMessage,
 )
@@ -50,6 +51,13 @@ class LineHttpClient(LineMessagingPort):
             messages=_coerce_reply_messages(messages),
         )
         await self._messaging.reply_message(req)
+
+    async def push_message_batch(self, to_user_id: str, messages: list[dict[str, Any]]) -> None:
+        req = PushMessageRequest(
+            to=to_user_id,
+            messages=_coerce_reply_messages(messages),
+        )
+        await self._messaging.push_message(req)
 
     async def reply_text(self, reply_token: str, text: str) -> None:
         await self.reply_message_batch(reply_token, [{"type": "text", "text": text}])

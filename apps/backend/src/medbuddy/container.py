@@ -39,7 +39,7 @@ def build_app_services(settings: Settings) -> AppServices:
             llm=MockLLM(locale=loc),
             drugs=MockDrugData(locale=loc),
             storage=storage,
-            users=MockUserData(),
+            users=MockUserData(settings),
             conversations=InMemoryConversationStore(),
             settings=settings,
             drug_caches=None,
@@ -96,11 +96,11 @@ def build_app_services(settings: Settings) -> AppServices:
                 "package is not installed; install with pip install 'medbuddy-api[supabase]'. "
                 "Using in-memory user and conversation stores.",
             )
-            user_data = MockUserData()
+            user_data = MockUserData(settings)
             conversations_store = InMemoryConversationStore()
         else:
             sb_client = create_supabase_client(settings)
-            user_data = SupabaseUserData(sb_client)
+            user_data = SupabaseUserData(sb_client, settings)
             conversations_store = SupabaseConversationStore(sb_client, user_data)
             drug_caches = SupabaseDrugCaches(sb_client, settings)
             drugs_backend = CachingDrugData(HttpDrugData(locale=settings.locale), drug_caches)
@@ -110,7 +110,7 @@ def build_app_services(settings: Settings) -> AppServices:
             "Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY; run "
             "supabase/schema.sql for RLS) for Postgres-backed persistence.",
         )
-        user_data = MockUserData()
+        user_data = MockUserData(settings)
         conversations_store = InMemoryConversationStore()
 
     return AppServices(

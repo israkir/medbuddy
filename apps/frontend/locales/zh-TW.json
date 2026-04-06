@@ -3,11 +3,20 @@
   "onboarding": {
     "title": "歡迎使用",
     "lead": "簡單幾項資料，能讓 MedBuddy 更懂怎麼跟您說話。字大、步驟少，慢慢填沒關係。",
-    "hintSkip": "請至少填「怎麼稱呼您」。也建議填年齡，提醒會更安全、貼心；家人聯絡與健康備註可之後再補。",
+    "hintSkip": "請至少填「怎麼稱呼您」。也建議填年齡，提醒會更安全、貼心；生理性別／性別、家人聯絡與健康備註可之後再補。",
     "nameLabel": "怎麼稱呼您？",
     "namePlaceholder": "姓名或慣用的稱呼",
     "ageLabel": "年齡（建議填寫）",
     "agePlaceholder": "例：72",
+    "genderLabel": "生理性別／性別（選填）",
+    "genderHint": "選填，有助部分用藥衛教。再點同一選項可取消。",
+    "genderOption": {
+      "female": "女性",
+      "male": "男性",
+      "non_binary": "非二元",
+      "other": "其他／自填",
+      "prefer_not_say": "不方便透露"
+    },
     "contactLabel": "家人或緊急聯絡人（選填）",
     "contactPlaceholder": "稱呼與電話",
     "notesLabel": "過敏或重要身體狀況（選填）",

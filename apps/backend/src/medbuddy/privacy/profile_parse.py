@@ -85,4 +85,27 @@ def parse_profile_patch_from_text(user_text: str) -> ProfilePatch:
         if len(note) >= 2:
             out["health_notes"] = note
 
+    if re.search(
+        r"我是女生|我是女的|^女的[，,。\s]|性別\W*女|性别\W*女|生理女",
+        text,
+    ):
+        out["gender"] = "female"
+    elif re.search(
+        r"我是男生|我是男的|^男的[，,。\s]|性別\W*男|性别\W*男|生理男",
+        text,
+    ):
+        out["gender"] = "male"
+    elif re.search(r"非二元|非二元人", text):
+        out["gender"] = "non_binary"
+    elif re.search(r"不方便說|不方便透露|不想說|prefer not to say", text, re.I):
+        out["gender"] = "prefer_not_say"
+    elif re.search(r"性別\W*其他|性别\W*其他|^其他\W*性", text):
+        out["gender"] = "other"
+    elif re.search(r"\bi am female\b|\bi'?m female\b|\bgender\s*[:：]?\s*female\b", text, re.I):
+        out["gender"] = "female"
+    elif re.search(r"\bi am male\b|\bi'?m male\b|\bgender\s*[:：]?\s*male\b", text, re.I):
+        out["gender"] = "male"
+    elif re.search(r"non[- ]?binary|gender\s*[:：]?\s*non", text, re.I):
+        out["gender"] = "non_binary"
+
     return out

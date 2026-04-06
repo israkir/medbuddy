@@ -3,11 +3,20 @@
   "onboarding": {
     "title": "Welcome",
     "lead": "A few simple details help MedBuddy speak to you more clearly. Large fields and short steps—take your time.",
-    "hintSkip": "Please add what to call you at minimum. We recommend age for safer, more relevant tips; contact and health notes can wait.",
+    "hintSkip": "Please add what to call you at minimum. We recommend age for safer, more relevant tips; sex or gender, contact, and health notes are optional and can wait.",
     "nameLabel": "What should we call you?",
     "namePlaceholder": "Your name or preferred name",
     "ageLabel": "Age (recommended)",
     "agePlaceholder": "e.g. 72",
+    "genderLabel": "Sex or gender (optional)",
+    "genderHint": "Optional—helps with some medication guidance. Tap again to clear.",
+    "genderOption": {
+      "female": "Female",
+      "male": "Male",
+      "non_binary": "Non-binary",
+      "other": "Other / self-described",
+      "prefer_not_say": "Prefer not to say"
+    },
     "contactLabel": "Family or emergency contact (optional)",
     "contactPlaceholder": "Name and phone number",
     "notesLabel": "Allergies or important health notes (optional)",

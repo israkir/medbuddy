@@ -6,6 +6,7 @@ import logging
 
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
+from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 from medbuddy.models.domain import Intent, MedicationRecord
 from medbuddy.privacy.redact import redact_pii_text
 from medbuddy.prompts.persona import (
@@ -58,7 +59,7 @@ async def try_medication_intent_reply(
         patient_ctx = build_patient_context_for_llm(user_row, meds_updated, locale=locale)
         drug_grounding = await _drug_grounding_for_query(svc, saved.name)
         try:
-            return await svc.llm.compose_medication_added_reply(
+            reply = await svc.llm.compose_medication_added_reply(
                 patient_context=patient_ctx,
                 drug_grounding=drug_grounding,
                 saved=saved,
@@ -67,13 +68,15 @@ async def try_medication_intent_reply(
             )
         except Exception:
             log.exception("compose_medication_added_reply failed; using template fallback")
-            return t(
+            reply = t(
                 "medication.added",
                 locale=locale,
                 name=saved.name,
                 dosage=saved.dosage,
                 schedule=saved.schedule,
             )
+        await sync_and_enqueue_reminders(svc, user_key)
+        return reply
 
     if intent == Intent.REMOVE_MEDICATION:
         if not medications:
@@ -89,6 +92,7 @@ async def try_medication_intent_reply(
         ok = await svc.users.delete_medication(user_key, mid)
         if not ok:
             return t("medication.remove_not_found", locale=locale)
+        await sync_and_enqueue_reminders(svc, user_key)
         return t("medication.removed", locale=locale, name=target.name)
 
     return None

@@ -46,6 +46,7 @@ Switching **mock vs real** integrations (env and Make aliases): [`apps/backend/R
 | Resource | What you’ll find |
 |----------|------------------|
 | [`docs/use-cases.md`](docs/use-cases.md) | Product flows, example utterances, channels, intents, caches |
+| [`docs/reminders.md`](docs/reminders.md) | LINE dose reminders: Supabase `dose_events`, arq/Redis, worker deploy, reconcile |
 | [`apps/backend/README.md`](apps/backend/README.md) | Package layout, env vars, mocks, LINE/mobile auth, localization, deploy |
 | [`apps/frontend/README.md`](apps/frontend/README.md) | Expo workflow, mock vs API, i18n, simulator targets |
 | [`CHANGELOG.md`](CHANGELOG.md) | [Keep a Changelog](https://keepachangelog.com/) history and notable behavior changes |

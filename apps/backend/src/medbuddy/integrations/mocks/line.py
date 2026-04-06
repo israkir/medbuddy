@@ -11,6 +11,7 @@ class MockLineClient(LineMessagingPort):
 
     def __init__(self) -> None:
         self.replies: list[dict[str, Any]] = []
+        self.pushes: list[dict[str, Any]] = []
         self._content_by_message_id: dict[str, bytes] = {}
 
     def seed_voice_message(self, message_id: str, m4a_bytes: bytes) -> None:
@@ -36,6 +37,10 @@ class MockLineClient(LineMessagingPort):
                 }
             ],
         )
+
+    async def push_message_batch(self, to_user_id: str, messages: list[dict[str, Any]]) -> None:
+        await asyncio.sleep(0)
+        self.pushes.append({"to_user_id": to_user_id, "messages": messages})
 
     async def get_message_content(self, message_id: str) -> bytes:
         await asyncio.sleep(0)

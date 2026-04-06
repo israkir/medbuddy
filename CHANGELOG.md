@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **LINE dose reminders (prototype)**: Supabase **`dose_events`** sync after add/remove medication;
+  **`reminder_sent_at`** and **`users.timezone`**; **arq** + **`REDIS_URL`** for deferred
+  **`send_reminder_for_dose`** jobs; **LINE `push_message`**; **`POST /internal/reminders/reconcile`**
+  with **`MEDBUDDY_CRON_SECRET`**; settings **`MEDBUDDY_REMINDER_*`** / **`MEDBUDDY_CRON_SECRET`** /
+  **`REDIS_URL`**. Docker image installs **`[reminders]`** extra.
+- **Deploy**: repo-root **`Dockerfile.reminder-worker`** for the arq worker; **`render.yaml`** adds **`medbuddy-reminder-worker`** (Render **Background Worker**, **`starter`** plan) alongside **`medbuddy-api`**; Compose **`reminders`** profile for local Redis + worker.
+- **Documentation**: **`docs/reminders.md`** — LINE dose reminders (data model, arq/Redis, Render, Compose, reconcile); linked from root **`README.md`**, **`docs/use-cases.md`**, and backend **`README.md`**.
+- **Onboarding / profile**: optional **`gender`** (self-reported category: female, male, non-binary, prefer not to say, other)
+  on **`users`**, mobile **`POST /v1/app/onboarding`** and **`GET /v1/app/me`**, persona gaps/signals, and conservative
+  **`parse_profile_patch_from_text`** patterns for chat profile updates.
 - **Documentation**: **`docs/privacy.md`** — how PII is limited for LLM calls, redaction, local profile parsing,
   and operational caveats.
 - **Profile in chat (LINE + app)**: **`Intent.UPDATE_PROFILE`** with **`UserDataPort.patch_user_profile`** and
