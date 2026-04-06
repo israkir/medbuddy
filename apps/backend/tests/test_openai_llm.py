@@ -41,6 +41,22 @@ async def test_openai_classify_intent_uses_structured_parse(
     fake_client.chat.completions.parse.assert_called_once()
 
 
+def test_recent_context_for_intent_includes_redacted_tail() -> None:
+    from datetime import UTC, datetime
+
+    from medbuddy.agents.medication_agent import _recent_context_for_intent
+    from medbuddy.models.domain import ConversationTurn
+
+    turns = [
+        ConversationTurn(role="user", content="hi", at=datetime.now(UTC)),
+        ConversationTurn(role="assistant", content="要設定幾天提醒？", at=datetime.now(UTC)),
+    ]
+    out = _recent_context_for_intent(turns)
+    assert out is not None
+    assert "assistant:" in out
+    assert "提醒" in out
+
+
 @pytest.mark.asyncio
 async def test_map_intent_label_substring_fuzzy() -> None:
     from medbuddy.integrations.openai_llm import _map_intent_label

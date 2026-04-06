@@ -114,6 +114,7 @@ class InteractionCheckTool:
                 drug_grounding=drug_grounding,
                 history=[],
                 user_message=safe_text,
+                locale=locale,
             )
             interaction_result = InteractionResult(
                 query=safe_text,
@@ -167,21 +168,19 @@ def _format_interaction_reply(result: InteractionResult, *, locale: str) -> str:
             severity_label = _severity_label(ix.severity, locale=locale)
             lines.append(f"• {ix.drug_a} × {ix.drug_b} [{severity_label}]")
             lines.append(f"  {ix.description}")
-            lines.append(f"  建議: {ix.recommendation}")
+            rec = t("interaction.recommendation_prefix", locale=locale)
+            lines.append(f"  {rec}{ix.recommendation}")
     lines.append("")
     lines.append(r.disclaimer)
     return "\n".join(lines)
 
 
 def _severity_label(severity: str, *, locale: str) -> str:
-    mapping = {
-        "none": "無交互",
-        "mild": "輕微",
-        "moderate": "中等",
-        "severe": "嚴重",
-        "unknown": "未知",
-    }
-    return mapping.get(severity.lower(), severity)
+    s = severity.lower()
+    key = f"interaction.severity_{s}"
+    if s in ("none", "mild", "moderate", "severe", "unknown"):
+        return t(key, locale=locale)
+    return severity
 
 
 def _stub_interaction_result(text: str) -> InteractionCheckResult:

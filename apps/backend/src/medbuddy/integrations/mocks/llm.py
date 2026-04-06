@@ -36,9 +36,10 @@ class MockLLM(LLMPort):
         self.reply_template = reply_template or t("mocks.llm.reply_template", locale=locale)
         self.last_classify_input: str | None = None
 
-    async def classify_intent(self, user_text: str) -> Intent:
+    async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
         await asyncio.sleep(0)
         self.last_classify_input = user_text
+        _ = recent_context
         if self._intent is not None:
             return self._intent
         ut = user_text.strip()
@@ -148,15 +149,17 @@ class MockLLM(LLMPort):
         drug_grounding: str | None,
         history: list[ConversationTurn],
         user_message: str,
+        locale: str,
     ) -> str:
         await asyncio.sleep(0)
-        _ = (system_persona, patient_context, drug_grounding, history)
+        _ = (system_persona, patient_context, drug_grounding, history, locale)
         return self.reply_template.format(user_message=user_message)
 
-    async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str:
+    async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str:
         await asyncio.sleep(0)
         excerpt = raw_label[:200]
-        return t("mocks.llm.simplify_prefix", locale=self._locale, excerpt=excerpt)
+        loc = locale or self._locale
+        return t("mocks.llm.simplify_prefix", locale=loc, excerpt=excerpt)
 
     async def extract_medication_draft(
         self, user_text: str, *, locale: str
