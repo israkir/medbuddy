@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).
+
 ### Fixed
 
 - **`drug_personalization_cache`**: `save_personalized_reply` now stores **`medication_id`** when exactly
@@ -21,13 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Standalone app**: **Visit summary** screen (`doctor-summary`) — structured doctor-ready draft (main concern, symptoms, optional vitals, med changes, questions, carer note), **Share** as plain text, local **AsyncStorage** draft; companion chat **Visit summary** header link, **rotating starter chips** and **occasional post-reply prompts** toward medications list, drug questions, visit prep, interactions, Mandarin/voice, and family/caregiver topics; mock chat replies for those themes when offline.
 - **LINE dose reminders (prototype)**: Supabase **`dose_events`** sync after add/remove medication;
   **`reminder_sent_at`** and **`users.timezone`**; **arq** + **`REDIS_URL`** for deferred
   **`send_reminder_for_dose`** jobs; **LINE `push_message`**; **`POST /internal/reminders/reconcile`**
   with **`MEDBUDDY_CRON_SECRET`**; settings **`MEDBUDDY_REMINDER_*`** / **`MEDBUDDY_CRON_SECRET`** /
   **`REDIS_URL`**. Docker image installs **`[reminders]`** extra.
-- **Deploy**: repo-root **`Dockerfile.reminder-worker`** for the arq worker; **`render.yaml`** adds **`medbuddy-reminder-worker`** (Render **Background Worker**, **`starter`** plan) alongside **`medbuddy-api`**; Compose **`reminders`** profile for local Redis + worker.
 - **Documentation**: **`docs/reminders.md`** — LINE dose reminders (data model, arq/Redis, Render, Compose, reconcile); linked from root **`README.md`**, **`docs/use-cases.md`**, and backend **`README.md`**.
+- **Documentation**: **`docs/features.md`** — product features at a glance; linked from root **`README.md`**.
 - **Onboarding / profile**: optional **`gender`** (self-reported category: female, male, non-binary, prefer not to say, other)
   on **`users`**, mobile **`POST /v1/app/onboarding`** and **`GET /v1/app/me`**, persona gaps/signals, and conservative
   **`parse_profile_patch_from_text`** patterns for chat profile updates.

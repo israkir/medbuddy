@@ -103,17 +103,20 @@ Intent overrides without changing routing: [`src/medbuddy/extensibility/intent_h
 
 ## LINE dose reminders (prototype)
 
-When **Supabase** backs users/medications, **add** and **remove** medication intents call **`sync_upcoming_dose_events`**: future **`dose_events`** are recreated from each medication using a **once-daily local time** (**`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`**, default `09:00`) in the user’s **`timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default `14`). If **`REDIS_URL`** is set and **arq** is installed (`pip install -e ".[reminders]"`; the [repo-root `Dockerfile`](../../Dockerfile) includes this extra), the API enqueues **`send_reminder_for_dose`** jobs with **`_defer_until = scheduled_at`** (UTC). A **separate worker process** must run:
+When **Supabase** backs users/medications, **add** and **remove** medication intents call **`sync_upcoming_dose_events`**: future **`dose_events`** are recreated from each medication using a **once-daily local time** (**`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`**, default `09:00`) in the user’s **`timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default `14`). If **`REDIS_URL`** is set and **arq** is installed (`pip install -e ".[reminders]"`; the [repo-root `Dockerfile`](../../Dockerfile) includes this extra), the API enqueues **`send_reminder_for_dose`** jobs with **`_defer_until = scheduled_at`** (UTC).
+
+**Production container (default):** the repo-root **`Dockerfile`** runs [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh): **uvicorn** plus **`arq medbuddy.reminders.worker.WorkerSettings`** when **`REDIS_URL`** is non-empty. The arq process runs [`deliver_dose_reminder`](src/medbuddy/reminders/deliver.py) (**LINE push**, then **`reminder_sent_at`**). **Push copy** comes from **`reminder.line_push`** in locale JSON.
+
+**Local dev (two terminals):** run worker manually if you prefer not to use the entrypoint:
 
 ```bash
-# After pip install -e ".[dev,reminders,supabase]" or production equivalents
 export REDIS_URL=redis://127.0.0.1:6379
 arq medbuddy.reminders.worker.WorkerSettings
 ```
 
-The worker runs [`deliver_dose_reminder`](src/medbuddy/reminders/deliver.py) (**LINE push**, then **`reminder_sent_at`**). **Push copy** comes from **`reminder.line_push`** in locale JSON.
+**Scale-out:** add a **second** service from the **same** **`Dockerfile`** with start command **`arq medbuddy.reminders.worker.WorkerSettings`**; point **`medbuddy-api`** at **uvicorn-only** (override default **`CMD`**) so **arq** does not run twice.
 
-**Container image:** production worker image is built from the repo-root **[`Dockerfile.reminder-worker`](../../Dockerfile.reminder-worker)** (same Python deps as the API image; **`CMD`** is **`arq medbuddy.reminders.worker.WorkerSettings`**). Local stack: **`podman compose --profile reminders up --build`** (see root [`compose.yaml`](../../compose.yaml)) and set **`REDIS_URL=redis://redis:6379`** for **`medbuddy-api`** when that profile is active so the API can enqueue jobs.
+**Compose:** **`REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build`** (see root [`compose.yaml`](../../compose.yaml)); the **`medbuddy-api`** container runs API + arq.
 
 Optional safety net: **`POST /internal/reminders/reconcile`** with header **`X-Cron-Secret`** matching **`MEDBUDDY_CRON_SECRET`** re-enqueues jobs for rows that are due but never marked sent (e.g. after Redis or worker restarts). See [`.env.example`](.env.example).
 
@@ -141,16 +144,17 @@ LINE webhook: `POST http://localhost:8000/v1/line/webhook`
 
 The repo includes a [**Blueprint**](https://render.com/docs/infrastructure-as-code) at [`render.yaml`](../../render.yaml) and a repo-root **[`Dockerfile`](../../Dockerfile)** — Render’s default **Dockerfile path** is **`./Dockerfile`** relative to the repo root; the **build context** must be the **repository root** (so `COPY apps/backend/...` works). [Render](https://render.com/) injects **`PORT`** at runtime and **`RENDER=true`**; the image listens on **`${PORT:-8000}`** and uses **`GET /health`** for health checks. When **`RENDER`** is set, [`Settings`](src/medbuddy/config.py) **always** uses real integrations (`MOCK_EXTERNAL_SERVICES=false`), turns **`DEBUG`** off, and treats **`MEDBUDDY_INTEGRATION=mock`** as **`real`** so a mis-set dashboard env cannot enable mocks.
 
-1. **Create services** — Render Dashboard → **New** → **Blueprint** → connect the repo and apply [`render.yaml`](../../render.yaml). That defines **`medbuddy-api`** (web, **`Dockerfile`**) and **`medbuddy-reminder-worker`** (background worker, **`Dockerfile.reminder-worker`**). Workers cannot use Render’s **free** instance type; the blueprint uses **`plan: starter`** for the worker.
-2. **Redis** — Create **Render Key Value** (or use Upstash) and set the same **`REDIS_URL`** on **both** the web service and the worker so the API can enqueue arq jobs and the worker can consume them.
-3. **Environment** — For **each** service, set dashboard secrets (`sync: false` in the blueprint): **`PUBLIC_BASE_URL`**, **`LINE_CHANNEL_*`**, **`GEMINI_API_KEY`**, Supabase keys, **`MEDBUDDY_MOBILE_BEARER_TOKEN`**, **`REDIS_URL`**, optional **`MEDBUDDY_CRON_SECRET`** for **`POST /internal/reminders/reconcile`**, etc. (see [`.env.example`](.env.example)).
+1. **Create service** — Render Dashboard → **New** → **Blueprint** → connect the repo and apply [`render.yaml`](../../render.yaml). That defines **`medbuddy-api`** (web, repo-root **`Dockerfile`**) which runs **uvicorn** and **arq** when **`REDIS_URL`** is set.
+2. **Redis** — Create **Render Key Value** (or use Upstash) and set **`REDIS_URL`** on **`medbuddy-api`** to your managed instance (not `127.0.0.1` on Render).
+3. **Environment** — On **`medbuddy-api`**, set dashboard secrets (`sync: false` in the blueprint): **`PUBLIC_BASE_URL`**, **`LINE_CHANNEL_*`**, **`GEMINI_API_KEY`**, Supabase keys, **`MEDBUDDY_MOBILE_BEARER_TOKEN`**, **`REDIS_URL`**, optional **`MEDBUDDY_CRON_SECRET`** for **`POST /internal/reminders/reconcile`**, etc. (see [`.env.example`](.env.example)).
 4. **LINE** — Webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
 5. **Mobile / clients** — Point API calls at the same **`PUBLIC_BASE_URL`**; use **`GET /v1/app/health`** or **`GET /health`** for checks.
 
 **Without Docker:** use a **Python** runtime with **root directory** `apps/backend`, build command
 `pip install --upgrade pip && pip install ".[llm,supabase,tts,reminders]"`, start command
-`uvicorn medbuddy.main:app --host 0.0.0.0 --port $PORT`, and a **second** service or task running
-`arq medbuddy.reminders.worker.WorkerSettings` with the same env (**`REDIS_URL`**, Supabase keys, **`LINE_CHANNEL_ACCESS_TOKEN`**).
+that runs **both** **uvicorn** and **`arq medbuddy.reminders.worker.WorkerSettings`** when **`REDIS_URL`** is set
+(e.g. copy [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh) to the service), **or** use two processes
+/ two services with the same env and **only one** arq consumer.
 
 ## Development (without Make)
 

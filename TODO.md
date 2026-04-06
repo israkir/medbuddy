@@ -36,7 +36,7 @@ Checklists for MedBuddy **backend** (`apps/backend`) and **mobile app** (`apps/f
 
 ### Container and dependencies
 
-- [ ] Tune repo-root **`Dockerfile`** / `pip install` extras if you need different production stacks (**`voice`** / **`pydub`**, etc.) or split images per profile.
+- [ ] Tune repo-root **`Dockerfile`** / `pip install` extras if you need different production stacks (**`voice`** / **`pydub`**, etc.).
 - [ ] Run **Uvicorn** appropriately for production (**workers** and/or **process manager**, **`--proxy-headers`** if behind a reverse proxy).
 
 ### Networking, LINE, and standalone app

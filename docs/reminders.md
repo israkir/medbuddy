@@ -30,7 +30,7 @@ flowchart LR
     subgraph queue [Redis]
         ARQ[arq deferred jobs]
     end
-    subgraph worker [Worker process]
+    subgraph worker [arq worker — same container as API by default]
         W[send_reminder_for_dose]
         DV[deliver_dose_reminder]
     end
@@ -68,25 +68,25 @@ Apply new columns on existing projects via the same file’s **`ALTER TABLE ... 
 
 | Variable | Role |
 |----------|------|
-| **`REDIS_URL`** | Redis DSN for arq (API **enqueue** + worker **consume**). |
+| **`REDIS_URL`** | Redis DSN for arq (API **enqueue** + worker **consume**; main **`Dockerfile`** runs both in one container when set). |
 | **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`** | `HH:MM` local time (default `09:00`). |
 | **`MEDBUDDY_REMINDER_HORIZON_DAYS`** | Days ahead to materialize (default **14**, max **90** in settings). |
 | **`MEDBUDDY_CRON_SECRET`** | Secret for **`POST /internal/reminders/reconcile`** (**`X-Cron-Secret`** header). |
 
-**Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root API **Dockerfile** and **[`Dockerfile.reminder-worker`](../Dockerfile.reminder-worker)**.
+**Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root **Dockerfile** (`pip install ".[llm,supabase,tts,reminders]"`).
 
 ## Processes
 
 | Process | Command / image |
 |---------|-------------------|
-| **API** | **`uvicorn medbuddy.main:app`** — [`Dockerfile`](../Dockerfile) |
-| **Reminder worker** | **`arq medbuddy.reminders.worker.WorkerSettings`** — [`Dockerfile.reminder-worker`](../Dockerfile.reminder-worker) |
+| **API + reminder worker (default)** | Repo-root [`Dockerfile`](../Dockerfile) → [`docker-entrypoint-web.sh`](../docker-entrypoint-web.sh): **`uvicorn`** and, if **`REDIS_URL`** is set, **`arq medbuddy.reminders.worker.WorkerSettings`**. |
+| **Worker only (optional scale-out)** | Same **`Dockerfile`** image; override start command to **`arq medbuddy.reminders.worker.WorkerSettings`** (API service must use **uvicorn-only** start command — do not run arq in both). |
 
-Both need **Supabase** credentials for **`UserDataPort`** and **`LINE_CHANNEL_ACCESS_TOKEN`** for push when **`MOCK_EXTERNAL_SERVICES=false`**.
+The same container needs **Supabase** for **`UserDataPort`** and **`LINE_CHANNEL_ACCESS_TOKEN`** for push when **`MOCK_EXTERNAL_SERVICES=false`**.
 
 ## Render
 
-The [**`render.yaml`**](../render.yaml) blueprint defines **`medbuddy-api`** (web) and **`medbuddy-reminder-worker`** (background worker, **starter** tier). Use the **same `REDIS_URL`** (e.g. Render Key Value or Upstash) on both services. Details: [Deploy on Render](../apps/backend/README.md#deploy-on-render).
+The [**`render.yaml`**](../render.yaml) blueprint defines **`medbuddy-api`** (web **`Dockerfile`**). Set managed **`REDIS_URL`** (e.g. Render Key Value or Upstash) so the container runs **arq** alongside **uvicorn**. Optional **second** Background Worker from the **same** Docker image with **`arq ...` start command** is for scale-out only (same **`REDIS_URL`**; API must not also run arq). Details: [Deploy on Render](../apps/backend/README.md#deploy-on-render).
 
 ## Local Compose
 
@@ -96,7 +96,7 @@ From the repo root:
 # API only (no Redis): default compose up
 podman compose up --build
 
-# API + Redis + worker — set REDIS_URL for the API so it can enqueue.
+# API + Redis — entrypoint runs uvicorn + arq when REDIS_URL is set (no separate worker container).
 REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build
 ```
 
@@ -104,7 +104,7 @@ The **`reminders`** profile is defined in [`compose.yaml`](../compose.yaml).
 
 ## Reconciliation
 
-If Redis or the worker restarts, some due rows may never get a job. A low-frequency caller (e.g. external cron every 15–60 minutes) can **`POST /internal/reminders/reconcile`** with **`X-Cron-Secret: <MEDBUDDY_CRON_SECRET>`** to enqueue **immediate** jobs for rows with **`scheduled_at <= now()`**, **`reminder_sent_at` IS NULL**, **`taken_at` IS NULL**. This is a safety net; primary scheduling remains deferred arq jobs.
+If Redis or the **arq** process restarts, some due rows may never get a job. A low-frequency caller (e.g. external cron every 15–60 minutes) can **`POST /internal/reminders/reconcile`** with **`X-Cron-Secret: <MEDBUDDY_CRON_SECRET>`** to enqueue **immediate** jobs for rows with **`scheduled_at <= now()`**, **`reminder_sent_at` IS NULL**, **`taken_at` IS NULL**. This is a safety net; primary scheduling remains deferred arq jobs.
 
 ## Code map
 

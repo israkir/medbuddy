@@ -1,7 +1,8 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Stack } from 'expo-router';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { Link, Stack, type Href } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,8 +25,32 @@ type Bubble = { role: 'user' | 'assistant'; text: string };
 
 const SCROLL_PAD = 120;
 
+/** Full-line chat starters; three are reshuffled whenever this screen is opened. */
+const ENGAGEMENT_KEYS = [
+  'companion.engage.listMeds',
+  'companion.engage.askDrug',
+  'companion.engage.doctorSummary',
+  'companion.engage.interactions',
+  'companion.engage.mandarinVoice',
+  'companion.engage.familyView',
+] as const;
+
+function pickRandomSubset<K>(keys: readonly K[], n: number): K[] {
+  const copy = [...keys];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = copy[i]!;
+    copy[i] = copy[j]!;
+    copy[j] = tmp;
+  }
+  return copy.slice(0, n);
+}
+
+const PEEK_ROLL = 0.38;
+
 export default function CompanionScreen() {
   const { t, i18n } = useTranslation();
+  const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const palette = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
@@ -33,6 +58,10 @@ export default function CompanionScreen() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [starterKeys, setStarterKeys] = useState<readonly string[]>(() =>
+    pickRandomSubset(ENGAGEMENT_KEYS, 3)
+  );
+  const [peekKey, setPeekKey] = useState<(typeof ENGAGEMENT_KEYS)[number] | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const speechLang = i18n.language.startsWith('zh') ? 'zh-TW' : 'en-US';
 
@@ -55,6 +84,30 @@ export default function CompanionScreen() {
     []
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      setStarterKeys(pickRandomSubset(ENGAGEMENT_KEYS, 3));
+      return undefined;
+    }, [])
+  );
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Link href={'/doctor-summary' as Href} asChild>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('companion.visitSummaryA11y')}
+            style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1, marginRight: 12, padding: 6 })}>
+            <Text style={{ color: palette.tint, fontSize: 16, fontWeight: '700' }} maxFontSizeMultiplier={1.35}>
+              {t('companion.visitSummaryLink')}
+            </Text>
+          </Pressable>
+        </Link>
+      ),
+    });
+  }, [navigation, palette.tint, t]);
+
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || sending) {
@@ -62,11 +115,16 @@ export default function CompanionScreen() {
     }
     setInput('');
     setError(null);
+    setPeekKey(null);
     setMessages((prev) => [...prev, { role: 'user', text }]);
     setSending(true);
     try {
       const reply = await sendCompanionMessage(text);
       setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
+      if (Math.random() < PEEK_ROLL) {
+        const pool = ENGAGEMENT_KEYS;
+        setPeekKey(pool[Math.floor(Math.random() * pool.length)]!);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('companion.errorUnknown');
       setError(msg);
@@ -110,25 +168,23 @@ export default function CompanionScreen() {
           </Text>
 
           <View style={styles.suggestionsRow} lightColor="transparent" darkColor="transparent">
-            {[t('companion.suggested1'), t('companion.suggested2'), t('companion.suggested3')].map(
-              (label) => (
-                <Pressable
-                  key={label}
-                  onPress={() => appendSuggestion(label)}
-                  style={({ pressed }) => [
-                    styles.suggestionChip,
-                    {
-                      backgroundColor: palette.voicePanelBg,
-                      borderColor: palette.dockBorder,
-                      opacity: pressed ? 0.85 : 1,
-                    },
-                  ]}>
-                  <Text style={styles.suggestionText} maxFontSizeMultiplier={1.45}>
-                    {label}
-                  </Text>
-                </Pressable>
-              )
-            )}
+            {starterKeys.map((key) => (
+              <Pressable
+                key={key}
+                onPress={() => appendSuggestion(t(key))}
+                style={({ pressed }) => [
+                  styles.suggestionChip,
+                  {
+                    backgroundColor: palette.voicePanelBg,
+                    borderColor: palette.dockBorder,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}>
+                <Text style={styles.suggestionText} maxFontSizeMultiplier={1.45}>
+                  {t(key)}
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
           {messages.map((m, i) => (
@@ -170,6 +226,42 @@ export default function CompanionScreen() {
               </View>
             </View>
           ))}
+
+          {peekKey ? (
+            <View
+              style={[styles.peekCard, { backgroundColor: palette.voicePanelBg, borderColor: palette.dockBorder }]}
+              lightColor="transparent"
+              darkColor="transparent">
+              <Text style={[styles.peekHint, { color: palette.textSecondary }]} maxFontSizeMultiplier={1.45}>
+                {t('companion.peekHint')}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  appendSuggestion(t(peekKey));
+                  setPeekKey(null);
+                }}
+                style={({ pressed }) => [
+                  styles.peekChip,
+                  {
+                    borderColor: palette.dockBorder,
+                    backgroundColor: palette.background,
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}>
+                <Text style={[styles.peekChipText, { color: palette.text }]} maxFontSizeMultiplier={1.45}>
+                  {t(peekKey)}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPeekKey(null)}
+                style={({ pressed }) => [styles.peekDismiss, { opacity: pressed ? 0.7 : 1 }]}>
+                <Text style={{ color: palette.tint, fontWeight: '600' }} maxFontSizeMultiplier={1.4}>
+                  {t('companion.peekDismiss')}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {error ? (
             <Text style={[styles.error, { color: palette.tint }]} maxFontSizeMultiplier={1.45}>
@@ -262,6 +354,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '600',
+  },
+  peekCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    marginBottom: 14,
+    width: '100%',
+  },
+  peekHint: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  peekChip: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  peekChipText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  peekDismiss: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
   },
   bubbleWrap: {
     marginBottom: 12,

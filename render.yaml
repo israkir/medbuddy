@@ -2,6 +2,7 @@
 # Production web service: real integrations only. Render injects RENDER=true; see Settings._render_host_production_defaults.
 # Docker path defaults to ./Dockerfile from repo root; dockerContext is . so COPY apps/backend/... works.
 # After deploy: set PUBLIC_BASE_URL to https://<service-name>.onrender.com and add secrets in Environment.
+# REDIS_URL: same container runs uvicorn + arq reminder worker when set (managed Redis required in production).
 version: "1"
 services:
   - type: web
@@ -46,44 +47,4 @@ services:
       - key: REDIS_URL
         sync: false
       - key: MEDBUDDY_CRON_SECRET
-        sync: false
-
-  # Background worker: processes arq jobs for LINE dose reminder pushes (same Redis as REDIS_URL).
-  # Requires managed Redis (e.g. Render Key Value / Upstash) and the same Supabase + LINE secrets as the API.
-  # Dockerfile: repo-root Dockerfile.reminder-worker (see deploy-on-render in apps/backend/README.md).
-  - type: worker
-    name: medbuddy-reminder-worker
-    runtime: docker
-    region: singapore
-    plan: starter
-    dockerfilePath: ./Dockerfile.reminder-worker
-    dockerContext: .
-    envVars:
-      - key: MEDBUDDY_INTEGRATION
-        value: real
-      - key: MOCK_EXTERNAL_SERVICES
-        value: "false"
-      - key: DEBUG
-        value: "false"
-      - key: PYTHONUNBUFFERED
-        value: "1"
-      - key: LOG_LEVEL
-        value: INFO
-      - key: MEDBUDDY_LOCALE
-        value: zh-TW
-      - key: PUBLIC_BASE_URL
-        sync: false
-      - key: LINE_CHANNEL_SECRET
-        sync: false
-      - key: LINE_CHANNEL_ACCESS_TOKEN
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_PUBLISHABLE_KEY
-        sync: false
-      - key: WHISPER_SERVICE_URL
-        sync: false
-      - key: REDIS_URL
         sync: false
