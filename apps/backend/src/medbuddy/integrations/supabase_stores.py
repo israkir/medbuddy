@@ -179,9 +179,9 @@ class SupabaseConversationStore(ConversationStorePort):
         def q() -> Any:
             return (
                 self._client.table("conversation_turns")
-                .select("role, content, at")
+                .select("role, content, created_at")
                 .eq("user_id", uid)
-                .order("at", desc=True)
+                .order("created_at", desc=True)
                 .limit(max_turns)
                 .execute()
             )
@@ -189,7 +189,7 @@ class SupabaseConversationStore(ConversationStorePort):
         resp = await _run_q(q)
         rows = list(reversed(resp.data or []))
         return [
-            ConversationTurn(role=r["role"], content=r["content"], at=_parse_ts(r["at"]))
+            ConversationTurn(role=r["role"], content=r["content"], at=_parse_ts(r["created_at"]))
             for r in rows
         ]
 
@@ -203,7 +203,7 @@ class SupabaseConversationStore(ConversationStorePort):
             "user_id": uid,
             "role": turn.role,
             "content": turn.content,
-            "at": at.isoformat(),
+            "created_at": at.isoformat(),
         }
 
         def q() -> Any:

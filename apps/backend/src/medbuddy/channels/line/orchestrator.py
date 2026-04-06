@@ -1,13 +1,15 @@
-"""LINE channel: event → classify → optional drug grounding → LLM → reply (text/audio)."""
+"""LINE channel: event → classify → optional drug grounding → LLM → reply."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from typing import Any
+from urllib.parse import parse_qs
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.engine.types import AppServices
+from medbuddy.i18n import t
 from medbuddy.models.domain import MessageKind
 
 log = logging.getLogger(__name__)
@@ -30,8 +32,6 @@ async def _handle_user_message(
     user_text: str,
     prefer_audio_reply: bool,
 ) -> None:
-    await svc.users.get_or_create_user(line_user_id)
-
     reply_text = await run_assistant_text_turn(
         svc,
         user_key=line_user_id,
@@ -95,11 +95,19 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
 
     if etype == "follow":
         await svc.users.get_or_create_user(line_user_id)
-        log.info("LINE flow: user_id=%s new follow", line_user_id)
+        loc = svc.settings.locale
+        await svc.line.reply_text(
+            reply_token,
+            t("line.follow_welcome", locale=loc),
+        )
+        log.info("LINE flow: user_id=%s new follow — welcome", line_user_id)
         return
 
     if etype == "postback":
-        log.info("LINE flow: user_id=%s postback ignored", line_user_id)
+        data = event.get("postback", {}).get("data") or ""
+        qs = parse_qs(data)
+        action = (qs.get("action") or [""])[0]
+        log.info("LINE flow: user_id=%s unhandled postback action=%r", line_user_id, action)
         return
 
     if etype != "message":

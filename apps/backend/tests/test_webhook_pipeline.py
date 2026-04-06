@@ -61,8 +61,8 @@ async def test_webhook_signed_batch_returns_ok(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_text_message_replies(mock_settings):
-    """Drive orchestrator with a full event dict (same shape ``handle_line_event`` expects)."""
+async def test_orchestrator_text_message_runs_assistant(mock_settings):
+    """Text messages go straight to the assistant (mock LINE batch reply)."""
     mock_settings.mock_external_services = True
     svc: AppServices = __import__(
         "medbuddy.container",
@@ -84,11 +84,12 @@ async def test_orchestrator_text_message_replies(mock_settings):
     )
     line = svc.line
     assert hasattr(line, "replies")
-    assert len(line.replies) >= 1
+    assert len(line.replies) == 1
+    assert line.replies[0]["type"] == "batch"  # type: ignore[index]
 
 
 @pytest.mark.asyncio
-async def test_follow_does_not_auto_reply(mock_settings):
+async def test_follow_sends_welcome_text(mock_settings):
     mock_settings.line_channel_secret = ""
     app.state.services = __import__(
         "medbuddy.container",
@@ -112,4 +113,6 @@ async def test_follow_does_not_auto_reply(mock_settings):
             r = await client.post("/v1/line/webhook", content=raw)
     assert r.status_code == 200
     svc: AppServices = app.state.services
-    assert svc.line.replies == []  # type: ignore[attr-defined]
+    assert svc.line.replies[-1]["type"] == "batch"  # type: ignore[attr-defined]
+    msgs = svc.line.replies[-1]["messages"]  # type: ignore[index]
+    assert msgs[0]["type"] == "text"
