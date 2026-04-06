@@ -23,6 +23,7 @@ from medbuddy.llm.schemas import (
     HealthSummaryResult,
     IntentClassification,
     InteractionCheckResult,
+    LocaleIntentExtraction,
     MedicationExtraction,
     MedicationSummaryItem,
     RemovalResolution,
@@ -124,10 +125,19 @@ class OpenAILLM(LLMPort):
             "Classify the user message into exactly one intent: "
             "add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
-            "update_profile, general_question. "
+            "update_profile, update_locale, off_topic, general_question. "
             "Use update_profile when the user is sharing or correcting personal profile "
             "information (how to address them, age, emergency contact, allergies/health notes), "
-            "not asking about a specific drug.\n\n"
+            "not asking about a specific drug. "
+            "Use update_locale when they want to change the assistant reply language "
+            "(English vs Traditional Chinese), including paraphrases like "
+            '"I\'d prefer English" or "請用中文回覆". '
+            "Do not use update_locale when they only want a drug explanation translated. "
+            "Use off_topic when the message is clearly not about medications, adherence, reminders, "
+            "drug questions, care-related profile, vitals/symptoms tied to their care, or switching "
+            "this assistant's language — e.g. weather, sports scores, politics, unrelated homework, "
+            "random chit-chat. If there is a health or medication angle, prefer general_question or "
+            "the best matching clinical intent, not off_topic.\n\n"
             f"User: {user_text}"
         )
         try:
@@ -141,6 +151,26 @@ class OpenAILLM(LLMPort):
 
     async def classify_intent(self, user_text: str) -> Intent:
         return await asyncio.to_thread(self._classify_sync, user_text)
+
+    def _extract_locale_intent_sync(self, user_text: str) -> str | None:
+        prompt = (
+            "Decide if the user is asking to change the assistant's reply language "
+            "to English (en) or Traditional Chinese for Taiwan (zh-TW). "
+            "If they are not asking to switch reply language, set target_locale to null. "
+            "Do not treat requests to explain medical text in another language as a UI switch.\n\n"
+            f"User: {user_text}"
+        )
+        try:
+            parsed: LocaleIntentExtraction = self._generate_structured_sync(
+                self._model, prompt, LocaleIntentExtraction
+            )
+        except LLMParseError:
+            log.warning("extract_locale_intent: structured parse failed")
+            return None
+        return parsed.target_locale
+
+    async def extract_locale_intent(self, user_text: str) -> str | None:
+        return await asyncio.to_thread(self._extract_locale_intent_sync, user_text)
 
     def _compose_sync(
         self,

@@ -141,7 +141,7 @@ async def app_get_health_summary(
     """
     user_row = await svc.users.get_or_create_user(ctx.app_user_id)
     medications = await svc.users.list_medications(ctx.app_user_id)
-    locale = svc.settings.locale
+    locale = effective_user_locale(user_row.get("locale"))
 
     try:
         result = await _summary_tool.run(

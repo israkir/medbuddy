@@ -1,18 +1,39 @@
-# MedBuddy — covered use cases
+# MedBuddy — Use cases
 
 **Disclaimer:** MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
 
-This document summarizes behaviors the codebase implements today: what the user can do, an example, and how the backend handles it. All assistant replies share the core pipeline **`run_assistant_text_turn`** unless noted.
+## How this document relates to the feature catalog
+
+| Document | Focus |
+|----------|--------|
+| **This file (`use-cases.md`)** | **Scenarios:** entry points, every implemented interaction, example utterances, and how a turn flows through the backend. |
+| **[`features.md`](features.md)** | **Capabilities:** product-style feature specs (summary, user value, boundaries). Primary product: **LINE + backend**; HTTP API without UI detail. |
+| **[`frontend-expo.md`](frontend-expo.md)** | **Reference / future:** Expo client only — not expanded here. |
 
 ---
 
-## Channels
+## Interaction map (what calls what)
 
-### LINE: new follower
+| Kind | Implemented today |
+|------|-------------------|
+| **Assistant chat** | **`run_assistant_text_turn`** — one user text in, one reply string out. Used by **LINE** (text + STT transcript from voice) and **`POST /v1/app/messages`**. Implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py). |
+| **LINE-only (no full assistant turn)** | **`follow`** → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
+| **HTTP without chat pipeline** | **`GET /v1/app/health`**, **`GET /v1/app/info`**, **`GET /v1/app/me`**, **`POST /v1/app/onboarding`**, **`GET /v1/app/summary`** — auth + user store / LLM as documented below. |
+| **Infrastructure** | **`GET /health`**, **`GET /internal-media/{file_id}`** (TTS audio for LINE), **`POST /internal/reminders/reconcile`** (cron). |
 
-**Example:** User adds the official account and triggers a `follow` event.
+---
 
-**Process:** The webhook ensures a user record exists (`get_or_create_user`), then sends a fixed welcome string from i18n (not the full assistant turn).
+## 1. Entry points
+
+### 1.1 LINE Messaging API
+
+| Event / message | User-visible outcome | Process |
+|-----------------|----------------------|---------|
+| **`follow`** | Fixed **welcome** (i18n `line.follow_welcome`). | `get_or_create_user` → **`run_assistant_text_turn` is not called.** |
+| **`message` · text** | Assistant reply (text). | Webhook verified → `run_assistant_text_turn(user_key=line_user_id, user_text=…)` → `reply_text` to LINE. |
+| **`message` · audio** | Assistant reply: **audio + text** batch (when TTS configured), else behavior follows project settings. | Download audio → **STT** (`transcribe_m4a`) → same `run_assistant_text_turn` on transcript → optional **TTS** URL under `/internal-media/...` + text batch; temp file TTL cleanup. |
+| **`postback`** | *(None)* | Parsed `action` is logged; **no user reply** (placeholder for future rich UI). |
+| **`message` · other types** (sticker, image, …) | *(None)* | Logged as unsupported; **no** `run_assistant_text_turn`. |
 
 **Welcome copy (English, example):**
 
@@ -22,7 +43,7 @@ This document summarizes behaviors the codebase implements today: what the user 
 
 > 欢迎使用 MedBuddy！我会帮您记住用药安排，并回答与用药相关的问题（不能替代医生或药师的医嘱）。请用一句话告诉我您希望我了解的内容，例如：您希望我怎么称呼您、年龄（选填）、家属联系方式，或过敏史 / 重要健康状况——直接打字发给我即可，我稍后可以帮您录入。
 
-**One-line user replies (简体中文 examples):**
+**One-line user replies after welcome (简体中文 examples)** — typically classified as **`update_profile`** on the next text message:
 
 - 叫我老王就行，今年 62 岁。
 - 请叫我李阿姨；有事联系我儿子张伟，手机 138-xxxx-xxxx。
@@ -33,130 +54,189 @@ This document summarizes behaviors the codebase implements today: what the user 
 
 ---
 
-### LINE: text message
+### 1.2 Standalone HTTP API (`/v1/app`)
 
-**Example:** 「我的藥清單」 / `list my medications`; 「這顆要跟食物一起吃嗎？」 / `Do I need to take this with food?`; 「幫我記錄今天頭有點暈」 / `I felt a bit dizzy today—note that down`
+Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth: **`X-App-User-Id`**, optional **`Authorization: Bearer`** when configured.
 
-**Process:** Verified webhook → event parsed → user id extracted → **`run_assistant_text_turn(user_key=line_user_id, user_text=...)`** → reply as LINE text (or batch; see audio).
+| Method / path | Assistant pipeline? | Behavior |
+|---------------|---------------------|----------|
+| **`GET /health`** | No | JSON `{"status":"ok","channel":"standalone"}`. |
+| **`GET /info`** | No | Channel + API version metadata. |
+| **`GET /me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. |
+| **`POST /onboarding`** | No | **`UserDataPort.save_onboarding_profile`** — name, optional age, gender, contacts, notes, **IANA `timezone`**, **`locale`** (`en` \| `zh-TW`). |
+| **`POST /messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn(user_key=app_user_id, user_text=…)`** → `{"reply":"…"}`. |
+| **`GET /summary`** | No (dedicated tool path) | **`GenerateHealthSummaryTool`** with full history/meds — structured **doctor summary** JSON (+ `plain_text`), not the same JSON shape as chat-only summary text. |
 
----
-
-### LINE: voice message
-
-**Example:** User sends a voice clip asking a medication question.
-
-**Process:** Audio bytes are fetched from LINE → **STT** (e.g. Whisper service or mock) → transcript fed into **`run_assistant_text_turn`**. If the client path prefers audio back, **TTS** builds a short-lived public URL; LINE gets a **batch** of audio + text, then storage deletes the temp object after TTL.
-
----
-
-### Standalone app: one assistant message (HTTP)
-
-**Example:** `POST /v1/app/messages` with JSON `{"text":"⋯"}` and headers `X-App-User-Id` (and optional `Authorization: Bearer` in production).
-
-**Process:** Auth resolves `app_user_id` → same **`run_assistant_text_turn(user_key=app_user_id, user_text=...)`** as LINE text → JSON `{"reply":"⋯"}`.
+**Reference UI:** Expo **`Medication helper`** calls **`POST /messages`** when live API mode is on — see [`frontend-expo.md`](frontend-expo.md).
 
 ---
 
-### Expo companion: “Medication helper” UI
+## 2. Assistant pipeline (`run_assistant_text_turn`)
 
-**Example:** User opens the in-app chat screen and sends “What is metformin for?” or 「我的藥哪些不能同時吃？」 / “Which of my meds shouldn’t I combine?” (or taps a suggested prompt).
+All **chat** turns share this flow (LINE text/voice transcript and **`POST /v1/app/messages`**).
 
-**Process (when not in mock mode):** The app calls **`POST /v1/app/messages`**. When **`EXPO_PUBLIC_USE_MOCK_DATA=true`**, no API call; local i18n text is returned. The screen can **read aloud** replies with on-device TTS.
+1. **Redact** PII for classification (`redact_pii_text`).
+2. **Load** user row + medication list; **classify intent** via **`LLM`** (or mock rules in tests).
+3. **Append** the **user** turn to conversation store (raw text).
+4. **Locale change (first short-circuit):** [`try_locale_change_reply`](../apps/backend/src/medbuddy/application/locale_intents.py) — see **§3.8** `update_locale`. If it returns a string, **append assistant turn and return** (no hooks/tools below).
+5. **Intent hooks** — optional pilot short-circuit (**§5**).
+6. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.9**).
+7. **`update_profile`** — regex/heuristic parse + `patch_user_profile` (**§3.7**).
+8. **Tool dispatch** — `list` / `add` / `remove` / `explain` / `interaction_check` / `request_summary` (**§3**).
+9. **Fallback** — `compose_reply` with **no** drug grounding for intents without a tool (e.g. **`confirm_dose`**, **`log_vital`**, **`general_question`**).
+10. **Append** the **assistant** turn and return reply text.
 
----
-
-## Assistant intents (same core for LINE + mobile)
-
-Classification is done by the configured **LLM** (e.g. Gemini) or **mock rules** in tests. Numeric order below is logical, not code order.
-
-### List saved medications
-
-**Example:** 「我的藥清單」 / “What’s on my med list?”
-
-**Process:** Intent **`list_medications`** → **no LLM compose**: response is built from **`UserDataPort.list_medications`** (in-memory mock or Supabase) plus i18n intro / empty message.
-
----
-
-### Add a medication
-
-**Example:** 「新增阿斯匹靈 100mg 每天飯後」 / `add aspirin 100mg after meals`
-
-**Process (high level):**
-
-1. Intent **`add_medication`** → **extract** name/dose/schedule (and optional notes) via LLM JSON or mock heuristics. Incomplete extraction (no drug name) → i18n **`medication.add_incomplete`**; no full assistant compose.
-2. **Persist** via **`UserDataPort.add_medication`**.
-3. Reload the list → build **patient medication context** (includes the new row and any existing meds).
-4. **Reference data:** **`DrugDataPort`** fetches snippets for the **new drug name** (HTTP **OpenFDA**; **`HttpDrugData`** TFDA returns nothing until a real integration exists; **mocks** may still simulate TFDA), same family of grounding used for explain—**not** the per-user **`drug_personalization_cache`** (that cache remains for **`explain_medication`** / **`interaction_check`** only).
-5. **LLM `compose_medication_added_reply`** (Gemini in production, deterministic **`mocks.llm.medication_added`** in mock mode): short confirmation that restates **schedule in plain language**, adds **one or two sentences** of drug context personalized to the list + references only, and reminds that this is not individualized medical advice. If compose fails → **i18n `medication.added`** template fallback.
+**Classification** uses the configured **`Intent`** enum ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
+`add_medication`, `list_medications`, `remove_medication`, `explain_medication`, `interaction_check`, `confirm_dose`, `log_vital`, `request_summary`, `update_profile`, `update_locale`, `off_topic`, `general_question`.
 
 ---
 
-### Remove a medication
+## 3. Intents (chat) — behaviors and examples
 
-**Example:** 「停藥普拿疼」 / `remove Tylenol from my list`
+Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) decides the label.
 
-**Process:** Intent **`remove_medication`** → **resolve** which row (LLM JSON or mock match on name) → **delete** via **`delete_medication`** → i18n confirmation or “not found”.
+### 3.1 `list_medications`
 
----
-
-### Explain a medication (comprehension)
-
-**Example:** 「解釋 Metformin 是做什麼的」 / “Why do I take this blood pressure pill?”
-
-**Process (high level):**
-
-1. Intent **`explain_medication`** (or **`interaction_check`** for interactions — similar path).
-2. **Personalization cache (Supabase only):** If **`drug_personalization_cache`** has a fresh row for `(user, fingerprint)`, fingerprint includes a **hash of the current medication list text** → return cached reply and append conversation turns; **skip** remote drug fetch and LLM.
-3. Else **reference data:** **`DrugDataPort`** (HTTP OpenFDA label search; no TFDA row from HTTP until integrated, or mocks). With Supabase, **`CachingDrugData`** reads/writes **`drug_reference_cache`** (TTL configurable).
-4. **Conversation history** loaded; **user message** stored.
-5. Optional **intent hooks** and **medication intents** short-circuit if they return text.
-6. Otherwise **LLM `compose_reply`** with system persona, **patient medication context**, **drug grounding** string, and history. Extra system text nudges **purpose, timing rationale, cautions**.
-7. Assistant turn stored; if the reply came from **compose** (not list/add/remove/hook), **personalization row upserted** for next time.
+| | |
+|--|--|
+| **Scenario** | User asks for their saved medication list. |
+| **Examples** | 「我的藥清單」 · “What’s on my med list?” |
+| **Outcome** | List from **`UserDataPort.list_medications`** + i18n intro or empty state. **No** LLM compose for the list body. |
+| **Errors** | Unusual failures → generic agent error message (`agent.generic_error`). |
 
 ---
 
-### Drug–drug / combination caution
+### 3.2 `add_medication`
 
-**Example:** 「阿斯匹靈可以跟抗凝血藥一起吃嗎？」 / “Can I take aspirin with my blood thinner?”
-
-**Process:** Intent **`interaction_check`** → same structure as explain: personalization cache → grounded references → LLM with **interaction-focused** system add-on → optional save to personalization cache.
-
----
-
-### Confirm dose / log vital / ask for summary / general chat
-
-**Examples:** 「藥物過量了怎麼辦」 / `What if I accidentally took a double dose?`; 「血壓 130/85」; 「用三句話總結我們聊的」 / `Summarize our chat in three bullets`; 「早安，今天天氣不錯」 / small talk.
-
-**Process:** Classified into **`confirm_dose`**, **`log_vital`**, **`request_summary`**, or **`general_question`**. **Drug API snippets** are prefetched inside the main turn for **`explain_medication`**, **`interaction_check`**, and (after a successful save) **`add_medication`**; other intents do not load that grounding in **`run_assistant_text_turn`**. Replies come from **hooks** (if registered), **medication handlers** (list/add/remove), or **generic `compose_reply`** without the explain/interaction “companion” add-on unless the intent matched those.
+| | |
+|--|--|
+| **Scenario** | User adds a drug with dose/schedule in natural language. |
+| **Examples** | 「新增阿斯匹靈 100mg 每天飯後」 · `add aspirin 100mg after meals` |
+| **Outcome** | Extract (**LLM** structured output or mock) → **`add_medication`**. Then **`DrugDataPort`** for the **new** drug only → **`compose_medication_added_reply`** (or i18n **`medication.added`** fallback). |
+| **Incomplete** | No drug name → **`medication.add_incomplete`** (no full compose). |
+| **Side effect** | When Supabase + reminders are configured: **dose_events** sync / LINE push path — [`reminders.md`](reminders.md). |
 
 ---
 
-## Caching & data (when Supabase is configured)
+### 3.3 `remove_medication`
 
-Table-by-table detail: **[`docs/features.md`](features.md#6-persistence-and-caching-supabase)**. Reminder scheduling and **`users.timezone`**: **[`docs/reminders.md`](reminders.md)**.
-
-Without Supabase, users and conversations stay in memory; drug reference/personalization caches are not wired.
-
----
-
-## LINE: dose reminder pushes (prototype)
-
-**Trigger:** Successful **add medication** or **remove medication** via [`try_medication_intents`](../apps/backend/src/medbuddy/application/medication_intents.py) (LINE text/voice and any channel that uses the same handler).
-
-**Behavior (Supabase + Redis):** Upcoming **`dose_events`** rows are recreated; deferred **arq** jobs send a **LINE push** around each **`scheduled_at`**, then set **`reminder_sent_at`**. Free-text **`schedule`** is echoed in the message but does not drive multiple times per day in v1.
-
-**Full reference:** architecture, schema, env vars, Render (API + arq in one service when **`REDIS_URL`** is set), Compose profile, reconcile endpoint — **[`docs/reminders.md`](reminders.md)**.
+| | |
+|--|--|
+| **Scenario** | User stops tracking a med. |
+| **Examples** | 「停藥普拿疼」 · `remove Tylenol from my list` |
+| **Outcome** | Resolve row (**LLM** or mock) → **`delete_medication`** → i18n confirm or **`medication.remove_not_found`**. |
+| **Side effect** | Reminder rebuild when configured (same as add). |
 
 ---
 
-## Extensibility
+### 3.4 `explain_medication`
 
-**Intent hooks** can return a string before medication handlers and **`compose_reply`** — useful for pilot features (e.g. doctor summary) without forking the LINE app.
+| | |
+|--|--|
+| **Scenario** | User wants to understand a drug or regimen. |
+| **Examples** | 「解釋 Metformin 是做什麼的」 · “Why do I take this blood pressure pill?” |
+| **Outcome** | **Personalization cache** hit (Supabase) → cached text + history append, skip fetch/LLM. Else **OpenFDA** (etc.) grounding + **`compose_reply`** with **companion** instructions (purpose, timing, cautions). **Upsert** personalization when composed. |
+| **Prefetch** | Drug snippets prefetched in this turn path. |
 
 ---
 
-## Out of scope (not primary flows here)
+### 3.5 `interaction_check`
 
-- Diagnosis or replacing clinician/pharmacist judgment (prompts explicitly discourage that).
-- Full TFDA API integration (**`HttpDrugData.fetch_tfda_snippet`** currently returns **`None`** so **`source=tfda`** is not stored for placeholder text; mocks can still imitate TFDA).
-- Companion **center mic** hold-to-talk → **automatic** STT to this backend (keyboard dictation or LINE voice are the intended voice paths today).
+| | |
+|--|--|
+| **Scenario** | Drug–drug or combination questions. |
+| **Examples** | 「阿斯匹靈可以跟抗凝血藥一起吃嗎？」 · “Can I take aspirin with my blood thinner?” |
+| **Outcome** | Same pipeline as explain with **interaction-focused** system add-on; optional personalization cache. |
+
+---
+
+### 3.6 `request_summary` (in chat)
+
+| | |
+|--|--|
+| **Scenario** | User asks for a recap or doctor-ready summary **in the conversation**. |
+| **Examples** | 「用三句話總結我們聊的」 · “Summarize what we discussed for my doctor.” |
+| **Outcome** | **`GenerateHealthSummaryTool`** — structured generation + **reply text** (`as_text()`) stored as the assistant message. |
+| **Contrast** | **`GET /v1/app/summary`** returns **JSON** (fields + `plain_text`) without going through the normal single-string chat reply path for the HTTP layer — same tool concept, different transport. |
+
+---
+
+### 3.7 `update_profile`
+
+| | |
+|--|--|
+| **Scenario** | User updates profile fields **in chat** (name, age, emergency contact, health notes, gender). |
+| **Examples** | Same one-line replies as after LINE welcome; “叫我老王”; “我對青霉素过敏”. |
+| **Outcome** | **`parse_profile_patch_from_text`** (heuristics) → **`patch_user_profile`**. No LLM JSON extraction for stored PII. Empty parse → **`profile.update_unclear`**. |
+| **Contrast** | Standalone **onboarding** uses **`POST /onboarding`** with typed JSON — not this intent. |
+
+---
+
+### 3.8 `update_locale`
+
+| | |
+|--|--|
+| **Scenario** | User asks to switch **UI/reply language** (`en` or `zh-TW`). |
+| **Examples** | “switch to English” · 「請用中文」 · “I prefer English replies from now on” (classifier + LLM extract if regex misses). |
+| **Outcome** | **`parse_locale_request_from_text`** first; if missing but intent is **`update_locale`**, **`extract_locale_intent`**. **`patch_user_profile`** with **`locale`**. Already on target → **`locale.unchanged`**; invalid → **`locale.unclear`**. |
+| **Note** | Phrases like “explain this in English” (content language only) are **excluded** from switching UI locale — see [`user_locale.py`](../apps/backend/src/medbuddy/user_locale.py). |
+
+---
+
+### 3.9 `off_topic`
+
+| | |
+|--|--|
+| **Scenario** | Message is **not** medication-related (weather, sports, etc.). |
+| **Examples** | “What’s the weather today?” · 「今天天氣怎麼樣」 |
+| **Outcome** | Fixed **`agent.off_topic`** string in the user’s **effective locale**. **No** `compose_reply`. |
+
+---
+
+### 3.10 `confirm_dose` · `log_vital` · `general_question`
+
+| | |
+|--|--|
+| **Scenario** | Dosing concern, vital sign in text, small talk, or general medication-adjacent chat **without** a dedicated tool. |
+| **Examples** | 「藥物過量了怎麼辦」 · “What if I doubled my dose?” · 「血壓 130/85」 · 「早安」 |
+| **Outcome** | **`compose_reply`** with persona + **de-identified** patient context + history; **no** automatic drug API prefetch for these intents (unlike explain / interaction / post-add ack). |
+| **Prefetch** | Only **`explain_medication`**, **`interaction_check`**, and (after successful save) **`add_medication`** load drug grounding inside the main turn. |
+
+---
+
+## 4. Caching and persistence (when Supabase is configured)
+
+**Scenario:** Explain/interaction personalization, drug reference cache, conversations, medications, **`users.locale`**, **`users.timezone`**, **`dose_events`**.
+
+**Detail:** [`features.md` §6](features.md#6-persistence-and-caching-supabase) · **Reminders:** [`reminders.md`](reminders.md).
+
+Without Supabase: in-memory user/conversation mocks; drug caches not wired.
+
+---
+
+## 5. Extensibility (intent hooks)
+
+**Scenario:** Pilot intercepts a classified intent before fixed refusals, profile, tools, or fallback.
+
+**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **locale** short-circuit first → **hooks** → **`off_topic`** → **`update_profile`** → **tools** → **`compose_reply`** fallback.
+
+---
+
+## 6. LINE dose reminder pushes (prototype)
+
+**Trigger:** Successful **`add_medication`** or **`remove_medication`** via medication intents (any channel using the same handler).
+
+**User-visible outcome:** **LINE push** near **`scheduled_at`** (not in-app local notifications).
+
+**Behavior:** **`dose_events`** rebuild; **arq** + Redis; copy under **`reminder.line_push`**. Free-text **`schedule`** echoed but **v1** does not expand to multiple times per day.
+
+**Full reference:** [`reminders.md`](reminders.md).
+
+---
+
+## 7. Out of scope (not implemented as primary flows here)
+
+- Clinical diagnosis or replacing clinician/pharmacist judgment.
+- **Full TFDA HTTP** — stub returns empty; mocks may imitate TFDA.
+- **LINE `postback`** handling** — no user-facing action yet.
+- **Reference Expo** hold-to-talk → backend STT — see [`frontend-expo.md`](frontend-expo.md); **LINE audio** + Whisper is supported.

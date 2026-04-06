@@ -51,6 +51,9 @@ class TextToSpeechPort(Protocol):
 class LLMPort(Protocol):
     async def classify_intent(self, user_text: str) -> Intent: ...
 
+    async def extract_locale_intent(self, user_text: str) -> str | None:
+        """If the user wants English or zh-TW replies, return ``en`` or ``zh-TW``; else ``None``."""
+
     async def compose_reply(
         self,
         *,

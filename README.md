@@ -1,8 +1,10 @@
 # MedBuddy
 
-MedBuddy is a **patient-facing medication companion** — a FastAPI backend paired with an **Expo (React Native)** mobile app. Patients interact through **LINE Messaging** and/or the **standalone mobile client**; both channels share the same agent, drug lookup, and persistence layer.
+MedBuddy is a **patient-facing medication companion** built around a **FastAPI** backend. **Primary product:** **LINE Messaging** (chat, voice, dose reminder push) plus shared assistant logic, persistence, and drug lookup. **Secondary:** an **HTTP API** (`/v1/app/*`) for the same core without LINE.
 
-This is a **monorepo**. See the per-app READMEs for day-to-day development details.
+The monorepo also includes an **Expo (React Native)** app under `apps/frontend/` as a **reference and future mobile client** — documented separately so it is not mixed with LINE/backend features: **[`docs/frontend-expo.md`](docs/frontend-expo.md)**.
+
+See the per-app READMEs for day-to-day development details.
 
 > **Disclaimer:** MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
 
@@ -11,28 +13,28 @@ This is a **monorepo**. See the per-app READMEs for day-to-day development detai
 ## Architecture at a glance
 
 ```
-┌──────────────┐   ┌──────────────────────┐
-│  LINE Messaging │   │  Expo (React Native)  │
-│  (webhook)      │   │  iOS & Android app    │
-└──────┬──────┘   └──────────┬───────────┘
-       │                     │
-       ▼                     ▼
-┌──────────────────────────────────────────┐
-│             FastAPI backend              │
-│  /v1/line/...        /v1/app/...         │
-│                                          │
-│   channels/line    channels/mobile       │
-│           ↓               ↓              │
-│      application/assistant_turn()        │
-│              ↓                           │
-│         agents/MedicationAgent           │
-│    (intent → tool dispatch)              │
-│              ↓                           │
-│   protocols/ports (hexagonal boundary)  │
-│      ↓           ↓          ↓            │
-│  integrations/  integrations/ integrations/
-│  gemini_llm    supabase_stores drugs_http│
-└──────────────────────────────────────────┘
+┌──────────────────┐   ┌────────────────────────────┐
+│  LINE Messaging  │   │  HTTP clients (optional    │
+│  (webhook, push) │   │  reference mobile app)     │
+└────────┬─────────┘   └─────────────┬──────────────┘
+         │                           │
+         ▼                           ▼
+┌──────────────────────────────────────────────┐
+│             FastAPI backend                  │
+│  /v1/line/...        /v1/app/...             │
+│                                              │
+│   channels/line    channels/mobile           │
+│           ↓               ↓                  │
+│      application/assistant_turn()            │
+│              ↓                               │
+│         agents/MedicationAgent               │
+│    (intent → tool dispatch)                  │
+│              ↓                               │
+│   protocols/ports (hexagonal boundary)       │
+│      ↓           ↓          ↓                │
+│  integrations/  integrations/ integrations/  |
+│  gemini_llm    supabase_stores drugs_http    │
+└──────────────────────────────────────────────┘
          ↓              ↓
     Supabase (Postgres)  Gemini or OpenAI (LLM)
     Redis + arq          OpenFDA / TFDA
@@ -86,7 +88,7 @@ make be-compose       # podman/docker compose up --build
 | Path | Role |
 |------|------|
 | [`apps/backend/`](apps/backend/) | FastAPI service — LINE webhooks, mobile REST API, agent core |
-| [`apps/frontend/`](apps/frontend/) | Expo app (iOS & Android) — patient UI |
+| [`apps/frontend/`](apps/frontend/) | Expo (iOS & Android) — **reference / future** client; see [`docs/frontend-expo.md`](docs/frontend-expo.md) |
 | [`Dockerfile`](Dockerfile) | Repo-root image (API + optional arq worker) |
 | [`compose.yaml`](compose.yaml) | Local container orchestration |
 | [`render.yaml`](render.yaml) | [Render](https://render.com/) blueprint — see [Deploy on Render](apps/backend/README.md#deploy-on-render) |
@@ -117,8 +119,9 @@ Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#
 | Resource | What you'll find |
 |----------|------------------|
 | [`docs/architecture.md`](docs/architecture.md) | **Technical design document** — architecture, data model, API reference, integrations, security |
-| [`docs/features.md`](docs/features.md) | Product features at a glance (channels, assistant, caching, reminders) |
+| [`docs/features.md`](docs/features.md) | Product features at a glance (LINE, HTTP API, assistant, caching, reminders) |
 | [`docs/use-cases.md`](docs/use-cases.md) | Narrated flows, example utterances, channels, intents |
+| [`docs/frontend-expo.md`](docs/frontend-expo.md) | **Reference / future:** Expo app only (not mixed with primary LINE + backend docs) |
 | [`docs/reminders.md`](docs/reminders.md) | LINE dose reminders: schema, arq/Redis, Compose, Render, reconcile |
 | [`docs/privacy.md`](docs/privacy.md) | PII handling, LLM redaction, profile parsing, compliance notes |
 | [`apps/backend/README.md`](apps/backend/README.md) | Package layout, env vars, mock vs real, LINE testing, deploy |

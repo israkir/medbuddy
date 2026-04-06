@@ -4,6 +4,8 @@ React Native client for **iOS** and **Android** built with [Expo](https://docs.e
 
 Paths below are relative to **`apps/frontend/`**.
 
+**Product docs:** This app is documented as a **reference / future** mobile client in **[`docs/frontend-expo.md`](../../docs/frontend-expo.md)** so it stays separate from the primary LINE + backend documentation set.
+
 ---
 
 ## Screen map

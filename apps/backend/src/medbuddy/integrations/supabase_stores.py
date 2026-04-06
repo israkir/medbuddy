@@ -372,7 +372,7 @@ class SupabaseUserData(UserDataPort):
         def q_user() -> Any:
             return (
                 self._client.table("users")
-                .select("external_user_id, timezone")
+                .select("external_user_id, timezone, locale")
                 .eq("id", uid)
                 .limit(1)
                 .execute()
@@ -385,6 +385,8 @@ class SupabaseUserData(UserDataPort):
         line_uid = str(urows[0]["external_user_id"])
         tz_raw = urows[0].get("timezone")
         tz_name = effective_user_timezone(str(tz_raw) if tz_raw else None)
+        loc_raw = urows[0].get("locale")
+        user_locale = effective_user_locale(str(loc_raw) if loc_raw else None)
 
         def q_med() -> Any:
             return (
@@ -408,6 +410,7 @@ class SupabaseUserData(UserDataPort):
             schedule=str(m["schedule"]),
             scheduled_at=scheduled_at,
             user_timezone=tz_name,
+            user_locale=user_locale,
         )
 
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:

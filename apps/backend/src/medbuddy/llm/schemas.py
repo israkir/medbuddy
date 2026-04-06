@@ -8,6 +8,8 @@ clear field hints in the JSON schema it sends to the model.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -65,10 +67,22 @@ class IntentClassification(BaseModel):
         description=(
             "One of: add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
-            "update_profile, general_question"
+            "update_profile, update_locale, off_topic, general_question"
         )
     )
     reasoning: str = Field(description="Brief reasoning for this classification (1 sentence)")
+
+
+class LocaleIntentExtraction(BaseModel):
+    """Which reply language the user wants when switching UI/conversation language."""
+
+    target_locale: Literal["en", "zh-TW"] | None = Field(
+        default=None,
+        description=(
+            "en if they want English replies, zh-TW for Traditional Chinese (Taiwan); "
+            "null if the message is not asking to change reply language"
+        ),
+    )
 
 
 class InteractionPair(BaseModel):

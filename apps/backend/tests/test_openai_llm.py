@@ -47,3 +47,5 @@ async def test_map_intent_label_substring_fuzzy() -> None:
 
     assert _map_intent_label("add_medication") == Intent.ADD_MEDICATION
     assert _map_intent_label("something add_medication extra") == Intent.ADD_MEDICATION
+    assert _map_intent_label("update_locale") == Intent.UPDATE_LOCALE
+    assert _map_intent_label("off_topic") == Intent.OFF_TOPIC
