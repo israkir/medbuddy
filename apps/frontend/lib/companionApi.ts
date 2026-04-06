@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18next from '@/i18n';
+import type { AppLanguage } from '@/i18n/languageStorage';
 import {
   apiBaseUrl,
   appUserId,
@@ -26,6 +27,8 @@ export type MeProfile = {
   health_notes?: string | null;
   /** IANA timezone for reminders (server defaults to Asia/Taipei). */
   timezone?: string | null;
+  /** App UI language (`en` or `zh-TW`; server default zh-TW). */
+  locale?: AppLanguage | string | null;
   onboarding_completed_at?: string | null;
 };
 
@@ -51,6 +54,7 @@ function emptyProfile(): MeProfile {
     emergency_contact: null,
     health_notes: null,
     timezone: null,
+    locale: null,
     onboarding_completed_at: null,
   };
 }
@@ -88,6 +92,8 @@ export type OnboardingPayload = {
   gender: ProfileGender | null;
   emergency_contact: string;
   health_notes: string;
+  /** App UI language; persisted on the user profile. */
+  locale: AppLanguage;
   /** IANA timezone; defaults to device zone when omitted. */
   timezone?: string | null;
 };
@@ -104,6 +110,7 @@ export async function submitOnboarding(payload: OnboardingPayload): Promise<MePr
     gender: payload.gender,
     emergency_contact: payload.emergency_contact.trim() || null,
     health_notes: payload.health_notes.trim() || null,
+    locale: payload.locale,
     ...(tz ? { timezone: tz } : {}),
   };
 
@@ -113,6 +120,7 @@ export async function submitOnboarding(payload: OnboardingPayload): Promise<MePr
       ...emptyProfile(),
       ...body,
       timezone: tz ?? 'Asia/Taipei',
+      locale: payload.locale,
       onboarding_completed_at: new Date().toISOString(),
     };
     await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(completed));

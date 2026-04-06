@@ -4,6 +4,12 @@
     "title": "Welcome",
     "lead": "A few simple details help MedBuddy speak to you more clearly. Large fields and short steps—take your time.",
     "hintSkip": "Please add what to call you at minimum. We recommend age for safer, more relevant tips; sex or gender, contact, and health notes are optional and can wait.",
+    "languageLabel": "App language",
+    "languageHint": "Buttons and messages in the app will follow this choice.",
+    "languageOption": {
+      "en": "English",
+      "zh-TW": "Traditional Chinese (Taiwan)"
+    },
     "nameLabel": "What should we call you?",
     "namePlaceholder": "Your name or preferred name",
     "ageLabel": "Age (recommended)",

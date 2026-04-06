@@ -4,6 +4,12 @@
     "title": "歡迎使用",
     "lead": "簡單幾項資料，能讓 MedBuddy 更懂怎麼跟您說話。字大、步驟少，慢慢填沒關係。",
     "hintSkip": "請至少填「怎麼稱呼您」。也建議填年齡，提醒會更安全、貼心；生理性別／性別、家人聯絡與健康備註可之後再補。",
+    "languageLabel": "介面語言",
+    "languageHint": "App 按鈕與說明會使用您選擇的語言。",
+    "languageOption": {
+      "en": "English",
+      "zh-TW": "繁體中文（台灣）"
+    },
     "nameLabel": "怎麼稱呼您？",
     "namePlaceholder": "姓名或慣用的稱呼",
     "ageLabel": "年齡（建議填寫）",

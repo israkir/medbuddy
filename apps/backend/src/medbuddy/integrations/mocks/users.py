@@ -13,6 +13,7 @@ from medbuddy.reminders.prefs import (
     reminder_prefs_from_metadata,
 )
 from medbuddy.protocols.ports import UserDataPort
+from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
 from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
 
@@ -24,6 +25,7 @@ def _default_profile_fields() -> dict[str, Any]:
         "emergency_contact": None,
         "health_notes": None,
         "onboarding_completed_at": None,
+        "locale": "zh-TW",
     }
 
 
@@ -51,6 +53,7 @@ class MockUserData(UserDataPort):
         for k, v in _default_profile_fields().items():
             row.setdefault(k, v)
         row.setdefault("timezone", "Asia/Taipei")
+        row.setdefault("locale", "zh-TW")
         return row
 
     async def save_onboarding_profile(
@@ -63,6 +66,7 @@ class MockUserData(UserDataPort):
         emergency_contact: str | None,
         health_notes: str | None,
         timezone: str | None = None,
+        locale: str = "zh-TW",
     ) -> dict[str, Any]:
         await asyncio.sleep(0)
         row = await self.get_or_create_user(line_user_id)
@@ -73,6 +77,7 @@ class MockUserData(UserDataPort):
         row["health_notes"] = (health_notes or "").strip() or None
         row["onboarding_completed_at"] = datetime.now(UTC)
         row["timezone"] = effective_user_timezone(timezone)
+        row["locale"] = effective_user_locale(locale)
         return row
 
     async def patch_user_profile(self, line_user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
@@ -114,6 +119,10 @@ class MockUserData(UserDataPort):
                 row["timezone"] = norm
             elif fields["timezone"] is None:
                 row["timezone"] = None
+        if "locale" in fields:
+            norm_loc = normalize_locale_patch(fields["locale"])
+            if norm_loc is not None:
+                row["locale"] = norm_loc
         return row
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:

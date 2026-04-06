@@ -34,7 +34,7 @@ This is a **monorepo**. See the per-app READMEs for day-to-day development detai
 │  gemini_llm    supabase_stores drugs_http│
 └──────────────────────────────────────────┘
          ↓              ↓
-    Supabase (Postgres)  Google Gemini
+    Supabase (Postgres)  Gemini or OpenAI (LLM)
     Redis + arq          OpenFDA / TFDA
 ```
 
@@ -132,7 +132,7 @@ Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#
 | Service | Role | Required for real mode |
 |---------|------|----------------------|
 | **LINE Messaging API** | Webhook + push reminders | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` |
-| **Google Gemini** (`gemini-2.5-flash`) | Intent classification, reply composition, extraction | `GEMINI_API_KEY` |
+| **LLM** (Gemini or OpenAI) | Intent classification, reply composition, extraction | `LLM_PROVIDER=gemini` → `GEMINI_API_KEY`; `LLM_PROVIDER=openai` → `OPENAI_API_KEY` (defaults: `gemini-2.5-flash`, `gpt-4.1-mini`) |
 | **Supabase (Postgres)** | Users, medications, conversations, drug caches, dose events | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
 | **Redis + arq** | Deferred dose reminder jobs | `REDIS_URL` |
 | **OpenFDA HTTP** | Drug label grounding | automatic (HTTP) |

@@ -67,11 +67,11 @@ MedBuddy helps patients manage medications and ask medication-related questions.
 │         │          │              │                            │
 │         └──────────┴──────────────┘                            │
 │                    │                                           │
-│            protocols/ports.py   ← hexagonal boundary          │
+│            protocols/ports.py   ← hexagonal boundary           │
 │         ┌──────────┼──────────────┐                            │
 │         ▼          ▼              ▼                            │
-│    Gemini LLM   Supabase    OpenFDA HTTP                       │
-│    (or mock)  (or in-mem)   (or mock)                          │
+│    LLM (Gemini/OpenAI)   Supabase    OpenFDA HTTP              │
+│    (or mock)             (or in-mem)   (or mock)               │
 └────────────────────────────────────────────────────────────────┘
            │                          │
            ▼                          ▼
@@ -94,7 +94,7 @@ agents/             (abstract)               (concrete or mock)
 
 This means:
 - Tests inject mock adapters without patching or monkey-patching.
-- Swapping Gemini for another LLM requires only a new adapter implementing `LLMPort`.
+- Adding or swapping an LLM requires only a new adapter implementing `LLMPort` (see `gemini_llm.py`, `openai_llm.py`).
 - Adding a new channel (e.g. WhatsApp) requires implementing `run_assistant_text_turn` with the new channel's auth, without touching agent or tool code.
 
 ### 2.2 Agent-dispatch pattern
@@ -156,6 +156,7 @@ apps/backend/src/medbuddy/
 │
 ├── integrations/
 │   ├── gemini_llm.py           # GeminiLLM (google-genai)
+│   ├── openai_llm.py           # OpenAILLM (Chat Completions)
 │   ├── line_client.py          # LineHttpClient (line-bot-sdk)
 │   ├── supabase_stores.py      # SupabaseUserData, SupabaseConversationStore
 │   ├── supabase_drug_caches.py # SupabaseDrugCaches
@@ -385,8 +386,6 @@ conversation_turns             dose_events
 | `health_notes` | `text` | Patient-entered notes (not sent to LLM) |
 | `timezone` | `text` | IANA timezone for medication reminder local times and LINE push clock text (DB default `Asia/Taipei`; standalone app sets it on **`POST /v1/app/onboarding`**; **`patch_user_profile`** may update it) |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
-| `created_at` | `timestamptz` | Row creation |
-| `updated_at` | `timestamptz` | Last update |
 
 #### `medications`
 
@@ -398,15 +397,13 @@ conversation_turns             dose_events
 | `dosage` | `text` | e.g. "100mg" |
 | `schedule` | `text` | Free-text schedule (e.g. "after meals daily") |
 | `instructions_zh` | `text` | Optional Chinese instructions from LLM grounding |
-| `raw_metadata` | `jsonb` | Full structured LLM extraction output |
-| `created_at` | `timestamptz` | |
-| `updated_at` | `timestamptz` | |
+| `raw_metadata` | `jsonb` | Full structured LLM extraction output (e.g. reminder prefs) |
 
 #### `conversation_turns`
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | `uuid` PK | |
+| `id` | `bigserial` PK | |
 | `user_id` | `uuid` FK → `users` | |
 | `role` | `text` | `user` or `assistant` |
 | `content` | `text` | Original (un-redacted) message text |
@@ -436,11 +433,13 @@ Shared across all users. Caches drug label data fetched from OpenFDA / TFDA.
 | `source` | `text` | `openfda` / `tfda` / etc. |
 | `query_key` | `text` | Normalized drug name used for lookup |
 | `title` | `text` | Drug display name |
-| `body_zh` | `text` | Patient-facing Chinese summary |
-| `indications` | `text` | Indications and usage |
-| `raw_payload` | `jsonb` | `{"label": <full FDA label object>}` |
+| `usage_text` | `text` | Patient-facing usage summary |
+| `indications_and_usage` | `text` | Indications and usage (optional) |
+| `dosage_and_administration` | `text` | Dosage and administration (optional) |
+| `warnings` | `text` | Warnings (optional) |
+| `raw_payload` | `jsonb` | e.g. `{"label": <FDA label object>}` |
+| `fetched_at` | `timestamptz` | When the row was written |
 | `expires_at` | `timestamptz` | TTL (configurable via `MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS`, default 168h) |
-| `created_at` | `timestamptz` | |
 
 #### `drug_personalization_cache`
 
@@ -456,9 +455,10 @@ Per-user, per-query cached LLM reply for explain/interaction intents.
 | `intent` | `text` | `explain_medication` or `interaction_check` |
 | `personalized_text` | `text` | The cached LLM reply |
 | `locale` | `text` | `zh-TW` / `en` |
-| `llm_meta` | `jsonb` | `{"source": "openfda"/"gemini-2.5-flash"/"mock_llm"}` |
+| `llm_meta` | `jsonb` | e.g. `{"source": "openfda"|"tfda"|"<active model id>"|"mock_llm"}` — registry vs model-only grounding |
 | `expires_at` | `timestamptz` | TTL (configurable via `MEDBUDDY_DRUG_PERSONALIZATION_CACHE_TTL_HOURS`, default 72h) |
 | `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | |
 
 Unique constraint: `(user_id, query_fingerprint)`.
 
@@ -601,12 +601,16 @@ Generated by `GenerateHealthSummaryTool` using `compose_reply` with a summary-fo
 
 ## 8. LLM integration
 
-### 8.1 Provider
+### 8.1 Providers
 
-**Google Gemini** via the `google-genai` SDK (`genai.Client` + `models.generate_content`).
+`container.py` selects an **`LLMPort`** implementation from **`LLM_PROVIDER`** (`config.py`; default **`gemini`**):
 
-- **Default model:** `gemini-2.5-flash` (configurable via `GEMINI_MODEL`).
-- **Install:** `pip install 'medbuddy-api[llm]'` (included in the Docker image).
+| Provider | Implementation | Dependencies |
+|----------|------------------|--------------|
+| **Gemini** | `integrations/gemini_llm.py` — `google-genai` (`genai.Client`, `models.generate_content`) | `GEMINI_API_KEY`; default model **`gemini-2.5-flash`** (`GEMINI_MODEL`) |
+| **OpenAI** | `integrations/openai_llm.py` — Chat Completions | `OPENAI_API_KEY`; default model **`gpt-4.1-mini`** (`OPENAI_MODEL`) |
+
+Both implement the same **`LLMPort`** contract. **Install:** `pip install 'medbuddy-api[llm]'` (included in the Docker image).
 
 ### 8.2 LLMPort interface
 
@@ -649,7 +653,7 @@ All prompts follow the same pattern:
 
 ### 8.4 Structured outputs
 
-For extraction tasks, Gemini is called with structured output schemas (`llm/schemas.py`):
+For extraction tasks, the active LLM adapter calls structured output where supported (`llm/schemas.py`):
 
 | Schema | Used for |
 |--------|---------|
@@ -665,7 +669,7 @@ For extraction tasks, Gemini is called with structured output schemas (`llm/sche
 - `compose_reply` returns fixed i18n strings.
 - `extract_medication_draft` parses simple patterns.
 
-This enables running the full stack and all tests without a Gemini API key.
+This enables running the full stack and all tests without external LLM API keys.
 
 ---
 
@@ -704,7 +708,7 @@ This means the cache invalidates naturally when the patient's medication list ch
 **`llm_meta.source` field values:**
 - `"openfda"` — reply was grounded with OpenFDA label data
 - `"tfda"` — reply grounded with TFDA data (not yet implemented in HTTP adapter)
-- `"gemini-2.5-flash"` (or configured model name) — LLM-only grounding, no registry data
+- Active model id (e.g. `gemini-2.5-flash`, `gpt-4.1-mini`) — LLM-only grounding, no registry data
 - `"mock_llm"` — returned by mock adapter in tests
 
 ---
@@ -801,7 +805,7 @@ Both processes share the same container and environment. This is the default for
 │   uvicorn (port $PORT)                 │
 │   arq worker (when REDIS_URL set)      │
 │                                        │
-│   shared env: LINE, Gemini, Supabase,  │
+│   shared env: LINE, LLM keys, Supabase,│
 │   REDIS_URL                            │
 └────────────────────────────────────────┘
          │                  │
@@ -846,7 +850,7 @@ Defined in `compose.yaml`. The `reminders` profile adds a Redis service; the API
 
 1. Dashboard → New → Blueprint → connect repo → apply `render.yaml`.
 2. Create Render Key Value → set `REDIS_URL` on `medbuddy-api`.
-3. Set environment secrets: `LINE_CHANNEL_*`, `GEMINI_API_KEY`, Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `PUBLIC_BASE_URL`, optionally `MEDBUDDY_CRON_SECRET`.
+3. Set environment secrets: `LINE_CHANNEL_*`, LLM keys (`render.yaml` defaults to `LLM_PROVIDER=openai` with `OPENAI_API_KEY`; use `gemini` + `GEMINI_API_KEY` if preferred), Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `PUBLIC_BASE_URL`, optionally `MEDBUDDY_CRON_SECRET`.
 4. Set LINE webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
 
 ---
@@ -873,8 +877,11 @@ All settings are in `config.py` (Pydantic `BaseSettings`). Sources, in priority 
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `GEMINI_API_KEY` | — | Required for real LLM |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Override with any compatible model ID |
+| `LLM_PROVIDER` | `gemini` | `gemini` or `openai` |
+| `GEMINI_API_KEY` | — | Required when `LLM_PROVIDER=gemini` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model id |
+| `OPENAI_API_KEY` | — | Required when `LLM_PROVIDER=openai` |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI chat model id |
 
 ### 13.4 Storage and speech
 

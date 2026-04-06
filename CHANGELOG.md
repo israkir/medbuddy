@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- **`docs/features.md`**, **`docs/architecture.md`**, **`docs/reminders.md`**, **`docs/use-cases.md`**, **`README.md`**, **`apps/backend/README.md`**, **`apps/frontend/README.md`**, **`apps/backend/.env.example`**: document **`users.timezone`**, **`GET/POST /v1/app/onboarding`** **`timezone`**, and reminder scheduling vs env vars (**`MEDBUDDY_REMINDER_*`** are local clock + horizon only).
+- **Docs sweep**: Align **`docs/architecture.md`** with **`supabase/schema.sql`** and document **`LLM_PROVIDER`** (Gemini/OpenAI); fix **`docs/reminders.md`** configuration table; document dual LLM and Render env in **`README.md`**, **`docs/features.md`**, **`apps/backend/README.md`**; reduce overlap between **`docs/features.md`** and **`docs/use-cases.md`**; refresh **`TODO.md`** and **`apps/backend/.env.example`** comments; trim **`docs/privacy.md`**.
+- **`TODO.md`**: Item to **semantically** cache drug-related questions (vs normalized exact text in **`drug_cache_keys.py`**).
 
 ### Added
 
+- **User locale**: Supabase **`users.locale`** (`en` | `zh-TW`, default **`zh-TW`**); **`medbuddy.user_locale`** helpers; **`POST /v1/app/onboarding`** accepts **`locale`**; **`GET /v1/app/me`** returns **`locale`**. Standalone app onboarding includes a language choice (syncs with **`setAppLanguage`**); **`patch_user_profile`** may update **`locale`**.
 - **User timezone**: Shared helpers in **`medbuddy.user_timezone`** (default **`Asia/Taipei`**); **`POST /v1/app/onboarding`** accepts optional **`timezone`** (validated IANA); **`GET /v1/app/me`** returns **`timezone`**. Supabase **`users.timezone`** column comment documents reminder use (existing default **`Asia/Taipei`**).
 - **LINE reminders**: Medication extraction now returns structured **reminder preferences** (first reminder in N minutes, whether to materialize daily rows, explicit horizon days 1–90, whether to ask the user for horizon, optional daily HH:MM). Values are stored in **`medications.raw_metadata.reminder`** and drive **`dose_events`** materialization (e.g. “in 5 minutes” → a single upcoming event ~5 minutes ahead without fanning 14 days). The **compose** prompt receives appendix text so the model can confirm one-off timing or ask how many days of daily reminders the user wants. **`MEDBUDDY_REMINDER_*`** env defaults apply when the LLM leaves fields unset; updating prefs from a follow-up user message is not implemented yet.
 - **OpenAI**: optional Chat Completions LLM adapter (`OpenAILLM`, default model `gpt-4.1-mini`) implementing the same `LLMPort` contract as Gemini. Set **`LLM_PROVIDER=openai`**, **`OPENAI_API_KEY`**, and optionally **`OPENAI_MODEL`**; **`Settings.active_llm_model_id`** supplies drug-cache provenance. The **`llm`** optional dependency group now includes **`openai`**.
@@ -24,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).
 
 ### Fixed
+
+- **Supabase**: The PostgREST client is created with an **`httpx.Client` using `http2=False`** (postgrest-py defaults to HTTP/2), avoiding intermittent **`RemoteProtocolError` / `ConnectionTerminated`** during user upserts and LINE webhooks.
 
 - **`drug_personalization_cache`**: `save_personalized_reply` now stores **`medication_id`** when exactly
   one list medication name matches the user message (normalized substring), and **`reference_cache_id`**

@@ -23,14 +23,23 @@ alter table public.users add column if not exists health_notes text;
 alter table public.users add column if not exists onboarding_completed_at timestamptz;
 alter table public.users add column if not exists gender text;
 alter table public.users add column if not exists timezone text;
+alter table public.users add column if not exists locale text;
 
 alter table public.users
     alter column timezone set default 'Asia/Taipei';
 
 update public.users set timezone = 'Asia/Taipei' where timezone is null;
 
+alter table public.users
+    alter column locale set default 'zh-TW';
+
+update public.users set locale = 'zh-TW' where locale is null;
+
 comment on column public.users.timezone is
     'IANA timezone name; default Asia/Taipei; used for medication reminder local times and push copy.';
+
+comment on column public.users.locale is
+    'App UI language: en or zh-TW (standalone app); default zh-TW.';
 
 create table if not exists public.medications (
     id uuid primary key default gen_random_uuid(),

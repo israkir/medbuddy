@@ -71,9 +71,9 @@ Apply new columns on existing projects via the same file’s **`ALTER TABLE ... 
 | **`REDIS_URL`** | Redis DSN for arq (API **enqueue** + worker **consume**; main **`Dockerfile`** runs both in one container when set). |
 | **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`** | `HH:MM` **local** time (default `09:00`) in each user’s **`users.timezone`**. |
 | **`MEDBUDDY_REMINDER_HORIZON_DAYS`** | Days ahead to materialize (default **14**, max **90** in settings). |
-
-There is **no** global reminder timezone env var — **`users.timezone`** is the source of truth.
 | **`MEDBUDDY_CRON_SECRET`** | Secret for **`POST /internal/reminders/reconcile`** (**`X-Cron-Secret`** header). |
+
+There is **no** global reminder timezone env var — **`users.timezone`** in Postgres is the source of truth for local clock and LINE push copy.
 
 **Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root **Dockerfile** (`pip install ".[llm,supabase,tts,reminders]"`).
 

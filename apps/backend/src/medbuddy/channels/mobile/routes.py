@@ -19,6 +19,7 @@ from medbuddy.channels.mobile.schemas import (
     MessageReply,
     OnboardingSubmit,
 )
+from medbuddy.user_locale import effective_user_locale
 from medbuddy.user_timezone import effective_user_timezone
 from medbuddy.deps import get_services
 from medbuddy.engine.types import AppServices
@@ -45,6 +46,7 @@ def _me_response(app_user_id: str, row: dict[str, Any]) -> MeResponse:
     gender_str = g if isinstance(g, str) and g.strip() else None
     tz_raw = row.get("timezone")
     tz_str = effective_user_timezone(tz_raw if isinstance(tz_raw, str) else None)
+    loc_str = effective_user_locale(row.get("locale"))
     return MeResponse(
         app_user_id=app_user_id,
         preferred_name=row.get("preferred_name"),
@@ -53,6 +55,7 @@ def _me_response(app_user_id: str, row: dict[str, Any]) -> MeResponse:
         emergency_contact=row.get("emergency_contact"),
         health_notes=row.get("health_notes"),
         timezone=tz_str,
+        locale=loc_str,
         onboarding_completed_at=_onboarding_ts_iso(row.get("onboarding_completed_at")),
     )
 
@@ -104,6 +107,7 @@ async def app_complete_onboarding(
         emergency_contact=body.emergency_contact,
         health_notes=body.health_notes,
         timezone=body.timezone,
+        locale=body.locale.value,
     )
     return _me_response(ctx.app_user_id, row)
 
