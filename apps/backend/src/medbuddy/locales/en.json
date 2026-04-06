@@ -1,14 +1,7 @@
 {
-  "orchestrator": {
-    "consent_accepted": "Thank you—let’s begin. You can ask me anything about your medications.",
-    "consent_declined": "Understood. If you change your mind later, just let me know."
-  },
-  "line": {
-    "consent_body": "Welcome to MedBuddy. To comply with privacy rules and explain how we use data, please read and choose whether you agree to let us store chat and medication-related information (only for reminders and doctor summaries).",
-    "consent_agree": "I agree",
-    "consent_disagree": "I do not agree"
-  },
   "gemini": {
+    "extract_medication_intro": "Extract a medication to add from the user message. Use \"unspecified\" for unknown fields.",
+    "resolve_remove_intro": "Which medication does the user want to stop or remove? JSON only.",
     "no_drug_data": "(No extra drug reference data.)",
     "patient_background": "Patient medication context:",
     "reference": "Reference:",
@@ -34,6 +27,15 @@
     "stt": {
       "default_transcript": "Did I take my medicine today?"
     }
+  },
+  "medication": {
+    "unspecified": "Unspecified",
+    "added": "Saved: {name}, dose {dosage}, schedule {schedule}. Tell me if you want to change anything.",
+    "add_incomplete": "I can record a medication, but I need the drug name. Please share name, dose, and when you take it.",
+    "list_intro": "Your current medications:",
+    "list_empty": "No medications on file yet. Say \"add\" plus the drug name to start.",
+    "removed": "Removed from your list: {name}.",
+    "remove_not_found": "I could not find that medication. Say the name or ask for your list."
   },
   "prompts": {
     "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in Traditional Chinese (Taiwan).\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.",

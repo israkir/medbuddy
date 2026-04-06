@@ -1,14 +1,7 @@
 {
-  "orchestrator": {
-    "consent_accepted": "謝謝您，我們開始吧！有用藥相關問題都可以問我。",
-    "consent_declined": "了解。若之後改變心意，再跟我說一聲就可以。"
-  },
-  "line": {
-    "consent_body": "歡迎使用 MedBuddy。為了符合個資法與清楚說明資料用途，請先閱讀並選擇是否同意我們保存對話與用藥相關資料（僅限協助您用藥提醒與醫師摘要）。",
-    "consent_agree": "我同意",
-    "consent_disagree": "不同意"
-  },
   "gemini": {
+    "extract_medication_intro": "從使用者的訊息擷取要新增的用藥。若欄位不明，填「未註明」。",
+    "resolve_remove_intro": "使用者想停掉或從清單移除哪一筆藥？僅回傳 JSON。",
     "no_drug_data": "（無額外藥物資料）",
     "patient_background": "病人用藥背景：",
     "reference": "參考資料：",
@@ -34,6 +27,15 @@
     "stt": {
       "default_transcript": "我今天有吃藥了嗎？"
     }
+  },
+  "medication": {
+    "unspecified": "未註明",
+    "added": "已幫你記下：{name}，劑量 {dosage}，服用時間 {schedule}。若要改內容可以再告訴我。",
+    "add_incomplete": "我想幫你記用藥，但沒聽清楚藥名。可以說：藥名、劑量、什麼時候吃嗎？",
+    "list_intro": "你目前的用藥清單：",
+    "list_empty": "目前還沒有用藥記錄，你可以說「新增＋藥名」開始建立。",
+    "removed": "已從清單移除：{name}。",
+    "remove_not_found": "找不到要移除的藥；有的話請說藥名，或先看看清單。"
   },
   "prompts": {
     "system_persona": "你是 MedBuddy，一位在台灣透過 LINE 陪伴長輩用藥的語音助理。\n語氣溫暖、像孫子跟阿公阿嬤說話，使用繁體中文（台灣用語）。\n你不診斷疾病、不取代醫師指示；若有不確定或可能危急的情況，請鼓勵就醫或諮詢藥師。\n回答要短句、先講最重要的資訊；避免長列表；若為語音模式，句子要更容易聽懂。",

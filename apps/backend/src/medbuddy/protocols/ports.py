@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from medbuddy.models.domain import ConversationTurn, DrugGrounding, Intent, MedicationRecord
+from medbuddy.models.domain import (
+    ConversationTurn,
+    DrugGrounding,
+    Intent,
+    MedicationDraft,
+    MedicationRecord,
+)
 
 
 @runtime_checkable
@@ -18,8 +24,6 @@ class LineMessagingPort(Protocol):
     async def reply_text(self, reply_token: str, text: str) -> None: ...
 
     async def reply_audio_url(self, reply_token: str, audio_url: str, duration_ms: int) -> None: ...
-
-    async def reply_quick_reply_consent(self, reply_token: str) -> None: ...
 
     async def get_message_content(self, message_id: str) -> bytes: ...
 
@@ -50,6 +54,18 @@ class LLMPort(Protocol):
 
     async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str: ...
 
+    async def extract_medication_draft(
+        self, user_text: str, *, locale: str
+    ) -> MedicationDraft | None: ...
+
+    async def resolve_medication_removal_id(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        *,
+        locale: str,
+    ) -> str | None: ...
+
 
 @runtime_checkable
 class DrugDataPort(Protocol):
@@ -75,9 +91,13 @@ class ObjectStoragePort(Protocol):
 class UserDataPort(Protocol):
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]: ...
 
-    async def set_consent(self, line_user_id: str, accepted: bool) -> None: ...
-
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]: ...
+
+    async def add_medication(
+        self, line_user_id: str, draft: MedicationDraft
+    ) -> MedicationRecord: ...
+
+    async def delete_medication(self, line_user_id: str, medication_id: str) -> bool: ...
 
 
 @runtime_checkable
