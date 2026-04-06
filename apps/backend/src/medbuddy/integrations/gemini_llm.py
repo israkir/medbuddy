@@ -49,7 +49,10 @@ class GeminiLLM(LLMPort):
             "Classify the user message into exactly one intent: "
             "add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
-            "general_question. "
+            "update_profile, general_question. "
+            "Use update_profile when the user is sharing or correcting personal profile "
+            "information (how to address them, age, emergency contact, allergies/health notes), "
+            "not asking about a specific drug. "
             "Reply with only the snake_case label.\n\n"
             f"User: {user_text}"
         )

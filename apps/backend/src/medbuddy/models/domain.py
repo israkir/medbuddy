@@ -15,6 +15,7 @@ class Intent(str, Enum):
     INTERACTION_CHECK = "interaction_check"
     LOG_VITAL = "log_vital"
     REQUEST_SUMMARY = "request_summary"
+    UPDATE_PROFILE = "update_profile"
     GENERAL_QUESTION = "general_question"
 
 

@@ -56,6 +56,32 @@ class MockUserData(UserDataPort):
         row["onboarding_completed_at"] = datetime.now(UTC)
         return row
 
+    async def patch_user_profile(self, line_user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        if "preferred_name" in fields:
+            pn = fields["preferred_name"]
+            if isinstance(pn, str) and pn.strip():
+                row["preferred_name"] = pn.strip()
+        if "age_years" in fields:
+            age = fields["age_years"]
+            if age is None:
+                row["age_years"] = None
+            elif isinstance(age, int) and 0 <= age <= 120:
+                row["age_years"] = age
+            elif isinstance(age, float) and age.is_integer():
+                ai = int(age)
+                if 0 <= ai <= 120:
+                    row["age_years"] = ai
+        for key in ("emergency_contact", "health_notes"):
+            if key in fields:
+                raw = fields[key]
+                if raw is None:
+                    row[key] = None
+                elif isinstance(raw, str):
+                    row[key] = raw.strip() or None
+        return row
+
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
         await asyncio.sleep(0)
         await self.get_or_create_user(line_user_id)

@@ -5,6 +5,14 @@ from typing import Any
 from medbuddy.i18n import t
 
 
+def _age_band_label(age: int, *, locale: str) -> str:
+    if age >= 90:
+        return t("prompts.llm_signal_age_band_90_plus", locale=locale)
+    low = (age // 10) * 10
+    high = min(low + 9, 89)
+    return t("prompts.llm_signal_age_band_range", locale=locale, low=low, high=high)
+
+
 def get_system_persona(*, locale: str) -> str:
     return t("prompts.system_persona", locale=locale)
 
@@ -47,9 +55,81 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
     return f"{header}\n" + "\n".join(parts)
 
 
-def build_patient_context_for_llm(user_row: dict[str, Any], meds: list, *, locale: str) -> str:
+def format_patient_profile_signals_for_llm(user_row: dict[str, Any], *, locale: str) -> str:
+    """Coarse cues for the model without names, free-text health data, or contact strings."""
+    name = user_row.get("preferred_name")
+    age = user_row.get("age_years")
+    notes = user_row.get("health_notes")
+    contact = user_row.get("emergency_contact")
+    parts: list[str] = []
+    if isinstance(name, str) and name.strip():
+        parts.append(t("prompts.llm_signal_has_preferred_name", locale=locale))
+    if isinstance(age, int):
+        parts.append(
+            t(
+                "prompts.llm_signal_age_band",
+                locale=locale,
+                band=_age_band_label(age, locale=locale),
+            )
+        )
+    if isinstance(notes, str) and notes.strip():
+        parts.append(t("prompts.llm_signal_has_health_notes", locale=locale))
+    if isinstance(contact, str) and contact.strip():
+        parts.append(t("prompts.llm_signal_has_emergency_contact", locale=locale))
+    if not parts:
+        return ""
+    header = t("prompts.llm_profile_signals_header", locale=locale)
+    return f"{header}\n" + "\n".join(f"- {p}" for p in parts)
+
+
+def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
+    """List profile dimensions not stored yet (so the model can ask when helpful)."""
+    name = user_row.get("preferred_name")
+    age = user_row.get("age_years")
+    notes = user_row.get("health_notes")
+    contact = user_row.get("emergency_contact")
+    gaps: list[str] = []
+    if not (isinstance(name, str) and name.strip()):
+        gaps.append(t("prompts.gap_preferred_name", locale=locale))
+    if not isinstance(age, int):
+        gaps.append(t("prompts.gap_age", locale=locale))
+    if not (isinstance(contact, str) and contact.strip()):
+        gaps.append(t("prompts.gap_contact", locale=locale))
+    if not (isinstance(notes, str) and notes.strip()):
+        gaps.append(t("prompts.gap_health_notes", locale=locale))
+    if not gaps:
+        return ""
+    intro = t("prompts.profile_gaps_intro", locale=locale)
+    return f"{intro}\n" + "\n".join(gaps)
+
+
+def build_patient_context_for_chat_display(
+    user_row: dict[str, Any], meds: list, *, locale: str
+) -> str:
+    """User-facing summary including stored profile text (not for third-party LLMs)."""
     demo = format_patient_demographics(user_row, locale=locale)
+    gaps = format_profile_gaps(user_row, locale=locale)
     med_part = format_patient_medication_context(meds, locale=locale)
+    blocks: list[str] = []
     if demo:
-        return f"{demo}\n\n{med_part}"
+        blocks.append(demo)
+    if gaps:
+        blocks.append(gaps)
+    if blocks:
+        return "\n\n".join(blocks) + f"\n\n{med_part}"
+    return med_part
+
+
+def build_patient_context_for_llm(user_row: dict[str, Any], meds: list, *, locale: str) -> str:
+    """De-identified profile cues plus medications — safe for external model APIs."""
+    signals = format_patient_profile_signals_for_llm(user_row, locale=locale)
+    gaps = format_profile_gaps(user_row, locale=locale)
+    med_part = format_patient_medication_context(meds, locale=locale)
+    blocks: list[str] = []
+    if signals:
+        blocks.append(signals)
+    if gaps:
+        blocks.append(gaps)
+    if blocks:
+        return "\n\n".join(blocks) + f"\n\n{med_part}"
     return med_part

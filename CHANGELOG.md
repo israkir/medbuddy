@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Documentation**: **`docs/privacy.md`** — how PII is limited for LLM calls, redaction, local profile parsing,
+  and operational caveats.
+- **Profile in chat (LINE + app)**: **`Intent.UPDATE_PROFILE`** with **`UserDataPort.patch_user_profile`** and
+  **local parsing** (**`parse_profile_patch_from_text`**) so profile fields are **not** sent to LLM extractors.
+- **LLM privacy boundary**: **`redact_pii_text`** / **`redact_conversation_turns_for_llm`** mask emails, typical
+  phone shapes, and long digit runs before **`classify_intent`**, **`compose_reply`**, and medication extract/remove
+  calls; **`build_patient_context_for_llm`** sends only **coarse profile signals** (plus medication list), while
+  **`build_patient_context_for_chat_display`** keeps full text for **user-facing** list replies. Persona / reply
+  instructions state the model must not invent names or raw health/contact details.
 - **Supabase `drug_reference_cache`**: global table to cache drug usage / label text
   (`source`, `query_key`, `title`, `usage_text`, optional indication/dosing/warning fields,
   `raw_payload`, `fetched_at`, `expires_at`) with RLS for `anon`, matching other MedBuddy tables.
