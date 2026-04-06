@@ -1,4 +1,4 @@
-"""Register optional intent handlers without forking the core orchestrator."""
+"""Register optional intent handlers without forking the LINE channel orchestrator."""
 
 from __future__ import annotations
 

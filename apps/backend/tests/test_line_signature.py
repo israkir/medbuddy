@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import base64
 
-from medbuddy.core.line_signature import verify_line_signature
+from medbuddy.channels.line.signature import verify_line_signature
 
 
 def test_verify_line_signature_accepts_valid_mac():

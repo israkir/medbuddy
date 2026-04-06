@@ -11,6 +11,8 @@ From the repo root: **`make fe-install`** → **`make fe-dev`** or **`make fe-de
 | Make target | What it runs |
 |-------------|----------------|
 | **`make fe-build`** | `npm run typecheck` (`tsc --noEmit`) only |
+| **`make fe-run-ios`** | **`npx expo run:ios`** — native app on **iOS Simulator** (requires Xcode) |
+| **`make fe-run-android`** | **`npx expo run:android`** — native app on **Android Emulator** (requires Android SDK + AVD) |
 | **`make fe-lint`** / **`make fe-check`** | `npm run check` → **ESLint** + **TypeScript** (same as `cd apps/frontend && npm run check`) |
 
 In this directory you can also run **`npm run lint`** (ESLint with `eslint-config-expo`), **`npm run typecheck`**, or **`npm run check`** (both). **`npm run lint:fix`** applies ESLint auto-fixes.
@@ -50,4 +52,4 @@ To add a language: add `locales/<lang>.json`, import it in `i18n/index.ts`, and 
 | **AsyncStorage** | App language preference (`i18n/languageStorage.ts`); optional text + voice timestamp for medication visit notes (`storage/medicationQuestionNotes.ts`). |
 | **Backend / LINE** | HTTP client not wired in this baseline; copy in `locales` describes LINE + future family invite. |
 
-Native builds: from this directory, **`npx expo run:ios`** / **`run:android`** (Xcode / Android SDK required). Production builds typically use [EAS Build](https://docs.expo.dev/build/introduction/).
+Native builds for **simulation**: from the repo root **`make fe-run-ios`** / **`make fe-run-android`**, or from this directory **`npx expo run:ios`** / **`npx expo run:android`** (Xcode + Simulator / Android SDK + Emulator). Production and TestFlight / Play internal tracks typically use [EAS Build](https://docs.expo.dev/build/introduction/).
