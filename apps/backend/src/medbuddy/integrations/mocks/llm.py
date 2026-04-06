@@ -122,6 +122,10 @@ class MockLLM(LLMPort):
     ) -> MedicationDraft | None:
         await asyncio.sleep(0)
         un = t("medication.unspecified", locale=locale)
+        minutes_m = re.search(r"(\d+)\s*分鐘", user_text)
+        first_min: int | None = None
+        if minutes_m:
+            first_min = max(1, int(minutes_m.group(1)))
         for marker in ("新增", "加入"):
             if marker in user_text:
                 rest = user_text.split(marker, 1)[1].strip()
@@ -133,6 +137,9 @@ class MockLLM(LLMPort):
                     name=parts[0],
                     dosage=parts[1] if len(parts) > 1 else un,
                     schedule=parts[2] if len(parts) > 2 else un,
+                    first_reminder_in_minutes=first_min,
+                    materialize_daily_reminders=first_min is None,
+                    needs_horizon_confirmation=False,
                 )
         low = user_text.lower()
         if low.startswith("add "):
@@ -141,10 +148,15 @@ class MockLLM(LLMPort):
             parts = [p for p in parts if p]
             if not parts:
                 return None
+            en_min = re.search(r"in\s+(\d+)\s*(?:min|minutes?)", low)
+            fm = max(1, int(en_min.group(1))) if en_min else first_min
             return MedicationDraft(
                 name=parts[0],
                 dosage=parts[1] if len(parts) > 1 else un,
                 schedule=parts[2] if len(parts) > 2 else un,
+                first_reminder_in_minutes=fm,
+                materialize_daily_reminders=fm is None,
+                needs_horizon_confirmation=False,
             )
         return None
 

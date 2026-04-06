@@ -21,6 +21,32 @@ class MedicationExtraction(BaseModel):
         default=None,
         description="Additional instructions from the user in their own words, or null",
     )
+    first_reminder_in_minutes: int | None = Field(
+        default=None,
+        description=(
+            "If the user asked for a first/one-off reminder soon (e.g. in N minutes), set N; else null"
+        ),
+    )
+    materialize_daily_reminders: bool = Field(
+        default=True,
+        description=(
+            "False if the user only wants a one-off / first reminder; True if recurring daily reminders apply"
+        ),
+    )
+    reminder_horizon_days: int | None = Field(
+        default=None,
+        description="Explicit number of days to schedule daily reminders (1-90), or null for server default",
+    )
+    needs_horizon_confirmation: bool = Field(
+        default=False,
+        description=(
+            "True if the user did not say how long daily reminders should run and you should ask them"
+        ),
+    )
+    daily_reminder_local_hhmm: str | None = Field(
+        default=None,
+        description="If the user gave a daily clock time (HH:MM local), set it; else null",
+    )
 
 
 class RemovalResolution(BaseModel):

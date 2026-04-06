@@ -7,7 +7,11 @@ from typing import Any
 
 from medbuddy.config import Settings, get_settings
 from medbuddy.models.domain import DoseEventReminderPayload, MedicationDraft, MedicationRecord
-from medbuddy.reminders.dose_schedule import iter_scheduled_dose_times_utc
+from medbuddy.reminders.prefs import (
+    iter_dose_instants_for_medication,
+    reminder_blob_from_draft,
+    reminder_prefs_from_metadata,
+)
 from medbuddy.protocols.ports import UserDataPort
 
 
@@ -118,6 +122,7 @@ class MockUserData(UserDataPort):
             dosage=draft.dosage.strip(),
             schedule=draft.schedule.strip(),
             instructions_zh=ins or None,
+            raw_metadata={"reminder": reminder_blob_from_draft(draft)},
         )
         self._meds.setdefault(line_user_id, []).append(rec)
         return rec
@@ -148,16 +153,18 @@ class MockUserData(UserDataPort):
             del self._doses[did]
 
         rem = self._reminder_settings()
-        instants = iter_scheduled_dose_times_utc(
-            tz_name=tz_name,
-            local_hhmm=rem.reminder_default_local_time,
-            horizon_days=rem.reminder_horizon_days,
-            now_utc=now,
-        )
-        if not meds or not instants:
+        if not meds:
             return []
         out: list[tuple[str, datetime]] = []
         for med in meds:
+            prefs = reminder_prefs_from_metadata(med.raw_metadata)
+            instants = iter_dose_instants_for_medication(
+                prefs,
+                tz_name=tz_name,
+                default_local_hhmm=rem.reminder_default_local_time,
+                default_horizon_days=rem.reminder_horizon_days,
+                now_utc=now,
+            )
             for at in instants:
                 did = str(uuid.uuid4())
                 self._doses[did] = {

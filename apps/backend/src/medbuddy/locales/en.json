@@ -1,6 +1,11 @@
 {
   "gemini": {
     "extract_medication_intro": "Extract a medication to add from the user message. Use \"unspecified\" for unknown fields.",
+    "extract_medication_reminder_rules": "Also extract reminder-related fields (integers may be null):\n- first_reminder_in_minutes: if the user asked for a first dose or reminder soon (e.g. in N minutes), set N; else null.\n- materialize_daily_reminders: false if they only want a one-off reminder (e.g. \"remind me in 5 minutes\") with no ongoing daily schedule; true if recurring daily reminders apply.\n- reminder_horizon_days: if they explicitly said how many days to remind (1–90), set it; else null (server default).\n- needs_horizon_confirmation: true if they did not say how long daily reminders should run and you should ask; in that case set materialize_daily_reminders to false.\n- daily_reminder_local_hhmm: if they gave a daily clock time (HH:MM local), set it; else null.\nExample: \"aspirin in 5 minutes\" → first_reminder_in_minutes=5, materialize_daily_reminders=false, needs_horizon_confirmation=false.",
+    "added_ask_reminder_horizon": "[Reminder setup] Daily recurring reminders are not scheduled yet. In your reply, kindly ask how many days they want reminders for, or whether they only need a one-off reminder.",
+    "added_first_reminder_only": "[Scheduled] A one-time medication reminder was set for about {minutes} minutes from now (no daily series). Briefly confirm that timing in your reply.",
+    "added_first_reminder_plus_daily": "[Scheduled] A first reminder in about {minutes} minutes plus daily reminders at a fixed time were set. Mention both briefly.",
+    "added_daily_horizon_days": "[Scheduled] Daily reminders were set for about {days} days as requested. You may confirm in one short sentence.",
     "resolve_remove_intro": "Which medication does the user want to stop or remove? JSON only.",
     "no_drug_data": "(No extra drug reference data.)",
     "patient_background": "Patient context (profile and medication list):",
