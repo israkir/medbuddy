@@ -60,6 +60,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def _normalize_llm_provider(cls, v: object) -> str:
+        if v is None or v == "":
+            return "gemini"
+        s = str(v).lower().strip()
+        if s not in ("gemini", "openai"):
+            msg = f"Invalid LLM_PROVIDER {v!r}; use gemini or openai"
+            raise ValueError(msg)
+        return s
+
     @field_validator("medbuddy_integration", mode="before")
     @classmethod
     def _normalize_medbuddy_integration(cls, v: object) -> str | None:
@@ -87,6 +98,23 @@ class Settings(BaseSettings):
             "Override if Google deprecates the default."
         ),
         validation_alias=AliasChoices("GEMINI_MODEL", "gemini_model"),
+    )
+    llm_provider: str = Field(
+        default="gemini",
+        description=(
+            "Which LLM adapter to use in real mode: gemini (GEMINI_API_KEY) or "
+            "openai (OPENAI_API_KEY)."
+        ),
+        validation_alias=AliasChoices("LLM_PROVIDER", "llm_provider"),
+    )
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "openai_api_key"),
+    )
+    openai_model: str = Field(
+        default="gpt-4.1-mini",
+        description="OpenAI chat model id when LLM_PROVIDER=openai.",
+        validation_alias=AliasChoices("OPENAI_MODEL", "openai_model"),
     )
     supabase_url: str = ""
     supabase_publishable_key: str = Field(
@@ -184,6 +212,13 @@ class Settings(BaseSettings):
         if self.medbuddy_integration == "mock":
             object.__setattr__(self, "medbuddy_integration", "real")
         return self
+
+    @property
+    def active_llm_model_id(self) -> str:
+        """Model id used for cache provenance when the configured LLM generates text."""
+        if self.llm_provider == "openai":
+            return self.openai_model
+        return self.gemini_model
 
 
 @lru_cache

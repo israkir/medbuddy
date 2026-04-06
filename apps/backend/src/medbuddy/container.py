@@ -6,6 +6,7 @@ import logging
 
 from medbuddy.config import Settings
 from medbuddy.engine.types import AppServices
+from medbuddy.protocols.ports import LLMPort
 from medbuddy.integrations.mocks import (
     InMemoryConversationStore,
     MockDrugData,
@@ -20,11 +21,33 @@ from medbuddy.integrations.caching_drugs import CachingDrugData
 from medbuddy.integrations.drugs_http import HttpDrugData
 from medbuddy.integrations.edge_tts_service import EdgeTtsService
 from medbuddy.integrations.gemini_llm import GeminiLLM
+from medbuddy.integrations.openai_llm import OpenAILLM
 from medbuddy.integrations.line_client import LineHttpClient
 from medbuddy.integrations.local_public_storage import LocalPublicObjectStorage
 from medbuddy.integrations.stt_whisper import WhisperHttpSTT
 
 log = logging.getLogger(__name__)
+
+
+def _build_llm(settings: Settings) -> LLMPort:
+    loc = settings.locale
+    if settings.llm_provider == "openai":
+        if not settings.openai_api_key:
+            log.warning("OPENAI_API_KEY missing (LLM_PROVIDER=openai); using MockLLM")
+            return MockLLM(locale=loc)
+        return OpenAILLM(
+            api_key=settings.openai_api_key,
+            locale=loc,
+            model=settings.openai_model,
+        )
+    if not settings.gemini_api_key:
+        log.warning("GEMINI_API_KEY missing; using MockLLM")
+        return MockLLM(locale=loc)
+    return GeminiLLM(
+        api_key=settings.gemini_api_key,
+        locale=settings.locale,
+        intent_model=settings.gemini_model,
+    )
 
 
 def build_app_services(settings: Settings) -> AppServices:
@@ -63,15 +86,7 @@ def build_app_services(settings: Settings) -> AppServices:
         log.warning("edge-tts not installed; using MockTextToSpeech for TTS")
         tts = MockTextToSpeech(storage=storage)
 
-    if not settings.gemini_api_key:
-        log.warning("GEMINI_API_KEY missing; using MockLLM")
-        llm = MockLLM(locale=settings.locale)
-    else:
-        llm = GeminiLLM(
-            api_key=settings.gemini_api_key,
-            locale=settings.locale,
-            intent_model=settings.gemini_model,
-        )
+    llm = _build_llm(settings)
 
     if settings.whisper_service_url:
         stt = WhisperHttpSTT(base_url=settings.whisper_service_url)

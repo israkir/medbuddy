@@ -12,12 +12,12 @@ from typing import Any
 from medbuddy.agents.base import ToolResult
 from medbuddy.drug_cache_keys import (
     DRUG_REFERENCE_SOURCE_OPENFDA,
-    DRUG_REFERENCE_SOURCE_TFDA,
     normalize_query_key,
     personalization_fingerprint,
     resolve_medication_id_for_personalization,
 )
 from medbuddy.engine.types import AppServices
+from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.i18n import t
 from medbuddy.llm.schemas import InteractionCheckResult
 from medbuddy.models.domain import ConversationTurn, Intent, InteractionResult, MedicationRecord
@@ -101,7 +101,6 @@ class InteractionCheckTool:
             )
             reply = _format_interaction_reply(interaction_result, locale=locale)
         else:
-            from medbuddy.privacy.redact import redact_conversation_turns_for_llm
             from medbuddy.prompts.persona import get_system_persona
 
             system_persona = get_system_persona(locale=locale)
@@ -131,7 +130,11 @@ class InteractionCheckTool:
             )
             med_cache_id = resolve_medication_id_for_personalization(medications, user_text)
             prov_source = (
-                grounding_sources[0] if grounding_sources else svc.settings.gemini_model
+                grounding_sources[0]
+                if grounding_sources
+                else (
+                    "mock_llm" if isinstance(svc.llm, MockLLM) else svc.settings.active_llm_model_id
+                )
             )
             await svc.drug_caches.save_personalized_reply(
                 user_uuid=user_row["id"],

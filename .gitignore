@@ -19,6 +19,7 @@ htmlcov/
 # OS / editors
 .DS_Store
 .idea/
+.claude/
 *.swp
 *.swo
 

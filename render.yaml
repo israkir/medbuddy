@@ -36,6 +36,12 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY

@@ -201,9 +201,7 @@ class MockLLM(LLMPort):
             medications_checked=med_names,
             interactions=[],
             overall_severity="none",
-            summary=t("mocks.llm.reply_template", locale=locale).format(
-                user_message=user_message
-            ),
+            summary=t("mocks.llm.reply_template", locale=locale).format(user_message=user_message),
             disclaimer=t("mocks.llm.interaction_disclaimer", locale=locale),
         )
         return InteractionResult(query=user_message, result=result)
@@ -228,9 +226,7 @@ class MockLLM(LLMPort):
             )
             for m in medications
         ]
-        med_names = [m.name for m in medications] or [
-            t("mocks.llm.summary_no_meds", locale=locale)
-        ]
+        med_names = [m.name for m in medications] or [t("mocks.llm.summary_no_meds", locale=locale)]
         result = HealthSummaryResult(
             summary_for_doctor=t(
                 "mocks.llm.health_summary_doctor",
@@ -239,12 +235,8 @@ class MockLLM(LLMPort):
             ),
             key_concerns=[t("mocks.llm.summary_concern_placeholder", locale=locale)],
             reported_symptoms=[],
-            medication_adherence_notes=t(
-                "mocks.llm.summary_adherence_placeholder", locale=locale
-            ),
-            recommended_questions=[
-                t("mocks.llm.summary_question_placeholder", locale=locale)
-            ],
+            medication_adherence_notes=t("mocks.llm.summary_adherence_placeholder", locale=locale),
+            recommended_questions=[t("mocks.llm.summary_question_placeholder", locale=locale)],
         )
         return HealthSummary(
             generated_at=datetime.now(UTC),
