@@ -5,12 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
-from urllib.parse import parse_qs
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.engine.types import AppServices
 from medbuddy.models.domain import MessageKind
-from medbuddy.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -24,14 +22,6 @@ def _message_kind(message: dict[str, Any]) -> MessageKind:
     return MessageKind.UNKNOWN
 
 
-async def _ensure_consent(svc: AppServices, line_user_id: str, reply_token: str) -> bool:
-    user = await svc.users.get_or_create_user(line_user_id)
-    if user.get("consent_accepted"):
-        return True
-    await svc.line.reply_quick_reply_consent(reply_token)
-    return False
-
-
 async def _handle_user_message(
     svc: AppServices,
     *,
@@ -40,8 +30,7 @@ async def _handle_user_message(
     user_text: str,
     prefer_audio_reply: bool,
 ) -> None:
-    if not await _ensure_consent(svc, line_user_id, reply_token):
-        return
+    await svc.users.get_or_create_user(line_user_id)
 
     reply_text = await run_assistant_text_turn(
         svc,
@@ -50,6 +39,11 @@ async def _handle_user_message(
     )
 
     if prefer_audio_reply:
+        log.info(
+            "LINE flow: user_id=%s assistant reply len=%d chars — TTS + text batch",
+            line_user_id,
+            len(reply_text),
+        )
         audio_url, duration_ms = await svc.tts.synthesize_to_m4a_url(
             reply_text,
             svc.settings.public_base_url,
@@ -74,6 +68,11 @@ async def _handle_user_message(
         )
         return
 
+    log.info(
+        "LINE flow: user_id=%s assistant reply len=%d chars — text reply",
+        line_user_id,
+        len(reply_text),
+    )
     await svc.line.reply_text(reply_token, reply_text)
 
 
@@ -87,33 +86,24 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
         log.warning("LINE event without userId: %s", event)
         return
 
+    log.info(
+        "LINE event: user_id=%s type=%s webhook_event_id=%r",
+        line_user_id,
+        etype,
+        event.get("webhookEventId"),
+    )
+
     if etype == "follow":
         await svc.users.get_or_create_user(line_user_id)
-        await svc.line.reply_quick_reply_consent(reply_token)
+        log.info("LINE flow: user_id=%s new follow", line_user_id)
         return
 
     if etype == "postback":
-        data = event.get("postback", {}).get("data") or ""
-        qs = parse_qs(data)
-        action = (qs.get("action") or [""])[0]
-        value = (qs.get("value") or [""])[0]
-        if action == "consent":
-            accepted = value == "yes"
-            await svc.users.set_consent(line_user_id, accepted)
-            loc = svc.settings.locale
-            if accepted:
-                await svc.line.reply_text(
-                    reply_token,
-                    t("orchestrator.consent_accepted", locale=loc),
-                )
-            else:
-                await svc.line.reply_text(
-                    reply_token,
-                    t("orchestrator.consent_declined", locale=loc),
-                )
+        log.info("LINE flow: user_id=%s postback ignored", line_user_id)
         return
 
     if etype != "message":
+        log.debug("LINE event: user_id=%s ignored non-message type=%s", line_user_id, etype)
         return
 
     message = event.get("message") or {}
@@ -121,6 +111,11 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
 
     if kind == MessageKind.TEXT:
         text = message.get("text") or ""
+        log.info(
+            "LINE flow: user_id=%s inbound text chars=%d",
+            line_user_id,
+            len(text),
+        )
         await _handle_user_message(
             svc,
             line_user_id=line_user_id,
@@ -133,9 +128,16 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
     if kind == MessageKind.AUDIO:
         mid = message.get("id")
         if not mid:
+            log.warning("LINE flow: user_id=%s audio message without id", line_user_id)
             return
+        log.info("LINE flow: user_id=%s inbound audio message_id=%s", line_user_id, mid)
         raw = await svc.line.get_message_content(str(mid))
         user_text = await svc.stt.transcribe_m4a(raw)
+        log.info(
+            "LINE flow: user_id=%s STT done transcribed_chars=%d",
+            line_user_id,
+            len(user_text),
+        )
         await _handle_user_message(
             svc,
             line_user_id=line_user_id,
@@ -144,3 +146,9 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             prefer_audio_reply=True,
         )
         return
+
+    log.info(
+        "LINE flow: user_id=%s unsupported message kind=%s",
+        line_user_id,
+        kind,
+    )

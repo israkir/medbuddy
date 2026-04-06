@@ -4,7 +4,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from medbuddy.models.domain import MedicationRecord
+from medbuddy.models.domain import MedicationDraft, MedicationRecord
 from medbuddy.protocols.ports import UserDataPort
 
 
@@ -19,20 +19,38 @@ class MockUserData(UserDataPort):
             self._users[line_user_id] = {
                 "id": str(uuid.uuid4()),
                 "line_user_id": line_user_id,
-                "consent_accepted": False,
             }
-            self._meds[line_user_id] = []
+            self._meds.setdefault(line_user_id, [])
         return self._users[line_user_id]
-
-    async def set_consent(self, line_user_id: str, accepted: bool) -> None:
-        await asyncio.sleep(0)
-        u = await self.get_or_create_user(line_user_id)
-        u["consent_accepted"] = accepted
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
         await asyncio.sleep(0)
         await self.get_or_create_user(line_user_id)
         return list(self._meds.get(line_user_id, []))
+
+    async def add_medication(self, line_user_id: str, draft: MedicationDraft) -> MedicationRecord:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        ins = (draft.instructions_zh or "").strip()
+        rec = MedicationRecord(
+            id=str(uuid.uuid4()),
+            name=draft.name.strip(),
+            dosage=draft.dosage.strip(),
+            schedule=draft.schedule.strip(),
+            instructions_zh=ins or None,
+        )
+        self._meds.setdefault(line_user_id, []).append(rec)
+        return rec
+
+    async def delete_medication(self, line_user_id: str, medication_id: str) -> bool:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        meds = self._meds.get(line_user_id, [])
+        for i, m in enumerate(meds):
+            if m.id == medication_id:
+                del meds[i]
+                return True
+        return False
 
     def seed_medication(self, line_user_id: str, med: MedicationRecord) -> None:
         self._meds.setdefault(line_user_id, []).append(med)

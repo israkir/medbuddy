@@ -1,4 +1,5 @@
 # Render Blueprint — https://render.com/docs/infrastructure-as-code
+# Production web service: real integrations only. Render injects RENDER=true; see Settings._render_host_production_defaults.
 # Docker path defaults to ./Dockerfile from repo root; dockerContext is . so COPY apps/backend/... works.
 # After deploy: set PUBLIC_BASE_URL to https://<service-name>.onrender.com and add secrets in Environment.
 version: "1"
@@ -17,8 +18,12 @@ services:
         value: real
       - key: MOCK_EXTERNAL_SERVICES
         value: "false"
+      - key: DEBUG
+        value: "false"
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: LOG_LEVEL
+        value: INFO
       - key: MEDBUDDY_LOCALE
         value: zh-TW
       # Set after first deploy (your service HTTPS URL, no trailing slash).

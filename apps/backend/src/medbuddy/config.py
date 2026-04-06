@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
@@ -17,7 +18,16 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "MedBuddy"
-    debug: bool = False
+    debug: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("DEBUG", "debug", "MEDBUDDY_DEBUG"),
+    )
+
+    log_level: str = Field(
+        default="INFO",
+        description="Logging level for medbuddy.* and uvicorn.error (DEBUG, INFO, WARNING, …)",
+        validation_alias=AliasChoices("LOG_LEVEL", "log_level"),
+    )
 
     locale: str = Field(
         default="zh-TW",
@@ -32,7 +42,7 @@ class Settings(BaseSettings):
     )
 
     mock_external_services: bool = Field(
-        default=True,
+        default=False,
         description="Use in-memory mocks for LINE, STT, TTS, LLM, drugs, storage",
         validation_alias=AliasChoices("mock_external_services", "MOCK_EXTERNAL_SERVICES"),
     )
@@ -105,6 +115,18 @@ class Settings(BaseSettings):
             return self
         use_mock = self.medbuddy_integration == "mock"
         object.__setattr__(self, "mock_external_services", use_mock)
+        return self
+
+    @model_validator(mode="after")
+    def _render_host_production_defaults(self) -> Self:
+        """Render sets ``RENDER=true`` on web services—always real integrations, never debug."""
+        flag = os.environ.get("RENDER", "").strip().lower()
+        if flag not in ("1", "true", "yes"):
+            return self
+        object.__setattr__(self, "mock_external_services", False)
+        object.__setattr__(self, "debug", False)
+        if self.medbuddy_integration == "mock":
+            object.__setattr__(self, "medbuddy_integration", "real")
         return self
 
 

@@ -45,7 +45,7 @@ def _lookup_string(key: str, locale: str) -> str:
 
 
 def t(key: str, *, locale: str | None = None, **kwargs: Any) -> str:
-    """Return a translated string. Keys use dotted paths, e.g. ``orchestrator.consent_accepted``."""
+    """Return a translated string. Keys use dotted paths, e.g. ``prompts.system_persona``."""
     from medbuddy.config import get_settings
 
     loc = locale if locale is not None else get_settings().locale

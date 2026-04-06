@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.config import Settings
-from medbuddy.models.domain import ConversationTurn, MedicationRecord
+from medbuddy.models.domain import ConversationTurn, MedicationDraft, MedicationRecord
 from medbuddy.protocols.ports import ConversationStorePort, UserDataPort
 
 log = logging.getLogger(__name__)
@@ -29,7 +29,6 @@ def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
         "line_user_id": row["external_user_id"],
-        "consent_accepted": bool(row["consent_accepted"]),
     }
 
 
@@ -68,7 +67,7 @@ class SupabaseUserData(UserDataPort):
         def q() -> Any:
             return (
                 self._client.table("users")
-                .select("id, external_user_id, consent_accepted")
+                .select("id, external_user_id")
                 .eq("external_user_id", external_user_id)
                 .limit(1)
                 .execute()
@@ -84,16 +83,7 @@ class SupabaseUserData(UserDataPort):
             return _user_row_to_dict(row)
 
         def insert() -> Any:
-            return (
-                self._client.table("users")
-                .insert(
-                    {
-                        "external_user_id": line_user_id,
-                        "consent_accepted": False,
-                    }
-                )
-                .execute()
-            )
+            return self._client.table("users").insert({"external_user_id": line_user_id}).execute()
 
         try:
             resp = await _run_q(insert)
@@ -115,19 +105,6 @@ class SupabaseUserData(UserDataPort):
             return _user_row_to_dict(row)
         return _user_row_to_dict(rows[0])
 
-    async def set_consent(self, line_user_id: str, accepted: bool) -> None:
-        await self.get_or_create_user(line_user_id)
-
-        def q() -> Any:
-            return (
-                self._client.table("users")
-                .update({"consent_accepted": accepted})
-                .eq("external_user_id", line_user_id)
-                .execute()
-            )
-
-        await _run_q(q)
-
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
@@ -137,13 +114,53 @@ class SupabaseUserData(UserDataPort):
                 self._client.table("medications")
                 .select("id, name, dosage, schedule, instructions_zh, raw_metadata")
                 .eq("user_id", uid)
-                .order("created_at")
+                .order("id")
                 .execute()
             )
 
         resp = await _run_q(q)
         rows = resp.data or []
         return [_med_row_to_record(r) for r in rows]
+
+    async def add_medication(self, line_user_id: str, draft: MedicationDraft) -> MedicationRecord:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        ins = (draft.instructions_zh or "").strip()
+        payload: dict[str, Any] = {
+            "user_id": uid,
+            "name": draft.name.strip(),
+            "dosage": draft.dosage.strip(),
+            "schedule": draft.schedule.strip(),
+            "instructions_zh": ins or None,
+            "raw_metadata": {},
+        }
+
+        def insert() -> Any:
+            return self._client.table("medications").insert(payload).execute()
+
+        resp = await _run_q(insert)
+        rows = resp.data or []
+        if not rows:
+            msg = "Supabase medication insert returned no row"
+            raise RuntimeError(msg)
+        return _med_row_to_record(rows[0])
+
+    async def delete_medication(self, line_user_id: str, medication_id: str) -> bool:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+
+        def q() -> Any:
+            return (
+                self._client.table("medications")
+                .delete()
+                .eq("user_id", uid)
+                .eq("id", medication_id)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return len(rows) > 0
 
 
 class SupabaseConversationStore(ConversationStorePort):

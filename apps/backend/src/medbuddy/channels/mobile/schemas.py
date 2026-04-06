@@ -13,10 +13,5 @@ class MessageReply(BaseModel):
     reply: str
 
 
-class ConsentBody(BaseModel):
-    accepted: bool
-
-
 class MeResponse(BaseModel):
     app_user_id: str
-    consent_accepted: bool

@@ -9,15 +9,15 @@ Paths below are relative to **`apps/backend/`**.
 | Area | Role |
 |------|------|
 | [`channels/line/`](src/medbuddy/channels/line/) | LINE webhook, signature verification, LINE-specific event pipeline |
-| [`channels/mobile/`](src/medbuddy/channels/mobile/) | Standalone app JSON API: `auth` (Bearer + `X-App-User-Id`), `schemas`, `routes` (`/me`, `/consent`, `/messages`) |
-| [`application/`](src/medbuddy/application/) | Shared use cases (e.g. [`assistant_turn.py`](src/medbuddy/application/assistant_turn.py)) used by LINE and mobile |
+| [`channels/mobile/`](src/medbuddy/channels/mobile/) | Standalone app JSON API: `auth` (Bearer + `X-App-User-Id`), `schemas`, `routes` (`/me`, `/messages`) |
+| [`application/`](src/medbuddy/application/) | Shared use cases: [`assistant_turn.py`](src/medbuddy/application/assistant_turn.py), [`medication_intents.py`](src/medbuddy/application/medication_intents.py) (text add/list/remove meds) |
 | [`http/shared_routes.py`](src/medbuddy/http/shared_routes.py) | Ops health and `/internal-media/...` (LINE-accessible audio URLs) |
 | [`engine/`](src/medbuddy/engine/) | Shared types (`AppServices`, …) |
 | [`integrations/`](src/medbuddy/integrations/), [`protocols/`](src/medbuddy/protocols/) | Adapters and ports — unchanged |
 
 Add new **LINE** behavior under `channels/line/`; extend **app-only** REST under `channels/mobile/`. Shared assistant logic belongs in **`application/`** so LINE and mobile do not duplicate LLM/drug/history steps.
 
-**Standalone app auth:** set **`MEDBUDDY_MOBILE_BEARER_TOKEN`** for protected routes when not in mock mode. Clients send **`Authorization: Bearer <token>`** and **`X-App-User-Id`** (4–128 chars, stable id per install or account). If the token is unset and **`MOCK_EXTERNAL_SERVICES=true`**, Bearer is optional (development only). Call **`POST /v1/app/consent`** before **`POST /v1/app/messages`**.
+**Standalone app auth:** set **`MEDBUDDY_MOBILE_BEARER_TOKEN`** for protected routes when not in mock mode. Clients send **`Authorization: Bearer <token>`** and **`X-App-User-Id`** (4–128 chars, stable id per install or account). If the token is unset and **`MOCK_EXTERNAL_SERVICES=true`**, Bearer is optional (development only).
 
 ## Makefile (from repository root)
 
@@ -53,7 +53,7 @@ User-facing strings are **not** hardcoded in Python. They live in JSON files:
 - **`src/medbuddy/locales/zh-TW.json`** — primary locale (Taiwan Traditional Chinese).
 - **`src/medbuddy/locales/en.json`** — English mirror.
 
-Code loads copy with **`medbuddy.i18n.t`**, for example `t("orchestrator.consent_accepted", locale=svc.settings.locale)`. Keys use dotted paths; values may use `{name}`-style placeholders for `.format()`.
+Code loads copy with **`medbuddy.i18n.t`**, for example `t("prompts.system_persona", locale=svc.settings.locale)`. Keys use dotted paths; values may use `{name}`-style placeholders for `.format()`.
 
 **Settings**
 
@@ -61,7 +61,7 @@ Code loads copy with **`medbuddy.i18n.t`**, for example `t("orchestrator.consent
 |----------|---------|
 | `MEDBUDDY_LOCALE` or `locale` | BCP 47 tag (`zh-TW`, `en`, …). Default: **`zh-TW`**. |
 
-Copy [`.env.example`](.env.example) to `apps/backend/.env` or the repo root `.env` and set `MEDBUDDY_LOCALE` as needed. The same `locale` is passed into integrations from [`container.py`](src/medbuddy/container.py) so replies, prompts, and LINE UI strings stay consistent.
+Copy [`.env.example`](.env.example) to `apps/backend/.env` or the repo root `.env` and set `MEDBUDDY_LOCALE` as needed. The same `locale` is passed into integrations from [`container.py`](src/medbuddy/container.py) so LLM prompts and user-facing strings stay consistent.
 
 If a key is missing in the active locale, lookup falls back to **`zh-TW`**. For tests that replace locale files, call **`clear_i18n_cache()`** from `medbuddy.i18n`.
 
@@ -81,7 +81,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 
 **Environment (see [`.env.example`](.env.example))**
 
-- **`MOCK_EXTERNAL_SERVICES`** — `true` for local dev and tests; `false` to hit real LINE and optional cloud services.
+- **`MOCK_EXTERNAL_SERVICES`** — default **`false`** (real adapters). Use **`true`** (or **`make be-dev-mock`**) for local dev without LINE tokens; tests set mocks explicitly.
 - **`LINE_CHANNEL_SECRET`**, **`LINE_CHANNEL_ACCESS_TOKEN`** — required for real LINE when mocks are off.
 - **`PUBLIC_BASE_URL`** — HTTPS base for audio URLs LINE can fetch.
 - **`GEMINI_API_KEY`**, **`WHISPER_SERVICE_URL`** — optional real LLM/STT when not using mocks.
@@ -116,12 +116,12 @@ podman compose up --build
 ```
 
 Health (plain text): `GET http://localhost:8000/health`
-Standalone app (JSON): `GET /v1/app/health` · `GET /v1/app/info` (public) · `GET /v1/app/me` · `POST /v1/app/consent` · `POST /v1/app/messages` (authenticated; see above)
+Standalone app (JSON): `GET /v1/app/health` · `GET /v1/app/info` (public) · `GET /v1/app/me` · `POST /v1/app/messages` (authenticated; see above)
 LINE webhook: `POST http://localhost:8000/v1/line/webhook`
 
 ## Deploy on [Render](https://render.com/)
 
-The repo includes a [**Blueprint**](https://render.com/docs/infrastructure-as-code) at [`render.yaml`](../../render.yaml) and a repo-root **[`Dockerfile`](../../Dockerfile)** — Render’s default **Dockerfile path** is **`./Dockerfile`** relative to the repo root; the **build context** must be the **repository root** (so `COPY apps/backend/...` works). [Render](https://render.com/) injects **`PORT`** at runtime; the image listens on **`${PORT:-8000}`** and uses **`GET /health`** for health checks.
+The repo includes a [**Blueprint**](https://render.com/docs/infrastructure-as-code) at [`render.yaml`](../../render.yaml) and a repo-root **[`Dockerfile`](../../Dockerfile)** — Render’s default **Dockerfile path** is **`./Dockerfile`** relative to the repo root; the **build context** must be the **repository root** (so `COPY apps/backend/...` works). [Render](https://render.com/) injects **`PORT`** at runtime and **`RENDER=true`**; the image listens on **`${PORT:-8000}`** and uses **`GET /health`** for health checks. When **`RENDER`** is set, [`Settings`](src/medbuddy/config.py) **always** uses real integrations (`MOCK_EXTERNAL_SERVICES=false`), turns **`DEBUG`** off, and treats **`MEDBUDDY_INTEGRATION=mock`** as **`real`** so a mis-set dashboard env cannot enable mocks.
 
 1. **Create the service** — Render Dashboard → **New** → **Blueprint** → connect the repo and apply `render.yaml`, or **New** → **Web Service** → **Docker** → leave **Dockerfile Path** as **`Dockerfile`** and use the **repo root** as context (do not set **Root Directory** to `apps/backend` for the Docker build).
 2. **Environment** — In the service **Environment** tab, set **`PUBLIC_BASE_URL`** to your HTTPS base URL (e.g. `https://medbuddy-api.onrender.com`). Fill in **`LINE_CHANNEL_*`**, **`GEMINI_API_KEY`**, optional Supabase and Whisper URLs, **`MEDBUDDY_MOBILE_BEARER_TOKEN`**, etc. (see [`.env.example`](.env.example)). Keys marked `sync: false` in `render.yaml` are intentionally set only in the dashboard.

@@ -8,6 +8,8 @@ from typing import Any
 
 class Intent(str, Enum):
     ADD_MEDICATION = "add_medication"
+    LIST_MEDICATIONS = "list_medications"
+    REMOVE_MEDICATION = "remove_medication"
     CONFIRM_DOSE = "confirm_dose"
     EXPLAIN_MEDICATION = "explain_medication"
     INTERACTION_CHECK = "interaction_check"
@@ -28,6 +30,16 @@ class MessageKind(str, Enum):
 class LineUserContext:
     line_user_id: str
     display_name: str | None = None
+
+
+@dataclass
+class MedicationDraft:
+    """Structured fields extracted from a user message before persisting."""
+
+    name: str
+    dosage: str
+    schedule: str
+    instructions_zh: str | None = None
 
 
 @dataclass

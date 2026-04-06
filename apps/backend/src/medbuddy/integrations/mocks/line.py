@@ -37,10 +37,6 @@ class MockLineClient(LineMessagingPort):
             ],
         )
 
-    async def reply_quick_reply_consent(self, reply_token: str) -> None:
-        await asyncio.sleep(0)
-        self.replies.append({"type": "consent_quick_reply", "reply_token": reply_token})
-
     async def get_message_content(self, message_id: str) -> bytes:
         await asyncio.sleep(0)
         return self._content_by_message_id.get(message_id, b"mock-m4a-placeholder")

@@ -2,7 +2,7 @@
 
 Checklists for MedBuddy **backend** (`apps/backend`) and **mobile app** (`apps/frontend`, Expo).
 
-**Backend — current state:** **LINE** (`channels/line`) vs **standalone app** (`channels/mobile`: public `health`/`info`; authenticated **`GET /me`**, **`POST /consent`**, **`POST /messages`** with Bearer + `X-App-User-Id`; Pydantic validation). Shared assistant turn in **`application/assistant_turn`** (used by LINE text/audio replies and mobile messages). **`http/shared_routes`**, **`container`** wiring; mock vs real integrations; in-memory user/conversation stores; Supabase env vars exist but are not wired.
+**Backend — current state:** **LINE** (`channels/line`) vs **standalone app** (`channels/mobile`: public `health`/`info`; authenticated **`GET /me`**, **`POST /messages`** with Bearer + `X-App-User-Id`; Pydantic validation). Shared assistant turn in **`application/assistant_turn`** (used by LINE text/audio replies and mobile messages). **`http/shared_routes`**, **`container`** wiring; mock vs real integrations; in-memory user/conversation stores; Supabase env vars exist but are not wired.
 
 **Frontend — current state:** Expo Router app with mock vs API toggles (`EXPO_PUBLIC_*`); `apiBaseUrl` exists but **HTTP clients are not wired** to the backend **`/v1/app/...`** surface (or other routes) yet — see [`apps/frontend/README.md`](apps/frontend/README.md#integrations-prototype).
 
@@ -10,7 +10,7 @@ Checklists for MedBuddy **backend** (`apps/backend`) and **mobile app** (`apps/f
 
 ### Channel architecture (extend shared core, not duplicate)
 
-- [x] Baseline **`channels/mobile/`** REST: **`GET /me`**, **`POST /consent`**, **`POST /messages`** with Pydantic models; **Bearer** (`MEDBUDDY_MOBILE_BEARER_TOKEN`) + **`X-App-User-Id`** (optional Bearer in mock dev). Further routes (medications, family, etc.) as the Expo app grows.
+- [x] Baseline **`channels/mobile/`** REST: **`GET /me`**, **`POST /messages`** with Pydantic models; **Bearer** (`MEDBUDDY_MOBILE_BEARER_TOKEN`) + **`X-App-User-Id`** (optional Bearer in mock dev). Further routes (medications, family, etc.) as the Expo app grows.
 - [x] **LINE-only** UX remains in **`channels/line/`**; shared assistant text turn lives in **`application/assistant_turn`** (extend this layer when adding workflows both channels need).
 - [ ] If the mobile client needs different **CORS** or **API gateway** rules than the LINE webhook, configure at the edge (reverse proxy) or in FastAPI middleware scoped to **`/v1/app`** routes.
 - [ ] Optional: **JWT / session** or platform attestation instead of static Bearer when product requirements solidify.
@@ -18,7 +18,7 @@ Checklists for MedBuddy **backend** (`apps/backend`) and **mobile app** (`apps/f
 ### Configuration and secrets
 
 - [ ] Set **`MEDBUDDY_INTEGRATION=real`** (or **`MOCK_EXTERNAL_SERVICES=false`**) in the production environment; never run mocks in prod.
-- [ ] Set **`MEDBUDDY_MOBILE_BEARER_TOKEN`** for standalone app clients when **`MOCK_EXTERNAL_SERVICES=false`** (Bearer required for **`/v1/app/me`**, **`/consent`**, **`/messages`**).
+- [ ] Set **`MEDBUDDY_MOBILE_BEARER_TOKEN`** for standalone app clients when **`MOCK_EXTERNAL_SERVICES=false`** (Bearer required for **`/v1/app/me`**, **`/messages`**).
 - [ ] Provide **`LINE_CHANNEL_SECRET`** and **`LINE_CHANNEL_ACCESS_TOKEN`**; ensure signature verification is always on (no “mock without secret” path).
 - [ ] Set **`PUBLIC_BASE_URL`** to the public **HTTPS** origin the LINE client will use for audio URLs (must match your deployed host).
 - [ ] Configure **`GEMINI_API_KEY`**, **`WHISPER_SERVICE_URL`**, and any other real adapters you rely on; document required vs optional fallbacks.
