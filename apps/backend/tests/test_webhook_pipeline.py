@@ -2,12 +2,25 @@ import base64
 import hashlib
 import hmac
 import json
+from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from medbuddy.main import app
 from medbuddy.engine.types import AppServices
+
+
+def _line_webhook_event(**fields: Any) -> dict[str, Any]:
+    """Minimal valid shell for ``line-bot-sdk`` webhook ``Event`` models (tests only)."""
+    base = {
+        "timestamp": 1_704_000_000_000,
+        "mode": "active",
+        "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "deliveryContext": {"isRedelivery": False},
+    }
+    base.update(fields)
+    return base
 
 
 @pytest.mark.asyncio
@@ -20,18 +33,18 @@ async def test_webhook_text_message_uses_mocks(mock_settings):
 
     body = {
         "events": [
-            {
-                "type": "postback",
-                "replyToken": "r0",
-                "source": {"userId": "Uabc", "type": "user"},
-                "postback": {"data": "action=consent&value=yes"},
-            },
-            {
-                "type": "message",
-                "replyToken": "rtoken",
-                "source": {"userId": "Uabc", "type": "user"},
-                "message": {"id": "m1", "type": "text", "text": "你好"},
-            },
+            _line_webhook_event(
+                type="postback",
+                replyToken="r0",
+                source={"userId": "Uabc", "type": "user"},
+                postback={"data": "action=consent&value=yes"},
+            ),
+            _line_webhook_event(
+                type="message",
+                replyToken="rtoken",
+                source={"userId": "Uabc", "type": "user"},
+                message={"id": "m1", "type": "text", "text": "你好"},
+            ),
         ]
     }
     raw = json.dumps(body).encode("utf-8")
@@ -63,11 +76,12 @@ async def test_follow_sends_consent(mock_settings):
 
     body = {
         "events": [
-            {
-                "type": "follow",
-                "replyToken": "rt",
-                "source": {"userId": "Ux", "type": "user"},
-            }
+            _line_webhook_event(
+                type="follow",
+                replyToken="rt",
+                source={"userId": "Ux", "type": "user"},
+                follow={"isUnblocked": True},
+            ),
         ]
     }
     raw = json.dumps(body).encode("utf-8")
