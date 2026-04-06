@@ -25,6 +25,7 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
     )
     assert d["id"] == "11111111-1111-1111-1111-111111111111"
     assert d["line_user_id"] == "U-line"
+    assert set(d.keys()) == {"id", "line_user_id"}
 
 
 def test_parse_ts_iso_z() -> None:
@@ -82,6 +83,8 @@ async def test_get_or_create_user_inserts_when_missing() -> None:
     out = await ud.get_or_create_user("ext-2")
     assert out["id"] == "00000000-0000-0000-0000-000000000002"
     builder.insert.assert_called_once()
+    ins = builder.insert.call_args[0][0]
+    assert ins == {"external_user_id": "ext-2"}
 
 
 @pytest.mark.asyncio
@@ -122,6 +125,7 @@ async def test_append_turn_inserts_with_resolved_user_id() -> None:
     assert call_kw["user_id"] == "00000000-0000-0000-0000-000000000003"
     assert call_kw["role"] == "user"
     assert call_kw["content"] == "hi"
+    assert call_kw["created_at"] == at.isoformat()
 
 
 @pytest.mark.asyncio

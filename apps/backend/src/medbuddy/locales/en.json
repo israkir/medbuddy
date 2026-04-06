@@ -44,5 +44,8 @@
   },
   "tests": {
     "intent_hook_reply": "(hook) Doctor summary will be available later."
+  },
+  "line": {
+    "follow_welcome": "Welcome to MedBuddy! Ask me about your medications anytime — I am here to help you stay on track (this does not replace medical advice)."
   }
 }

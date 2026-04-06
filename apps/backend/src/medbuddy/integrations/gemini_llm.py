@@ -26,7 +26,7 @@ class GeminiLLM(LLMPort):
         *,
         api_key: str,
         locale: str = "zh-TW",
-        intent_model: str = "gemini-1.5-flash",
+        intent_model: str = "gemini-2.5-flash",
     ) -> None:
         try:
             from google import genai

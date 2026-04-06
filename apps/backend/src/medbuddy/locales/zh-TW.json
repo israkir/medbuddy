@@ -44,5 +44,8 @@
   },
   "tests": {
     "intent_hook_reply": "（掛鉤）醫師摘要將於稍後提供。"
+  },
+  "line": {
+    "follow_welcome": "歡迎使用 MedBuddy！有用藥問題隨時可以跟我說，我會陪著你好好記得用藥（不取代醫師指示）。"
   }
 }
