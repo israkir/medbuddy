@@ -160,7 +160,7 @@ When **`SUPABASE_URL`** and **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_
 | Integration | Role |
 |-------------|------|
 | **LINE** | Webhook + push (reply and reminder worker). |
-| **Gemini** (`google-genai`) | Intent classification, **`compose_reply`**, **`compose_medication_added_reply`**, extraction. Default model **`gemini-2.5-flash`**; override **`GEMINI_MODEL`**. |
+| **LLM** | **`LLM_PROVIDER`** selects **`GeminiLLM`** (`google-genai`, default **`gemini-2.5-flash`**) or **`OpenAILLM`** (Chat Completions, default **`gpt-4.1-mini`**). Same **`LLMPort`** for classify, compose, extraction. |
 | **Whisper HTTP** | STT for LINE voice. |
 | **edge-tts** | TTS for voice replies. |
 | **OpenFDA HTTP** | Drug label snippets for grounding and reference cache. |
@@ -232,12 +232,4 @@ Paths relative to **`apps/frontend/`**.
 
 ## Document map
 
-| Doc | Focus |
-|-----|--------|
-| [`architecture.md`](architecture.md) | **Technical design** — architecture, data model, API reference, security |
-| [`use-cases.md`](use-cases.md) | Narrated flows, utterances, channel specifics |
-| [`reminders.md`](reminders.md) | Dose events, arq, Redis, worker, reconcile |
-| [`privacy.md`](privacy.md) | Redaction, LLM boundaries, profile parsing |
-| [`../apps/backend/README.md`](../apps/backend/README.md) | Env vars, integrations, LINE testing, deploy |
-| [`../apps/frontend/README.md`](../apps/frontend/README.md) | Expo, mock vs API, i18n |
-| [`../CHANGELOG.md`](../CHANGELOG.md) | Version history and behavior notes |
+Index: **[`../README.md`](../README#documentation)**. Design and API reference: [`architecture.md`](architecture.md). Flows: [`use-cases.md`](use-cases.md). LINE dose pushes: [`reminders.md`](reminders.md). PII: [`privacy.md`](privacy.md). App READMEs: [`../apps/backend/README.md`](../apps/backend/README.md), [`../apps/frontend/README.md`](../apps/frontend/README.md).

@@ -11,10 +11,34 @@ from medbuddy.config import Settings
 from medbuddy.integrations.supabase_stores import (
     SupabaseConversationStore,
     SupabaseUserData,
+    create_supabase_client,
     _parse_ts,
     _user_row_to_dict,
 )
 from medbuddy.models.domain import ConversationTurn, MedicationDraft
+
+
+def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) -> None:
+    """postgrest-py defaults to HTTP/2; we pass httpx.Client(http2=False) for stability."""
+    pytest.importorskip("supabase")
+
+    kwargs_captured: dict = {}
+
+    def fake_httpx_client(**kwargs: object) -> MagicMock:
+        kwargs_captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr("httpx.Client", fake_httpx_client)
+    monkeypatch.setattr("supabase.create_client", lambda *a, **k: MagicMock())
+
+    create_supabase_client(
+        Settings(
+            supabase_url="https://example.supabase.co",
+            supabase_publishable_key="anon-key",
+        )
+    )
+    assert kwargs_captured.get("http2") is False
+    assert kwargs_captured.get("follow_redirects") is True
 
 
 def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
@@ -39,8 +63,10 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
         "health_notes",
         "onboarding_completed_at",
         "timezone",
+        "locale",
     }
     assert d["timezone"] == "Asia/Taipei"
+    assert d["locale"] == "zh-TW"
 
 
 def test_parse_ts_iso_z() -> None:
@@ -242,6 +268,7 @@ async def test_save_onboarding_profile_updates_row() -> None:
         gender="female",
         emergency_contact="son 0912",
         health_notes="DM",
+        locale="en",
     )
     assert out["preferred_name"] == "May"
     assert out["age_years"] == 72
@@ -252,6 +279,7 @@ async def test_save_onboarding_profile_updates_row() -> None:
     assert upd["age_years"] == 72
     assert upd["gender"] == "female"
     assert upd["timezone"] == "Asia/Taipei"
+    assert upd["locale"] == "en"
 
 
 @pytest.mark.asyncio

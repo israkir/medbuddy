@@ -48,7 +48,7 @@ gemini_llm    supabase_stores  drugs_http
 | | `protocols/drug_caches.py` | `DrugCachesPort` |
 | **Engine** | `engine/types.py` | `AppServices` dataclass — DI container |
 | **Container** | `container.py` | `build_app_services(settings)` — wires mock vs real adapters |
-| **Integrations** | `integrations/gemini_llm.py` | Google Gemini (intent classify, compose, extract) |
+| **Integrations** | `integrations/gemini_llm.py`, `integrations/openai_llm.py` | LLM adapters (`LLM_PROVIDER` selects which runs) |
 | | `integrations/line_client.py` | LINE Messaging API SDK |
 | | `integrations/supabase_stores.py` | Supabase Postgres (users, meds, turns, dose events) |
 | | `integrations/drugs_http.py` | OpenFDA HTTP + TFDA stub |
@@ -139,7 +139,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | Port | Mock | Real |
 |------|------|------|
 | **LINE** | `integrations/mocks/line.py` | `integrations/line_client.py` — needs `LINE_CHANNEL_ACCESS_TOKEN` |
-| **LLM** | `integrations/mocks/llm.py` | `integrations/gemini_llm.py` — needs `GEMINI_API_KEY`; install `[llm]` extra |
+| **LLM** | `integrations/mocks/llm.py` | `integrations/gemini_llm.py` or `integrations/openai_llm.py` — set `LLM_PROVIDER` and `GEMINI_API_KEY` or `OPENAI_API_KEY`; install `[llm]` extra |
 | **STT** | `integrations/mocks/stt.py` | `integrations/stt_whisper.py` — needs `WHISPER_SERVICE_URL` |
 | **TTS** | `integrations/mocks/tts.py` | `integrations/edge_tts_service.py` — install `[tts]` extra |
 | **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
@@ -152,7 +152,9 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | Variable | Purpose |
 |----------|---------|
 | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | Real LINE channel |
-| `GEMINI_API_KEY` | Google Gemini LLM (default model `gemini-2.5-flash`; override via `GEMINI_MODEL`) |
+| `LLM_PROVIDER` | `gemini` (default) or `openai` — see `GEMINI_*` / `OPENAI_*` below |
+| `GEMINI_API_KEY` | Google Gemini when `LLM_PROVIDER=gemini` (default model `gemini-2.5-flash`; override via `GEMINI_MODEL`) |
+| `OPENAI_API_KEY` | OpenAI when `LLM_PROVIDER=openai` (default model `gpt-4.1-mini`; override via `OPENAI_MODEL`) |
 | `WHISPER_SERVICE_URL` | External Whisper STT service |
 | `PUBLIC_BASE_URL` | HTTPS origin for audio URLs LINE fetches |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Postgres persistence (use anon key, never service role) |
@@ -223,7 +225,7 @@ Health checks:
 
 1. **Blueprint** — Dashboard → New → Blueprint → connect repo → apply [`render.yaml`](../../render.yaml). Defines `medbuddy-api` (web, repo-root `Dockerfile`).
 2. **Redis** — Create Render Key Value (or Upstash) → set `REDIS_URL` on `medbuddy-api`.
-3. **Environment** — Set secrets on `medbuddy-api`: `PUBLIC_BASE_URL`, `LINE_CHANNEL_*`, `GEMINI_API_KEY`, Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `REDIS_URL`, optional `MEDBUDDY_CRON_SECRET`.
+3. **Environment** — Set secrets on `medbuddy-api`: `PUBLIC_BASE_URL`, `LINE_CHANNEL_*`, LLM keys (`OPENAI_API_KEY` with blueprint `LLM_PROVIDER=openai`, or set `LLM_PROVIDER=gemini` and use `GEMINI_API_KEY`), Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `REDIS_URL`, optional `MEDBUDDY_CRON_SECRET`.
 4. **LINE** — Webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
 5. **Mobile clients** — Point API calls at `PUBLIC_BASE_URL`.
 

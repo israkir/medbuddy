@@ -20,6 +20,7 @@ from medbuddy.reminders.prefs import (
     reminder_prefs_from_metadata,
 )
 from medbuddy.protocols.ports import ConversationStorePort, UserDataPort
+from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
 from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
         "health_notes": row.get("health_notes"),
         "onboarding_completed_at": row.get("onboarding_completed_at"),
         "timezone": row.get("timezone") or "Asia/Taipei",
+        "locale": effective_user_locale(row.get("locale")),
     }
 
 
@@ -66,9 +68,23 @@ def _med_row_to_record(row: dict[str, Any]) -> MedicationRecord:
 
 
 def create_supabase_client(settings: Settings) -> Any:
-    from supabase import create_client
+    """Build the Supabase sync client.
 
-    return create_client(settings.supabase_url, settings.supabase_publishable_key)
+    postgrest-py defaults to ``httpx.Client(..., http2=True)``. HTTP/2 can raise
+    ``RemoteProtocolError`` / ``ConnectionTerminated`` against some hosts or proxies;
+    we use HTTP/1.1 for the shared httpx client instead.
+    """
+    import httpx
+    from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
+    from supabase import ClientOptions, create_client
+
+    http_client = httpx.Client(
+        follow_redirects=True,
+        timeout=httpx.Timeout(DEFAULT_POSTGREST_CLIENT_TIMEOUT),
+        http2=False,
+    )
+    options = ClientOptions(httpx_client=http_client)
+    return create_client(settings.supabase_url, settings.supabase_publishable_key, options)
 
 
 def _run_q(fn: Any) -> Any:
@@ -88,7 +104,7 @@ class SupabaseUserData(UserDataPort):
                 self._client.table("users")
                 .select(
                     "id, external_user_id, preferred_name, age_years, gender, "
-                    "emergency_contact, health_notes, onboarding_completed_at, timezone"
+                    "emergency_contact, health_notes, onboarding_completed_at, timezone, locale"
                 )
                 .eq("external_user_id", external_user_id)
                 .limit(1)
@@ -137,6 +153,7 @@ class SupabaseUserData(UserDataPort):
         emergency_contact: str | None,
         health_notes: str | None,
         timezone: str | None = None,
+        locale: str = "zh-TW",
     ) -> dict[str, Any]:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
@@ -149,6 +166,7 @@ class SupabaseUserData(UserDataPort):
             "health_notes": (health_notes or "").strip() or None,
             "onboarding_completed_at": now.isoformat(),
             "timezone": effective_user_timezone(timezone),
+            "locale": effective_user_locale(locale),
         }
 
         def upd() -> Any:
@@ -201,6 +219,10 @@ class SupabaseUserData(UserDataPort):
                 payload["timezone"] = norm
             elif fields["timezone"] is None:
                 payload["timezone"] = None
+        if "locale" in fields:
+            norm_loc = normalize_locale_patch(fields["locale"])
+            if norm_loc is not None:
+                payload["locale"] = norm_loc
         if not payload:
             return user
 

@@ -19,6 +19,13 @@ class ProfileGender(str, Enum):
     OTHER = "other"
 
 
+class AppLocale(str, Enum):
+    """Standalone app UI language (matches Expo i18n resources)."""
+
+    EN = "en"
+    ZH_TW = "zh-TW"
+
+
 class OnboardingSubmit(BaseModel):
     """First-run profile for the standalone app (large-type friendly fields)."""
 
@@ -27,6 +34,10 @@ class OnboardingSubmit(BaseModel):
     gender: ProfileGender | None = None
     emergency_contact: str | None = Field(None, max_length=200)
     health_notes: str | None = Field(None, max_length=1000)
+    locale: AppLocale = Field(
+        default=AppLocale.ZH_TW,
+        description="App UI language (en or zh-TW)",
+    )
     timezone: str | None = Field(
         None,
         max_length=64,
@@ -66,6 +77,10 @@ class MeResponse(BaseModel):
     timezone: str = Field(
         default="Asia/Taipei",
         description="IANA timezone used for medication reminders (default Asia/Taipei)",
+    )
+    locale: str = Field(
+        default="zh-TW",
+        description="App UI language (en or zh-TW)",
     )
     onboarding_completed_at: str | None = None
 

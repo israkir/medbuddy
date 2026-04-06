@@ -18,7 +18,19 @@ import { Text } from '@/components/Themed';
 import { fontSize, MIN_TOUCH } from '@/constants/accessibility';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
+import i18n from '@/i18n';
+import { setAppLanguage, type AppLanguage } from '@/i18n/languageStorage';
 import { submitOnboarding, type ProfileGender } from '@/lib/companionApi';
+
+const LANGUAGE_OPTIONS: AppLanguage[] = ['zh-TW', 'en'];
+
+function initialAppLanguage(): AppLanguage {
+  const lng = i18n.language;
+  if (lng === 'en' || lng === 'zh-TW') {
+    return lng;
+  }
+  return 'zh-TW';
+}
 
 const GENDER_OPTIONS: ProfileGender[] = [
   'female',
@@ -39,6 +51,7 @@ export default function OnboardingScreen() {
   const [gender, setGender] = useState<ProfileGender | null>(null);
   const [contact, setContact] = useState('');
   const [notes, setNotes] = useState('');
+  const [locale, setLocale] = useState<AppLanguage>(initialAppLanguage);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +73,9 @@ export default function OnboardingScreen() {
         gender,
         emergency_contact: contact.trim(),
         health_notes: notes.trim(),
+        locale,
       });
+      await setAppLanguage(locale);
       router.replace('/(tabs)' as Href);
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('onboarding.errorUnknown');
@@ -68,7 +83,7 @@ export default function OnboardingScreen() {
     } finally {
       setBusy(false);
     }
-  }, [ageText, busy, contact, gender, name, notes, router, t]);
+  }, [ageText, busy, contact, gender, locale, name, notes, router, t]);
 
   return (
     <>
@@ -96,6 +111,42 @@ export default function OnboardingScreen() {
           <Text style={[styles.hint, { color: palette.textSecondary }]} maxFontSizeMultiplier={1.45}>
             {t('onboarding.hintSkip')}
           </Text>
+
+          <Text style={[styles.label, { color: palette.text }]} maxFontSizeMultiplier={1.45}>
+            {t('onboarding.languageLabel')}
+          </Text>
+          <Text
+            style={[styles.genderHint, { color: palette.textSecondary }]}
+            maxFontSizeMultiplier={1.45}>
+            {t('onboarding.languageHint')}
+          </Text>
+          <View style={styles.genderRow}>
+            {LANGUAGE_OPTIONS.map((code) => {
+              const selected = locale === code;
+              return (
+                <Pressable
+                  key={code}
+                  onPress={() => setLocale(code)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={t(`onboarding.languageOption.${code}`)}
+                  style={({ pressed }) => [
+                    styles.genderChip,
+                    {
+                      borderColor: palette.dockBorder,
+                      backgroundColor: selected ? palette.selectedBackground : palette.background,
+                      opacity: pressed ? 0.85 : 1,
+                    },
+                  ]}>
+                  <Text
+                    style={[styles.genderChipText, { color: palette.text }]}
+                    maxFontSizeMultiplier={1.45}>
+                    {t(`onboarding.languageOption.${code}`)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           <Text style={[styles.label, { color: palette.text }]} maxFontSizeMultiplier={1.45}>
             {t('onboarding.nameLabel')}

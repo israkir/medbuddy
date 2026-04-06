@@ -144,6 +144,7 @@ class UserDataPort(Protocol):
         emergency_contact: str | None,
         health_notes: str | None,
         timezone: str | None = None,
+        locale: str = "zh-TW",
     ) -> dict[str, Any]: ...
 
     async def patch_user_profile(

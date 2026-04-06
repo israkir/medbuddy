@@ -1,5 +1,7 @@
 # MedBuddy — covered use cases
 
+**Disclaimer:** MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
+
 This document summarizes behaviors the codebase implements today: what the user can do, an example, and how the backend handles it. All assistant replies share the core pipeline **`run_assistant_text_turn`** unless noted.
 
 ---
@@ -131,15 +133,9 @@ Classification is done by the configured **LLM** (e.g. Gemini) or **mock rules**
 
 ## Caching & data (when Supabase is configured)
 
-| Layer | Table / behavior | Role |
-|--------|------------------|------|
-| User + meds | `users`, `medications` | Source of truth for list/add/remove and patient context string |
-| Turns | `conversation_turns` | Recent dialogue for the LLM |
-| Reference | `drug_reference_cache` | Shared label snippets per `source` + normalized `query_key` |
-| Personalization | `drug_personalization_cache` | Per-user LLM answer for explain/interaction fingerprints; **`llm_meta.source`** is **`openfda`** / **`tfda`** when label snippets were used, else the **LLM model id** (model-only grounding) |
-| Dose reminders | `dose_events`, **`users.timezone`** (IANA; default **Asia/Taipei**; app onboarding or **`patch_user_profile`** can set it) | Prototype LINE **push** at **`scheduled_at`** via **arq** + **`REDIS_URL`** after add/remove medication; see **[`docs/reminders.md`](reminders.md)** |
+Table-by-table detail: **[`docs/features.md`](features.md#6-persistence-and-caching-supabase)**. Reminder scheduling and **`users.timezone`**: **[`docs/reminders.md`](reminders.md)**.
 
-Without Supabase, users/conversations stay in memory and **drug_caches** / **CachingDrugData** are not wired.
+Without Supabase, users and conversations stay in memory; drug reference/personalization caches are not wired.
 
 ---
 
