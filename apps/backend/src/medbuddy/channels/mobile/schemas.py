@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -43,3 +44,26 @@ class MeResponse(BaseModel):
     emergency_contact: str | None = None
     health_notes: str | None = None
     onboarding_completed_at: str | None = None
+
+
+class MedicationSummaryItemResponse(BaseModel):
+    name: str
+    dosage: str
+    schedule: str
+    purpose: str
+    notes: str | None = None
+
+
+class HealthSummaryResponse(BaseModel):
+    """Doctor-ready health summary returned by ``GET /v1/app/summary``."""
+
+    generated_at: datetime
+    summary_for_doctor: str = Field(
+        description="Concise clinical paragraph suitable for a doctor."
+    )
+    medications: list[MedicationSummaryItemResponse]
+    key_concerns: list[str]
+    reported_symptoms: list[str]
+    medication_adherence_notes: str
+    recommended_questions: list[str]
+    plain_text: str = Field(description="Full summary as a single formatted text block.")

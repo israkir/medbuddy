@@ -19,6 +19,9 @@
     "pending_title": "待接入",
     "pending_body": "（請在 MVP 接入 info.fda.gov.tw 快取層）"
   },
+  "agent": {
+    "generic_error": "系統暫時無法完成您的請求，請稍後再試，或聯絡家人協助。"
+  },
   "mocks": {
     "drugs": {
       "tfda_title": "查詢：{query}",
@@ -28,7 +31,14 @@
     "llm": {
       "reply_template": "（測試模式）我聽懂了：{user_message}",
       "simplify_prefix": "（白話說明）重點摘錄：{excerpt}",
-      "medication_added": "（測試模式）已幫你記下 {name}（{dosage}）。請照這個時間吃：{schedule}。參考摘錄：{drug_summary}"
+      "medication_added": "（測試模式）已幫你記下 {name}（{dosage}）。請照這個時間吃：{schedule}。參考摘錄：{drug_summary}",
+      "interaction_disclaimer": "（測試模式）以上為示意資訊，請務必諮詢醫師或藥師。",
+      "summary_purpose_placeholder": "（用途待確認）",
+      "summary_no_meds": "尚無用藥",
+      "health_summary_doctor": "（測試摘要）患者目前用藥：{med_list}。詳情請面談。",
+      "summary_concern_placeholder": "請於就診時確認目前用藥是否合適",
+      "summary_adherence_placeholder": "（測試模式）無用藥順從性問題記錄",
+      "summary_question_placeholder": "我現在的藥有沒有要注意的交互作用？"
     },
     "stt": {
       "default_transcript": "我今天有吃藥了嗎？"
