@@ -1,76 +1,160 @@
 # MedBuddy
 
-MedBuddy is a **patient-facing medication companion**: a FastAPI backend plus an **Expo (React Native)** app. People can interact through **LINE** and/or the **standalone mobile client**; both channels share the same assistant, drug lookup, and persistence logic.
+MedBuddy is a **patient-facing medication companion** — a FastAPI backend paired with an **Expo (React Native)** mobile app. Patients interact through **LINE Messaging** and/or the **standalone mobile client**; both channels share the same agent, drug lookup, and persistence layer.
 
-This repository is a **monorepo**. Use the docs linked below for day-to-day development; the backend and frontend READMEs hold environment variables, mocks, and deployment detail.
+This is a **monorepo**. See the per-app READMEs for day-to-day development details.
+
+> **Disclaimer:** MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
+
+---
+
+## Architecture at a glance
+
+```
+┌──────────────┐   ┌──────────────────────┐
+│  LINE Messaging │   │  Expo (React Native)  │
+│  (webhook)      │   │  iOS & Android app    │
+└──────┬──────┘   └──────────┬───────────┘
+       │                     │
+       ▼                     ▼
+┌──────────────────────────────────────────┐
+│             FastAPI backend              │
+│  /v1/line/...        /v1/app/...         │
+│                                          │
+│   channels/line    channels/mobile       │
+│           ↓               ↓              │
+│      application/assistant_turn()        │
+│              ↓                           │
+│         agents/MedicationAgent           │
+│    (intent → tool dispatch)              │
+│              ↓                           │
+│   protocols/ports (hexagonal boundary)  │
+│      ↓           ↓          ↓            │
+│  integrations/  integrations/ integrations/
+│  gemini_llm    supabase_stores drugs_http│
+└──────────────────────────────────────────┘
+         ↓              ↓
+    Supabase (Postgres)  Google Gemini
+    Redis + arq          OpenFDA / TFDA
+```
+
+The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern. See [`docs/architecture.md`](docs/architecture.md) for the full technical design.
+
+---
 
 ## Prerequisites
 
-- **[GNU Make](https://www.gnu.org/software/make/)** — task runner at the repo root (`make` / `make help`).
-- **Backend:** Python **3.11+** (virtualenv created via `make be-install`).
-- **Frontend:** [Node.js](https://nodejs.org/) and npm (see `apps/frontend/`).
+- **[GNU Make](https://www.gnu.org/software/make/)** — task runner (`make` / `make help`).
+- **Backend:** Python **3.11+** (virtualenv created automatically by `make be-install`).
+- **Frontend:** [Node.js](https://nodejs.org/) 18+ and npm.
+
+---
 
 ## Quick start
 
-**Backend** (from the repository root):
+**Backend** (mock integrations — no external API keys needed):
 
 ```bash
-make be-install   # create .venv + install backend deps
-make be-dev       # API with reload (mock integrations by default)
-make be-test      # pytest
+make be-install       # create .venv + install all backend extras
+make be-dev-mock      # API with hot-reload, all external calls mocked
+make be-test          # pytest suite
 ```
 
 **Frontend:**
 
 ```bash
-make fe-install   # npm install in apps/frontend
-make fe-dev       # Expo dev server (mock data by default)
-make fe-check     # ESLint + TypeScript
+make fe-install       # npm install in apps/frontend
+make fe-dev           # Expo dev server (mock data, no backend needed)
+make fe-check         # ESLint + TypeScript
 ```
 
-Run **`make`** or **`make help`** for all targets (`be-*` backend, `fe-*` frontend).
+Run **`make`** or **`make help`** for all targets (`be-*` = backend, `fe-*` = frontend).
 
-Switching **mock vs real** integrations (env and Make aliases): [`apps/backend/README.md`](apps/backend/README.md#mock-vs-real-integrations) · mobile flags: [`apps/frontend/.env.example`](apps/frontend/.env.example) and **`make fe-dev-api`**.
+**Docker (mock, no secrets needed):**
+
+```bash
+make be-compose       # podman/docker compose up --build
+# API at http://localhost:8000
+```
+
+**Switch to real integrations:** see [Mock vs real](apps/backend/README.md#mock-vs-real-integrations) and copy [`.env.example`](apps/backend/.env.example).
+
+---
 
 ## Repository layout
 
 | Path | Role |
 |------|------|
-| [`apps/backend/`](apps/backend/) | FastAPI: LINE webhooks (`/v1/line/...`) and app JSON (`/v1/app/...`); shared `medbuddy` package |
-| [`apps/frontend/`](apps/frontend/) | Expo app (iOS & Android) — patient UI prototype |
-| [`compose.yaml`](compose.yaml) | Container orchestration (with repo-root `Dockerfile`) |
-| [`render.yaml`](render.yaml) | [**Render**](https://render.com/) blueprint — see [Deploy on Render](apps/backend/README.md#deploy-on-render) |
+| [`apps/backend/`](apps/backend/) | FastAPI service — LINE webhooks, mobile REST API, agent core |
+| [`apps/frontend/`](apps/frontend/) | Expo app (iOS & Android) — patient UI |
+| [`Dockerfile`](Dockerfile) | Repo-root image (API + optional arq worker) |
+| [`compose.yaml`](compose.yaml) | Local container orchestration |
+| [`render.yaml`](render.yaml) | [Render](https://render.com/) blueprint — see [Deploy on Render](apps/backend/README.md#deploy-on-render) |
+| [`Makefile`](Makefile) | Root task runner |
+
+---
+
+## API endpoints (overview)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Plain-text liveness (load balancers) |
+| `POST /v1/line/webhook` | LINE Messaging API webhook |
+| `GET /v1/app/health` | JSON health for mobile clients |
+| `GET /v1/app/info` | Public service metadata |
+| `GET /v1/app/me` | User profile |
+| `POST /v1/app/onboarding` | First-run profile save |
+| `POST /v1/app/messages` | Chat turn (returns `{"reply":"…"}`) |
+| `GET /v1/app/summary` | Doctor-ready health summary |
+| `POST /internal/reminders/reconcile` | Cron safety net for dose reminders |
+
+Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#api-reference).
+
+---
 
 ## Documentation
 
-| Resource | What you’ll find |
+| Resource | What you'll find |
 |----------|------------------|
-| [`docs/features.md`](docs/features.md) | Product features at a glance (channels, assistant, data, reminders) |
-| [`docs/use-cases.md`](docs/use-cases.md) | Product flows, example utterances, channels, intents, caches |
-| [`docs/reminders.md`](docs/reminders.md) | LINE dose reminders: Supabase `dose_events`, arq/Redis, API+worker in one container (or split), reconcile |
-| [`apps/backend/README.md`](apps/backend/README.md) | Package layout, env vars, mocks, LINE/mobile auth, localization, deploy |
+| [`docs/architecture.md`](docs/architecture.md) | **Technical design document** — architecture, data model, API reference, integrations, security |
+| [`docs/features.md`](docs/features.md) | Product features at a glance (channels, assistant, caching, reminders) |
+| [`docs/use-cases.md`](docs/use-cases.md) | Narrated flows, example utterances, channels, intents |
+| [`docs/reminders.md`](docs/reminders.md) | LINE dose reminders: schema, arq/Redis, Compose, Render, reconcile |
+| [`docs/privacy.md`](docs/privacy.md) | PII handling, LLM redaction, profile parsing, compliance notes |
+| [`apps/backend/README.md`](apps/backend/README.md) | Package layout, env vars, mock vs real, LINE testing, deploy |
 | [`apps/frontend/README.md`](apps/frontend/README.md) | Expo workflow, mock vs API, i18n, simulator targets |
-| [`CHANGELOG.md`](CHANGELOG.md) | [Keep a Changelog](https://keepachangelog.com/) history and notable behavior changes |
+| [`CHANGELOG.md`](CHANGELOG.md) | [Keep a Changelog](https://keepachangelog.com/) history |
 
-## Integrations (overview)
+---
 
-The backend can use **mock** adapters or real services: **LINE Messaging API**, **Google Gemini**, **Whisper** (HTTP STT), **edge-tts**, **OpenFDA** / TFDA placeholders, and optional **Supabase** — all driven by environment variables. For tables, defaults, and wiring, see **`apps/backend/README.md`**.
+## Integrations (summary)
+
+| Service | Role | Required for real mode |
+|---------|------|----------------------|
+| **LINE Messaging API** | Webhook + push reminders | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` |
+| **Google Gemini** (`gemini-2.5-flash`) | Intent classification, reply composition, extraction | `GEMINI_API_KEY` |
+| **Supabase (Postgres)** | Users, medications, conversations, drug caches, dose events | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
+| **Redis + arq** | Deferred dose reminder jobs | `REDIS_URL` |
+| **OpenFDA HTTP** | Drug label grounding | automatic (HTTP) |
+| **Whisper HTTP** | Speech-to-text for LINE voice | `WHISPER_SERVICE_URL` |
+| **edge-tts** | Text-to-speech for LINE voice replies | installed via `[tts]` extra |
+
+All integrations have **mock adapters** — run the full stack locally with `MEDBUDDY_INTEGRATION=mock`.
+
+---
 
 ## Localization
 
-- **Backend:** JSON under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); server default via `MEDBUDDY_LOCALE` / `.env` (see `apps/backend/.env.example`).
-- **Frontend:** `i18next` + JSON under `apps/frontend/locales/`.
+- **Backend:** `apps/backend/src/medbuddy/locales/` — `zh-TW.json` (primary) and `en.json`; server locale via `MEDBUDDY_LOCALE` (default `zh-TW`).
+- **Frontend:** `apps/frontend/locales/` — same language pair; user overrides saved in AsyncStorage.
 
-Adding a language: add matching `*.json` in both trees and register in backend settings/loaders and `apps/frontend/i18n/index.ts` (details in the per-app READMEs).
+---
 
 ## Contributing and quality
 
-- Install hooks after backend setup: **`make pre-commit-install`**. Run **`make pre-commit-run`** before a large change-set.
-- Backend: **`make be-lint`**, **`make be-fmt`**, **`make be-check`**. Frontend: **`make fe-lint`** / **`make fe-check`**.
-- User-visible or behavior changes should be reflected in [`CHANGELOG.md`](CHANGELOG.md) per repo convention.
+1. Install hooks after backend setup: **`make pre-commit-install`**.
+2. Backend: **`make be-check`** (lint + format + tests). Frontend: **`make fe-check`** (ESLint + TypeScript).
+3. Behavior changes → add an entry in [`CHANGELOG.md`](CHANGELOG.md).
+4. Keep secrets in `.env` files (see each app's `.env.example`).
 
-Pull requests are welcome. Keep secrets out of git; use `.env` files from each app’s `.env.example`.
-
-## Disclaimer
-
-MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
+Pull requests are welcome.

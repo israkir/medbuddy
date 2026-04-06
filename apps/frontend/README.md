@@ -1,55 +1,99 @@
 # MedBuddy mobile app (Expo)
 
-React Native client for **iOS** and **Android**, built with [Expo](https://docs.expo.dev/) and [expo-router](https://docs.expo.dev/router/introduction/).
+React Native client for **iOS** and **Android** built with [Expo](https://docs.expo.dev/) and [expo-router](https://docs.expo.dev/router/introduction/). Supports **繁體中文（台灣）** and English.
 
 Paths below are relative to **`apps/frontend/`**.
 
+---
+
+## Screen map
+
+| Screen | File | Description |
+|--------|------|-------------|
+| **Onboarding** | `app/onboarding.tsx` | First-run form — name, age, gender, emergency contact, health notes. Gated in `app/_layout.tsx` until completed. |
+| **Today** | `app/(tabs)/index.tsx` | Greeting, pending dose card, link to companion |
+| **Medications** | `app/(tabs)/medications.tsx` | Medication catalog, "Listen" (expo-speech), visit questions panel, hold-to-talk (expo-av) |
+| **Family** | `app/(tabs)/family.tsx` | Informational copy + "invite" placeholder |
+| **Settings** | `app/(tabs)/settings.tsx` | Language picker (zh-TW / English), profile view |
+| **Companion** | `app/companion.tsx` | Chat UI — messages, suggested prompts, read-aloud, rotating starter chips |
+| **Doctor summary** | `app/doctor-summary.tsx` | Structured doctor-ready draft — main concern, symptoms, med changes, questions; Share as plain text; backed by AsyncStorage draft |
+
+---
+
 ## Makefile (from repository root)
 
-From the repo root: **`make fe-install`** → **`make fe-dev`** or **`make fe-dev-mock`** (mock data, default) / **`make fe-dev-api`** (`EXPO_PUBLIC_USE_MOCK_DATA=false` for a future live API).
-
 | Make target | What it runs |
-|-------------|----------------|
-| **`make fe-build`** | `npm run typecheck` (`tsc --noEmit`) only |
-| **`make fe-run-ios`** | **`npx expo run:ios`** — native app on **iOS Simulator** (requires Xcode) |
-| **`make fe-run-android`** | **`npx expo run:android`** — native app on **Android Emulator** (requires Android SDK + AVD) |
-| **`make fe-lint`** / **`make fe-check`** | `npm run check` → **ESLint** + **TypeScript** (same as `cd apps/frontend && npm run check`) |
+|-------------|--------------|
+| `make fe-install` | `npm install` in `apps/frontend` |
+| `make fe-dev` / `make fe-dev-mock` | Expo dev server, mock data (default) |
+| `make fe-dev-api` | `EXPO_PUBLIC_USE_MOCK_DATA=false` — uses live backend |
+| `make fe-build` | `tsc --noEmit` (TypeScript check only) |
+| `make fe-run-ios` | `npx expo run:ios` — native iOS Simulator (requires Xcode) |
+| `make fe-run-android` | `npx expo run:android` — native Android Emulator (requires SDK + AVD) |
+| `make fe-lint` / `make fe-check` | ESLint + TypeScript (same as `npm run check`) |
 
-In this directory you can also run **`npm run lint`** (ESLint with `eslint-config-expo`), **`npm run typecheck`**, or **`npm run check`** (both). **`npm run lint:fix`** applies ESLint auto-fixes.
+You can also run scripts directly from `apps/frontend/`: `npm run lint`, `npm run typecheck`, `npm run check`, `npm run lint:fix`.
+
+---
 
 ## Mock vs real API
 
-Copy [`.env.example`](.env.example) to **`.env`** here. Flags are read at bundle time via **`EXPO_PUBLIC_*`**:
+Copy [`.env.example`](.env.example) to `.env` here. Flags are read at bundle time via `EXPO_PUBLIC_*`:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `EXPO_PUBLIC_USE_MOCK_DATA` | `true` | Prototype uses local/mock data until HTTP clients are wired. |
-| `EXPO_PUBLIC_API_BASE_URL` | `http://127.0.0.1:8000` | Backend base URL for future requests. |
+| `EXPO_PUBLIC_USE_MOCK_DATA` | `true` | Use local mock responses (no backend needed). |
+| `EXPO_PUBLIC_API_BASE_URL` | `http://127.0.0.1:8000` | Backend base URL when not in mock mode. |
 
-Runtime helpers: [`constants/integration.ts`](constants/integration.ts) (`useMockData`, `apiBaseUrl`).
+Runtime helpers: [`constants/integration.ts`](constants/integration.ts).
+
+When `EXPO_PUBLIC_USE_MOCK_DATA=false`, the companion and doctor-summary screens call the backend:
+- `POST /v1/app/messages` — chat turns
+- `GET /v1/app/summary` — doctor-ready health summary
+
+Both require `X-App-User-Id` header (stable per-install ID) and optionally `Authorization: Bearer <token>`.
+
+---
 
 ## Language in the UI
 
-The **設定 / Settings** tab lets users choose **繁體中文（台灣）** or **English**. The choice is stored with **`@react-native-async-storage/async-storage`** (`i18n/languageStorage.ts`) and applied on launch before the splash screen hides. Device locale still sets the **first** run until the user picks a language (then the saved value wins).
+The **Settings** tab lets users choose **繁體中文（台灣）** or **English**. The preference is stored in AsyncStorage (`i18n/languageStorage.ts`) and applied before the splash screen hides. Device locale seeds the **first** run; after that, the saved value wins.
+
+---
 
 ## Localization
 
 UI strings live in JSON files, not in components:
 
-- **`locales/zh-TW.json`** — Traditional Chinese (Taiwan), default fallback.
-- **`locales/en.json`** — English.
+- `locales/zh-TW.json` — Traditional Chinese (Taiwan), default fallback.
+- `locales/en.json` — English.
 
-The app uses **i18next** + **react-i18next**. In screens, use **`useTranslation()`** and **`t('section.key')`**. Initial language comes from **`expo-localization`** (`getLocales()`): Chinese tags map to **`zh-TW`**, English to **`en`**, otherwise **`zh-TW`**. See [`i18n/index.ts`](i18n/index.ts).
+The app uses **i18next** + **react-i18next**. In screens: `useTranslation()` + `t('section.key')`. Initial language from `expo-localization`: Chinese tags → `zh-TW`, English → `en`, else `zh-TW`. See [`i18n/index.ts`](i18n/index.ts).
 
-To add a language: add `locales/<lang>.json`, import it in `i18n/index.ts`, and add it to the `resources` map and to `resolveInitialLanguage()` if it should auto-select from the device.
+To add a language: add `locales/<lang>.json`, import it in `i18n/index.ts`, add to `resources` map and `resolveInitialLanguage()`.
 
-## Integrations (prototype)
+---
 
-| Feature | Notes |
-|---------|--------|
-| **expo-speech** | “Listen” explanations for sample medications (`zh-TW` / `en-US` TTS; follows app language from Settings / device). |
-| **expo-av** | Hold-to-talk recording (tab bar mic; medication “visit questions” panel). Prototype flow shows an alert after recording. |
-| **AsyncStorage** | App language preference (`i18n/languageStorage.ts`); optional text + voice timestamp for medication visit notes (`storage/medicationQuestionNotes.ts`). |
-| **Backend / LINE** | HTTP client not wired in this baseline; copy in `locales` describes LINE + future family invite. |
+## Integrations
 
-Native builds for **simulation**: from the repo root **`make fe-run-ios`** / **`make fe-run-android`**, or from this directory **`npx expo run:ios`** / **`npx expo run:android`** (Xcode + Simulator / Android SDK + Emulator). Production and TestFlight / Play internal tracks typically use [EAS Build](https://docs.expo.dev/build/introduction/).
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **expo-speech** | Implemented | "Listen" for medication explanations (zh-TW / en-US follows app language) |
+| **expo-av** | Prototype | Hold-to-talk recording; shows alert after recording — not wired to backend STT (LINE voice is the primary voice path) |
+| **AsyncStorage** | Implemented | Language preference, visit notes draft, doctor summary draft |
+| **Backend API** | Conditional | Enabled when `EXPO_PUBLIC_USE_MOCK_DATA=false`; uses `companionApi.ts` |
+
+---
+
+## Native builds
+
+**Simulator (development):**
+
+```bash
+make fe-run-ios      # or: npx expo run:ios
+make fe-run-android  # or: npx expo run:android
+```
+
+**Production / TestFlight / Play internal tracks:** use [EAS Build](https://docs.expo.dev/build/introduction/).
+
+App config: [`app.json`](app.json) (iOS bundle ID: `com.medbuddy.app`, Android package: `com.medbuddy.app`).

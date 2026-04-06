@@ -29,6 +29,7 @@ All routes below use **`X-App-User-Id`** (stable id per install or account, 4–
 | **`GET /v1/app/me`** | Returns **`app_user_id`** and profile: **`preferred_name`**, **`age_years`**, **`gender`**, **`emergency_contact`**, **`health_notes`**, **`onboarding_completed_at`**. |
 | **`POST /v1/app/onboarding`** | Body: **`preferred_name`** (required), optional **`age_years`**, **`gender`** (`female` \| `male` \| `non_binary` \| `prefer_not_say` \| `other`), **`emergency_contact`**, **`health_notes`**. Persists via **`UserDataPort.save_onboarding_profile`**; response mirrors **`GET /me`**. |
 | **`POST /v1/app/messages`** | Body: **`text`** (1–8000 chars). Resolves auth → **`run_assistant_text_turn(user_key=app_user_id, user_text)`** → **`{"reply":"…"}`**. |
+| **`GET /v1/app/summary`** | Returns a structured doctor-ready health summary (main concern, symptoms, optional vitals, med changes, questions, carer note). Backed by `GenerateHealthSummaryTool` via the agent; the Expo app also stores a local draft in AsyncStorage. |
 
 ### 1.3 Global / ops routes
 
@@ -40,7 +41,26 @@ All routes below use **`X-App-User-Id`** (stable id per install or account, 4–
 
 ---
 
-## 2. Shared assistant pipeline
+## 2. Agent layer (hexagonal + agent-dispatch)
+
+The backend follows **hexagonal architecture** (ports & adapters): `agents/` and `application/` call `protocols/` interfaces; `container.py` wires concrete adapters (mock or real) at startup so no business logic imports from `integrations/` directly.
+
+`MedicationAgent` (`agents/medication_agent.py`) maps each classified intent to a typed `AgentTool` and executes it:
+
+| Tool class | Intent(s) | Location |
+|------------|-----------|----------|
+| `ListMedicationsTool` | `list_medications` | `agents/tools/medication_crud.py` |
+| `AddMedicationTool` | `add_medication` | `agents/tools/medication_crud.py` |
+| `RemoveMedicationTool` | `remove_medication` | `agents/tools/medication_crud.py` |
+| `ExplainMedicationTool` | `explain_medication` | `agents/tools/drug_lookup.py` |
+| `InteractionCheckTool` | `interaction_check` | `agents/tools/interaction_check.py` |
+| `GenerateHealthSummaryTool` | `request_summary` | `agents/tools/health_summary.py` |
+
+Each tool returns a `ToolResult` (text reply + optional metadata) and is fully testable in isolation with mock ports.
+
+---
+
+## 3. Shared assistant pipeline
 
 **`run_assistant_text_turn`** (see `application/assistant_turn.py`) is the **single core** for LINE text/voice (after STT) and **`POST /v1/app/messages`**.
 
@@ -54,17 +74,17 @@ All routes below use **`X-App-User-Id`** (stable id per install or account, 4–
 
 ---
 
-## 3. Assistant intents (full list)
+## 4. Assistant intents (full list)
 
 Identifiers match **`Intent`** in `medbuddy.models.domain`.
 
-### 3.1 `list_medications`
+### 4.1 `list_medications`
 
 - **User goal:** See everything saved on their list (“我的藥清單”, “What’s on my med list?”).
 - **Behavior:** **No LLM compose** for the list body. Response built from **`UserDataPort.list_medications`** plus i18n intro / empty state.
 - **Display context:** Can use **`build_patient_context_for_chat_display`** so the user sees **full** stored profile lines where the product echoes them; that string is **not** for external LLM APIs (see [`privacy.md`](privacy.md)).
 
-### 3.2 `add_medication`
+### 4.2 `add_medication`
 
 - **User goal:** Add a drug with dose and schedule in natural language.
 - **Extraction:** LLM JSON or mock heuristics → **`MedicationDraft`** (name, dosage, schedule, optional **`instructions_zh`**). If **no drug name** → i18n **`medication.add_incomplete`** (no full compose).
@@ -73,13 +93,13 @@ Identifiers match **`Intent`** in `medbuddy.models.domain`.
 - **Reply:** **`LLMPort.compose_medication_added_reply`** — restates schedule in plain language, **one–two sentences** of grounded context, safety disclaimer; on failure → i18n **`medication.added`** template.
 - **Reminders:** When Supabase + reminder wiring apply, successful add triggers **`sync_upcoming_dose_events`** and optional arq enqueue (see §7).
 
-### 3.3 `remove_medication`
+### 4.3 `remove_medication`
 
 - **User goal:** Stop tracking a med (“停藥普拿疼”, “remove Tylenol”).
 - **Behavior:** Resolve row (LLM JSON or mock name match) → **`delete_medication`** → i18n confirmation or not-found.
 - **Reminders:** Same dose-event rebuild hook as add when configured.
 
-### 3.4 `explain_medication`
+### 4.4 `explain_medication`
 
 - **User goal:** Understand what a drug is for, how to think about timing, etc.
 - **Personalization cache (Supabase):** If **`drug_personalization_cache`** has a fresh row for `(user, query_fingerprint)` — fingerprint includes **hash of current medication list (de-identified context)** — return cached text, append conversation turns, **skip** remote fetch and LLM.
@@ -87,24 +107,24 @@ Identifiers match **`Intent`** in `medbuddy.models.domain`.
 - **Then:** Load history, store user turn; hooks / medication short-circuits if any; else **`compose_reply`** with persona, **LLM-safe patient context**, grounding, history.
 - **After compose:** Upsert personalization row; **`llm_meta.source`** is **`openfda`** / **`tfda`** when registry grounding was used, else **model id** (or mock). Optional **`medication_id`** / **`reference_cache_id`** when resolvable.
 
-### 3.5 `interaction_check`
+### 4.5 `interaction_check`
 
 - **User goal:** Drug–drug or combination cautions (“阿斯匹靈可以跟抗凝血藥一起吃嗎？”).
 - **Behavior:** Same pipeline as explain: personalization hit → reference cache → **`compose_reply`** with **interaction-focused** system add-on → optional cache save.
 
-### 3.6 `update_profile`
+### 4.6 `update_profile`
 
 - **User goal:** Change preferred name, age, emergency contact, health notes, gender, etc. via chat.
 - **Behavior:** **`UserDataPort.patch_user_profile`** driven by **`parse_profile_patch_from_text`** — **local heuristics**, **no** LLM “extract JSON” for stored PII fields.
 
-### 3.7 `confirm_dose` / `log_vital` / `request_summary` / `general_question`
+### 4.7 `confirm_dose` / `log_vital` / `request_summary` / `general_question`
 
 - **Examples:** Double-dose concern, “blood pressure 130/85”, “summarize in three bullets”, small talk.
 - **Behavior:** No automatic drug API prefetch in the main turn (unlike explain/interaction/add ack). Replies via hooks, medication handlers, or **generic `compose_reply`** without the explain/interaction companion add-on **unless** the classified intent is one of those.
 
 ---
 
-## 4. Privacy and LLM data shaping
+## 5. Privacy and LLM data shaping
 
 | Feature | Detail |
 |--------|--------|
@@ -118,7 +138,7 @@ Full detail: **[`privacy.md`](privacy.md)**.
 
 ---
 
-## 5. Persistence and caching (Supabase)
+## 6. Persistence and caching (Supabase)
 
 When **`SUPABASE_URL`** and **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_KEY`**) are set and the **`supabase`** extra is installed, **`UserDataPort`** and **`ConversationStorePort`** use Postgres (schema in **`apps/backend/supabase/schema.sql`**, RLS for **`anon`**).
 
@@ -135,7 +155,7 @@ When **`SUPABASE_URL`** and **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_
 
 ---
 
-## 6. Integrations (configurable)
+## 7. Integrations (configurable)
 
 | Integration | Role |
 |-------------|------|
@@ -152,7 +172,7 @@ When **`SUPABASE_URL`** and **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_
 
 ---
 
-## 7. LINE dose reminders (prototype)
+## 8. LINE dose reminders (prototype)
 
 | Feature | Detail |
 |--------|--------|
@@ -167,7 +187,7 @@ Architecture, Compose **`reminders`** profile, and **Render** single web service
 
 ---
 
-## 8. Expo (React Native) app features
+## 9. Expo (React Native) app features
 
 Paths relative to **`apps/frontend/`**.
 
@@ -183,7 +203,7 @@ Paths relative to **`apps/frontend/`**.
 
 ---
 
-## 9. Observability and quality
+## 10. Observability and quality
 
 | Feature | Detail |
 |--------|--------|
@@ -193,7 +213,7 @@ Paths relative to **`apps/frontend/`**.
 
 ---
 
-## 10. Extensibility
+## 11. Extensibility
 
 | Feature | Detail |
 |--------|--------|
@@ -201,7 +221,7 @@ Paths relative to **`apps/frontend/`**.
 
 ---
 
-## 11. Explicit non-goals (current codebase)
+## 12. Explicit non-goals (current codebase)
 
 - **Clinical diagnosis** or replacing pharmacist/doctor judgment (prompts push back).
 - **Full TFDA API** in production HTTP path (stub returns empty; mocks may fake TFDA).
@@ -214,6 +234,7 @@ Paths relative to **`apps/frontend/`**.
 
 | Doc | Focus |
 |-----|--------|
+| [`architecture.md`](architecture.md) | **Technical design** — architecture, data model, API reference, security |
 | [`use-cases.md`](use-cases.md) | Narrated flows, utterances, channel specifics |
 | [`reminders.md`](reminders.md) | Dose events, arq, Redis, worker, reconcile |
 | [`privacy.md`](privacy.md) | Redaction, LLM boundaries, profile parsing |

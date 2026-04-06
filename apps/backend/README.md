@@ -1,161 +1,235 @@
 # MedBuddy backend
 
-FastAPI service with **two delivery channels** on the same app: **LINE** (`/v1/line/...`) and the **standalone mobile client** (`/v1/app/...`). Protocol-based integrations and **mock adapters** are shared via [`container.py`](src/medbuddy/container.py).
+FastAPI service with **two delivery channels** sharing a single assistant core: **LINE** (`/v1/line/...`) and the **standalone mobile client** (`/v1/app/...`). The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern for intent routing.
 
 Paths below are relative to **`apps/backend/`**.
 
+---
+
+## Architecture overview
+
+```
+channels/line/   channels/mobile/
+      ↓                 ↓
+   application/assistant_turn.py    ← single entry point for both channels
+          ↓
+   agents/MedicationAgent           ← intent → tool dispatch
+          ↓
+   agents/tools/                    ← medication CRUD, drug lookup, interactions, summary
+          ↓
+   protocols/ports.py               ← abstract interfaces (hexagonal boundary)
+    ↓           ↓         ↓
+integrations/  integrations/ integrations/
+gemini_llm    supabase_stores  drugs_http
+(or mocks)    (or in-memory)  (or mock)
+```
+
+**Hexagonal principle:** `agents/` and `application/` never import from `integrations/` directly — they call `protocols/` interfaces. `container.py` wires concrete adapters at startup.
+
+---
+
 ## Package layout
 
-| Area | Role |
-|------|------|
-| [`channels/line/`](src/medbuddy/channels/line/) | LINE webhook, signature verification, LINE-specific event pipeline |
-| [`channels/mobile/`](src/medbuddy/channels/mobile/) | Standalone app JSON API: `auth` (Bearer + `X-App-User-Id`), `schemas`, `routes` (`/me`, `/messages`) |
-| [`application/`](src/medbuddy/application/) | Shared use cases: [`assistant_turn.py`](src/medbuddy/application/assistant_turn.py), [`medication_intents.py`](src/medbuddy/application/medication_intents.py) (text add/list/remove meds) |
-| [`http/shared_routes.py`](src/medbuddy/http/shared_routes.py) | Ops health and `/internal-media/...` (LINE-accessible audio URLs) |
-| [`engine/`](src/medbuddy/engine/) | Shared types (`AppServices`, …) |
-| [`integrations/`](src/medbuddy/integrations/), [`protocols/`](src/medbuddy/protocols/) | Adapters and ports — unchanged |
+| Area | Path | Role |
+|------|------|------|
+| **Channels** | `channels/line/` | LINE webhook, HMAC signature verification, event pipeline |
+| | `channels/mobile/` | Mobile REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
+| **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
+| | `application/medication_intents.py` | Medication add / list / remove handlers |
+| | `application/profile_intents.py` | Profile update handler (local parsing, no LLM) |
+| **Agents** | `agents/medication_agent.py` | `MedicationAgent` — maps intents to tools and executes them |
+| | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
+| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `RemoveMedicationTool` |
+| | `agents/tools/drug_lookup.py` | `ExplainMedicationTool` (grounding + LLM compose + cache) |
+| | `agents/tools/interaction_check.py` | `InteractionCheckTool` |
+| | `agents/tools/health_summary.py` | `GenerateHealthSummaryTool` (doctor-ready output) |
+| **Models** | `models/domain.py` | `Intent` enum, `MedicationDraft`, `MedicationRecord`, `ConversationTurn` |
+| **Protocols** | `protocols/ports.py` | Abstract interfaces: `LLMPort`, `UserDataPort`, `LineMessagingPort`, etc. |
+| | `protocols/drug_caches.py` | `DrugCachesPort` |
+| **Engine** | `engine/types.py` | `AppServices` dataclass — DI container |
+| **Container** | `container.py` | `build_app_services(settings)` — wires mock vs real adapters |
+| **Integrations** | `integrations/gemini_llm.py` | Google Gemini (intent classify, compose, extract) |
+| | `integrations/line_client.py` | LINE Messaging API SDK |
+| | `integrations/supabase_stores.py` | Supabase Postgres (users, meds, turns, dose events) |
+| | `integrations/drugs_http.py` | OpenFDA HTTP + TFDA stub |
+| | `integrations/caching_drugs.py` | `CachingDrugData` wrapper with TTL |
+| | `integrations/supabase_drug_caches.py` | `SupabaseDrugCaches` (personalization cache) |
+| | `integrations/edge_tts_service.py` | edge-tts TTS for LINE voice replies |
+| | `integrations/stt_whisper.py` | Whisper HTTP STT |
+| | `integrations/local_public_storage.py` | Short-lived audio URLs for LINE |
+| | `integrations/mocks/` | In-memory mock adapters for all ports |
+| **Privacy** | `privacy/redact.py` | `redact_pii_text()` — emails, phone patterns, digit runs |
+| | `privacy/profile_parse.py` | Local profile field extraction (no LLM) |
+| **Prompts** | `prompts/persona.py` | `get_system_persona()`, LLM-safe vs display patient context |
+| **Reminders** | `reminders/` | arq worker, dose scheduling, LINE push delivery, reconcile |
+| **Shared routes** | `http/shared_routes.py` | `/health`, `/internal-media/{id}`, `/internal/reminders/reconcile` |
+| **i18n** | `i18n.py` | `t()` — key lookup with zh-TW fallback |
+| **Config** | `config.py` | Pydantic Settings; loads `apps/backend/.env` then repo-root `.env` |
 
-Add new **LINE** behavior under `channels/line/`; extend **app-only** REST under `channels/mobile/`. Shared assistant logic belongs in **`application/`** so LINE and mobile do not duplicate LLM/drug/history steps.
+Add new **LINE** behavior in `channels/line/`; extend **app-only** REST in `channels/mobile/`. Shared assistant logic belongs in **`application/`** or **`agents/`** so channels never duplicate LLM or drug steps.
 
-**Standalone app auth:** set **`MEDBUDDY_MOBILE_BEARER_TOKEN`** for protected routes when not in mock mode. Clients send **`Authorization: Bearer <token>`** and **`X-App-User-Id`** (4–128 chars, stable id per install or account). If the token is unset and **`MOCK_EXTERNAL_SERVICES=true`**, Bearer is optional (development only).
+---
+
+## API endpoints
+
+### Shared / ops
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /health` | None | Plain-text liveness |
+| `GET /internal-media/{file_id}` | None | Serves short-lived TTS audio for LINE |
+| `POST /internal/reminders/reconcile` | `X-Cron-Secret` | Re-enqueues overdue, unsent dose reminder jobs |
+
+### LINE (`/v1/line`)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `POST /v1/line/webhook` | `X-Line-Signature` HMAC | Receives text, voice, and follow events |
+
+### Mobile app (`/v1/app`)
+
+All protected routes require **`X-App-User-Id`** (4–128 chars) and, in production, **`Authorization: Bearer <MEDBUDDY_MOBILE_BEARER_TOKEN>`**.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /v1/app/health` | None | JSON health check |
+| `GET /v1/app/info` | None | Public service metadata |
+| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes) |
+| `POST /v1/app/onboarding` | Bearer + User-Id | First-run profile save |
+| `POST /v1/app/messages` | Bearer + User-Id | Chat turn — `{"text":"…"}` → `{"reply":"…"}` |
+| `GET /v1/app/summary` | Bearer + User-Id | Doctor-ready structured health summary |
+
+---
 
 ## Makefile (from repository root)
 
-The [Makefile](../../Makefile) lives at the repo root. Backend targets use the **`be-`** prefix. Run **`make`** or **`make help`** for a grouped list.
+The [Makefile](../../Makefile) lives at the repo root. Backend targets use the **`be-`** prefix.
 
 | Area | Commands |
 |------|----------|
 | Environment | `make be-venv`, `make be-install` |
-| Run API | **`make be-dev-mock`** / **`make be-dev`** (reload, mocks), **`make be-dev-real`** (reload, real adapters + `.env`), **`make be-run-prod`**, **`make be-run-prod-real`**, optional `PORT=8080` |
-| Tests and quality | `make be-test`, `make be-test-verbose`, `make be-test-cov`, `make be-lint` (Ruff + **Black** `--check`), `make be-fmt` (**Black** format), `make be-check` |
+| Run API | **`make be-dev-mock`** / **`make be-dev`** (reload, mocks), **`make be-dev-real`** (reload, real + `.env`), `make be-run-prod`, optional `PORT=8080` |
+| Tests & quality | `make be-test`, `make be-test-verbose`, `make be-test-cov`, `make be-lint`, `make be-fmt`, `make be-check` |
 | Containers | `make be-compose`, `make be-build` |
-| Cleanup | `make be-clean`, `make be-clean-all` (removes repo-root `.venv`) |
+| Cleanup | `make be-clean`, `make be-clean-all` |
 
-Typical flow: `make be-install` → `make be-dev` → `make be-test`.
+Typical flow: `make be-install` → `make be-dev-mock` → `make be-test`.
+
+---
 
 ## Mock vs real integrations
 
 Switch without code changes:
 
-| Mechanism | Purpose |
-|-----------|---------|
-| **`MEDBUDDY_INTEGRATION`** | `mock` or `real` (aliases: `local`/`dev` → mock; `live`/`production` → real). When set, **overrides** `MOCK_EXTERNAL_SERVICES`. |
-| **`MOCK_EXTERNAL_SERVICES`** | `true` = in-memory LINE/STT/TTS/LLM/drugs/storage; `false` = real clients when keys/URLs are set. |
+| Variable | Values | Notes |
+|----------|--------|-------|
+| **`MEDBUDDY_INTEGRATION`** | `mock` / `real` | Aliases: `local`/`dev` → mock; `live`/`production` → real. **Overrides** `MOCK_EXTERNAL_SERVICES` when set. |
+| **`MOCK_EXTERNAL_SERVICES`** | `true` / `false` | `true` = in-memory adapters for LINE/STT/TTS/LLM/drugs/storage/users. Default `false`. |
 
-[`config.py`](src/medbuddy/config.py) loads **`apps/backend/.env`** first, then a **`.env`** in the current working directory (so a repo-root `.env` can override). **`make be-dev-mock`** exports `MEDBUDDY_INTEGRATION=mock` so a stray `real` entry in `.env` does not affect local mock runs. **`make be-dev-real`** exports `MEDBUDDY_INTEGRATION=real`; fill tokens in [`.env.example`](.env.example).
+[`config.py`](src/medbuddy/config.py) loads `apps/backend/.env` first, then a `.env` in the working directory (so a repo-root `.env` overrides). `make be-dev-mock` exports `MEDBUDDY_INTEGRATION=mock`; `make be-dev-real` exports `MEDBUDDY_INTEGRATION=real`.
 
-[Podman Compose](../../compose.yaml) defaults to `MEDBUDDY_INTEGRATION=mock`; run with `MEDBUDDY_INTEGRATION=real` (and real secrets) when you are ready to exercise external APIs.
+When **`RENDER=true`** (Render web services), settings force `MOCK_EXTERNAL_SERVICES=false`, `DEBUG=false`, and `MEDBUDDY_INTEGRATION=real` — a mis-set dashboard env cannot re-enable mocks in production.
 
-## Localization
-
-User-facing strings are **not** hardcoded in Python. They live in JSON files:
-
-- **`src/medbuddy/locales/zh-TW.json`** — primary locale (Taiwan Traditional Chinese).
-- **`src/medbuddy/locales/en.json`** — English mirror.
-
-Code loads copy with **`medbuddy.i18n.t`**, for example `t("prompts.system_persona", locale=svc.settings.locale)`. Keys use dotted paths; values may use `{name}`-style placeholders for `.format()`.
-
-**Settings**
-
-| Variable | Meaning |
-|----------|---------|
-| `MEDBUDDY_LOCALE` or `locale` | BCP 47 tag (`zh-TW`, `en`, …). Default: **`zh-TW`**. |
-
-Copy [`.env.example`](.env.example) to `apps/backend/.env` or the repo root `.env` and set `MEDBUDDY_LOCALE` as needed. The same `locale` is passed into integrations from [`container.py`](src/medbuddy/container.py) so LLM prompts and user-facing strings stay consistent.
-
-If a key is missing in the active locale, lookup falls back to **`zh-TW`**. For tests that replace locale files, call **`clear_i18n_cache()`** from `medbuddy.i18n`.
+---
 
 ## Integrations
 
-Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py): **`build_app_services(settings)`** chooses mock vs real implementations.
+Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py): `build_app_services(settings)` chooses mock vs real.
 
-| Port | Mock (`MEDBUDDY_INTEGRATION=mock` or `MOCK_EXTERNAL_SERVICES=true`) | Real (`MEDBUDDY_INTEGRATION=real` or `MOCK_EXTERNAL_SERVICES=false`) |
-|------|----------------------------------------|------------------|
-| **LINE** | [`integrations/mocks/line.py`](src/medbuddy/integrations/mocks/line.py) — records replies | [`integrations/line_client.py`](src/medbuddy/integrations/line_client.py) — needs `LINE_CHANNEL_ACCESS_TOKEN` |
-| **LLM** | [`integrations/mocks/llm.py`](src/medbuddy/integrations/mocks/llm.py) | [`integrations/gemini_llm.py`](src/medbuddy/integrations/gemini_llm.py) (**`GEMINI_API_KEY`**, default) or [`integrations/openai_llm.py`](src/medbuddy/integrations/openai_llm.py) (**`LLM_PROVIDER=openai`**, **`OPENAI_API_KEY`**, optional **`OPENAI_MODEL`**) — install with `pip install 'medbuddy-api[llm]'` |
-| **STT** | [`integrations/mocks/stt.py`](src/medbuddy/integrations/mocks/stt.py) | [`integrations/stt_whisper.py`](src/medbuddy/integrations/stt_whisper.py) — needs `WHISPER_SERVICE_URL` |
-| **TTS** | [`integrations/mocks/tts.py`](src/medbuddy/integrations/mocks/tts.py) | [`integrations/edge_tts_service.py`](src/medbuddy/integrations/edge_tts_service.py) — optional `edge-tts` extra |
-| **Drugs** | [`integrations/mocks/drugs.py`](src/medbuddy/integrations/mocks/drugs.py) | [`integrations/drugs_http.py`](src/medbuddy/integrations/drugs_http.py) — OpenFDA HTTP + TFDA stub |
-| **Object storage** | In-memory mock | [`integrations/local_public_storage.py`](src/medbuddy/integrations/local_public_storage.py) when `public_base_url` is set |
-| **Users / conversations** | In-memory mocks | [`integrations/supabase_stores.py`](src/medbuddy/integrations/supabase_stores.py) when **`SUPABASE_URL`** and **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_KEY`**) are set — install **`pip install 'medbuddy-api[supabase]'`**, apply [`supabase/schema.sql`](supabase/schema.sql) (RLS for `anon`); otherwise in-memory |
+| Port | Mock | Real |
+|------|------|------|
+| **LINE** | `integrations/mocks/line.py` | `integrations/line_client.py` — needs `LINE_CHANNEL_ACCESS_TOKEN` |
+| **LLM** | `integrations/mocks/llm.py` | `integrations/gemini_llm.py` — needs `GEMINI_API_KEY`; install `[llm]` extra |
+| **STT** | `integrations/mocks/stt.py` | `integrations/stt_whisper.py` — needs `WHISPER_SERVICE_URL` |
+| **TTS** | `integrations/mocks/tts.py` | `integrations/edge_tts_service.py` — install `[tts]` extra |
+| **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
+| **Object storage** | In-memory mock | `integrations/local_public_storage.py` when `PUBLIC_BASE_URL` is set |
+| **Users / turns** | In-memory mocks | `integrations/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are set; install `[supabase]` extra, apply `supabase/schema.sql` |
+| **Drug caches** | No-op | `integrations/supabase_drug_caches.py` + `integrations/caching_drugs.py` (Supabase required) |
 
-**Environment (see [`.env.example`](.env.example))**
+**Key environment variables** (see [`.env.example`](.env.example)):
 
-- **`MOCK_EXTERNAL_SERVICES`** — default **`false`** (real adapters). Use **`true`** (or **`make be-dev-mock`**) for local dev without LINE tokens; tests set mocks explicitly.
-- **`LINE_CHANNEL_SECRET`**, **`LINE_CHANNEL_ACCESS_TOKEN`** — required for real LINE when mocks are off.
-- **`PUBLIC_BASE_URL`** — HTTPS base for audio URLs LINE can fetch.
-- **`GEMINI_API_KEY`**, **`LLM_PROVIDER`** (**`gemini`** | **`openai`**), **`OPENAI_API_KEY`**, **`OPENAI_MODEL`** — optional real LLM when not using mocks.
-- **`WHISPER_SERVICE_URL`** — optional real STT when not using mocks.
-- **`SUPABASE_URL`**, **`SUPABASE_PUBLISHABLE_KEY`** (or **`SUPABASE_ANON_KEY`**) — optional Postgres persistence via the low-privilege key; never use **`service_role`** in app code ([API keys](https://supabase.com/docs/guides/api/api-keys)).
+| Variable | Purpose |
+|----------|---------|
+| `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | Real LINE channel |
+| `GEMINI_API_KEY` | Google Gemini LLM (default model `gemini-2.5-flash`; override via `GEMINI_MODEL`) |
+| `WHISPER_SERVICE_URL` | External Whisper STT service |
+| `PUBLIC_BASE_URL` | HTTPS origin for audio URLs LINE fetches |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Postgres persistence (use anon key, never service role) |
+| `REDIS_URL` | arq job queue for dose reminders |
+| `MEDBUDDY_MOBILE_BEARER_TOKEN` | Auth token for `/v1/app` protected routes |
+| `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` |
+| `MEDBUDDY_LOCALE` | Server locale (`zh-TW` default) |
+| `LOG_LEVEL` | `INFO` (default) or `DEBUG` |
 
-With `MOCK_EXTERNAL_SERVICES=true`, HMAC verification is skipped if `LINE_CHANNEL_SECRET` is empty. Set real LINE secrets and `MOCK_EXTERNAL_SERVICES=false` for integration against LINE APIs.
+---
+
+## Localization
+
+- **Backend:** JSON under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); server default via `MEDBUDDY_LOCALE` / `.env` (see `apps/backend/.env.example`).
+- **Frontend:** `i18next` + JSON under `apps/frontend/locales/`.
+
+Adding a language: add matching `*.json` in both trees and register in backend settings/loaders and `apps/frontend/i18n/index.ts` (details in the per-app READMEs).
+
+---
 
 ## Testing LINE integration
 
 | Layer | What to do |
-|-------|------------|
-| **Automated** | From repo root: **`make be-test`**, or **`pytest apps/backend/tests/test_webhook_pipeline.py`** and **`test_line_signature.py`**. These exercise **`POST /v1/line/webhook`** with a valid `X-Line-Signature` (when a secret is set) or skip verification in mock-without-secret mode. |
-| **Local + mocks** | **`make be-dev-mock`** (or **`be-dev`**). Send HTTP **`POST`** to `http://127.0.0.1:8000/v1/line/webhook` with a JSON body shaped like LINE’s [webhook event](https://developers.line.biz/en/reference/messaging-api/#webhook-event-objects) list. Without **`LINE_CHANNEL_SECRET`**, signature checks are skipped. The mock LINE client records “replies” in memory (see [`integrations/mocks/line.py`](src/medbuddy/integrations/mocks/line.py)). |
-| **Real LINE (tunnel)** | Run **`make be-dev-real`** with **`LINE_CHANNEL_SECRET`**, **`LINE_CHANNEL_ACCESS_TOKEN`**, and **`MEDBUDDY_INTEGRATION=real`**. Expose **`PUBLIC_BASE_URL`** as an HTTPS URL LINE can reach (e.g. [ngrok](https://ngrok.com/) or **Cloudflare Tunnel**). In the [LINE Developers Console](https://developers.line.biz/), set the Messaging API webhook URL to **`{PUBLIC_BASE_URL}/v1/line/webhook`**, enable the webhook, and use “Verify” / send a test event. LINE requires HTTPS for webhooks. |
-| **Hosted** | After [deploy on Render](#deploy-on-render) (or similar), set **`PUBLIC_BASE_URL`** to that service’s HTTPS origin and use the same webhook path **`/v1/line/webhook`** in the LINE console. |
+|-------|-----------|
+| **Automated** | `make be-test` runs `tests/test_webhook_pipeline.py`, `test_line_signature.py`, etc. |
+| **Local mock** | `make be-dev-mock` → `POST http://127.0.0.1:8000/v1/line/webhook` with a LINE-shaped JSON body. Signature check skipped when `LINE_CHANNEL_SECRET` is unset. |
+| **Real LINE (tunnel)** | `make be-dev-real` + set `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `PUBLIC_BASE_URL`. Expose via [ngrok](https://ngrok.com/) or Cloudflare Tunnel; set webhook URL in [LINE Developers Console](https://developers.line.biz/) to `{PUBLIC_BASE_URL}/v1/line/webhook`. |
+| **Hosted** | After deploy, set same webhook URL in LINE console. |
 
 Protocol definitions: [`src/medbuddy/protocols/ports.py`](src/medbuddy/protocols/ports.py).
-Intent overrides without changing routing: [`src/medbuddy/extensibility/intent_hooks.py`](src/medbuddy/extensibility/intent_hooks.py).
+Intent overrides: [`src/medbuddy/extensibility/intent_hooks.py`](src/medbuddy/extensibility/intent_hooks.py).
+
+---
 
 ## LINE dose reminders (prototype)
 
-When **Supabase** backs users/medications, **add** and **remove** medication intents call **`sync_upcoming_dose_events`**: future **`dose_events`** are recreated from each medication using a **once-daily local time** (**`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`**, default `09:00`) in the user’s **`timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default `14`). If **`REDIS_URL`** is set and **arq** is installed (`pip install -e ".[reminders]"`; the [repo-root `Dockerfile`](../../Dockerfile) includes this extra), the API enqueues **`send_reminder_for_dose`** jobs with **`_defer_until = scheduled_at`** (UTC).
+When **Supabase** is configured, successful add/remove medication calls `sync_upcoming_dose_events`: future `dose_events` rows are rebuilt (once daily at `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`, in the user's `timezone`, default `Asia/Taipei`) for `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, max 90). With **`REDIS_URL`** set and `[reminders]` installed, the API enqueues `send_reminder_for_dose` arq jobs.
 
-**Production container (default):** the repo-root **`Dockerfile`** runs [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh): **uvicorn** plus **`arq medbuddy.reminders.worker.WorkerSettings`** when **`REDIS_URL`** is non-empty. The arq process runs [`deliver_dose_reminder`](src/medbuddy/reminders/deliver.py) (**LINE push**, then **`reminder_sent_at`**). **Push copy** comes from **`reminder.line_push`** in locale JSON.
+The repo-root `Dockerfile` runs [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh): **uvicorn** + **`arq medbuddy.reminders.worker.WorkerSettings`** when `REDIS_URL` is non-empty.
 
-**Local dev (two terminals):** run worker manually if you prefer not to use the entrypoint:
+**Scale-out:** add a second service from the same image with the arq start command; configure the API service to use uvicorn only so arq runs in exactly one process.
 
-```bash
-export REDIS_URL=redis://127.0.0.1:6379
-arq medbuddy.reminders.worker.WorkerSettings
-```
+**Compose:** `REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build`
 
-**Scale-out:** add a **second** service from the **same** **`Dockerfile`** with start command **`arq medbuddy.reminders.worker.WorkerSettings`**; point **`medbuddy-api`** at **uvicorn-only** (override default **`CMD`**) so **arq** does not run twice.
+**Safety net:** `POST /internal/reminders/reconcile` with `X-Cron-Secret` re-enqueues overdue, unsent rows.
 
-**Compose:** **`REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build`** (see root [`compose.yaml`](../../compose.yaml)); the **`medbuddy-api`** container runs API + arq.
+Full reference: [`docs/reminders.md`](../../docs/reminders.md).
 
-Optional safety net: **`POST /internal/reminders/reconcile`** with header **`X-Cron-Secret`** matching **`MEDBUDDY_CRON_SECRET`** re-enqueues jobs for rows that are due but never marked sent (e.g. after Redis or worker restarts). See [`.env.example`](.env.example).
+---
 
-**Long-form doc:** [`docs/reminders.md`](../../docs/reminders.md) (architecture, schema, operations, code map).
-
-## Quick start (Podman)
+## Quick start (Docker/Podman)
 
 From the **repository root**:
 
 ```bash
 make be-compose
+# or: podman compose up --build
 ```
 
-Or:
+Health checks:
+- Plain text: `GET http://localhost:8000/health`
+- JSON: `GET http://localhost:8000/v1/app/health`
+- LINE webhook: `POST http://localhost:8000/v1/line/webhook`
 
-```bash
-podman compose up --build
-```
-
-Health (plain text): `GET http://localhost:8000/health`
-Standalone app (JSON): `GET /v1/app/health` · `GET /v1/app/info` (public) · `GET /v1/app/me` · `POST /v1/app/messages` (authenticated; see above)
-LINE webhook: `POST http://localhost:8000/v1/line/webhook`
+---
 
 ## Deploy on [Render](https://render.com/)
 
-The repo includes a [**Blueprint**](https://render.com/docs/infrastructure-as-code) at [`render.yaml`](../../render.yaml) and a repo-root **[`Dockerfile`](../../Dockerfile)** — Render’s default **Dockerfile path** is **`./Dockerfile`** relative to the repo root; the **build context** must be the **repository root** (so `COPY apps/backend/...` works). [Render](https://render.com/) injects **`PORT`** at runtime and **`RENDER=true`**; the image listens on **`${PORT:-8000}`** and uses **`GET /health`** for health checks. When **`RENDER`** is set, [`Settings`](src/medbuddy/config.py) **always** uses real integrations (`MOCK_EXTERNAL_SERVICES=false`), turns **`DEBUG`** off, and treats **`MEDBUDDY_INTEGRATION=mock`** as **`real`** so a mis-set dashboard env cannot enable mocks.
-
-1. **Create service** — Render Dashboard → **New** → **Blueprint** → connect the repo and apply [`render.yaml`](../../render.yaml). That defines **`medbuddy-api`** (web, repo-root **`Dockerfile`**) which runs **uvicorn** and **arq** when **`REDIS_URL`** is set.
-2. **Redis** — Create **Render Key Value** (or use Upstash) and set **`REDIS_URL`** on **`medbuddy-api`** to your managed instance (not `127.0.0.1` on Render).
-3. **Environment** — On **`medbuddy-api`**, set dashboard secrets (`sync: false` in the blueprint): **`PUBLIC_BASE_URL`**, **`LINE_CHANNEL_*`**, **`GEMINI_API_KEY`**, Supabase keys, **`MEDBUDDY_MOBILE_BEARER_TOKEN`**, **`REDIS_URL`**, optional **`MEDBUDDY_CRON_SECRET`** for **`POST /internal/reminders/reconcile`**, etc. (see [`.env.example`](.env.example)).
+1. **Blueprint** — Dashboard → New → Blueprint → connect repo → apply [`render.yaml`](../../render.yaml). Defines `medbuddy-api` (web, repo-root `Dockerfile`).
+2. **Redis** — Create Render Key Value (or Upstash) → set `REDIS_URL` on `medbuddy-api`.
+3. **Environment** — Set secrets on `medbuddy-api`: `PUBLIC_BASE_URL`, `LINE_CHANNEL_*`, `GEMINI_API_KEY`, Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `REDIS_URL`, optional `MEDBUDDY_CRON_SECRET`.
 4. **LINE** — Webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
-5. **Mobile / clients** — Point API calls at the same **`PUBLIC_BASE_URL`**; use **`GET /v1/app/health`** or **`GET /health`** for checks.
+5. **Mobile clients** — Point API calls at `PUBLIC_BASE_URL`.
 
-**Without Docker:** use a **Python** runtime with **root directory** `apps/backend`, build command
-`pip install --upgrade pip && pip install ".[llm,supabase,tts,reminders]"`, start command
-that runs **both** **uvicorn** and **`arq medbuddy.reminders.worker.WorkerSettings`** when **`REDIS_URL`** is set
-(e.g. copy [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh) to the service), **or** use two processes
-/ two services with the same env and **only one** arq consumer.
+**Without Docker:** Python runtime, root directory `apps/backend`, build `pip install ".[llm,supabase,tts,reminders]"`, start command running uvicorn (+ arq when `REDIS_URL` is set).
+
+---
 
 ## Development (without Make)
 
