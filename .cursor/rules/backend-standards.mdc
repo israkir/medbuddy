@@ -14,8 +14,10 @@ alwaysApply: false
 
 ## Structure
 
-- **FastAPI** app entry: `medbuddy.main`. Settings: `pydantic-settings` (`medbuddy.config`).
-- Prefer clear boundaries: **ports** (`protocols/`), **integrations** (`integrations/` with `mocks/` vs `real/`), **engine** orchestration — extend existing patterns instead of ad-hoc modules at the package root.
+- **FastAPI** app entry: `medbuddy.main` (mounts routers). Settings: `pydantic-settings` (`medbuddy.config`).
+- **Channels**: LINE-specific code in `channels/line/` (webhook, signature, LINE pipeline); standalone app HTTP in `channels/mobile/` (auth, schemas, routes). Shared infrastructure routes in `http/shared_routes.py` (e.g. health, media URLs).
+- **Application layer**: shared use cases both channels call (e.g. `application/assistant_turn.py`) — avoid duplicating LLM/drug/history logic in `channels/*`.
+- **Ports / integrations**: **protocols** (`protocols/`), **integrations** (`integrations/` — `mocks/` plus concrete adapters at package root), shared **engine** types (`engine/`). Extend these patterns instead of ad-hoc modules outside `integrations/`.
 
 ## Security and config
 

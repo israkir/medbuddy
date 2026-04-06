@@ -71,11 +71,32 @@ class Settings(BaseSettings):
     # Real integrations (optional when mock_external_services is False)
     gemini_api_key: str = ""
     supabase_url: str = ""
-    supabase_service_role_key: str = ""
+    supabase_publishable_key: str = Field(
+        default="",
+        description=(
+            "Supabase publishable API key (sb_publishable_...) or legacy anon JWT — "
+            "PostgREST uses the anon role; pair with RLS policies in supabase/schema.sql"
+        ),
+        validation_alias=AliasChoices(
+            "SUPABASE_PUBLISHABLE_KEY",
+            "supabase_publishable_key",
+            "SUPABASE_ANON_KEY",
+            "supabase_anon_key",
+        ),
+    )
     whisper_service_url: str = ""
 
     conversation_history_turns: int = 5
     audio_temp_ttl_seconds: int = 60
+
+    mobile_bearer_token: str = Field(
+        default="",
+        description=(
+            "Bearer token for standalone app protected routes under /v1/app/*. "
+            "If empty and mock_external_services is True, Bearer is not required (local dev only)."
+        ),
+        validation_alias=AliasChoices("MEDBUDDY_MOBILE_BEARER_TOKEN", "mobile_bearer_token"),
+    )
 
     @model_validator(mode="after")
     def _apply_integration_switch(self) -> Self:

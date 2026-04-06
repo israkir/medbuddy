@@ -1,0 +1,13 @@
+.git
+.venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+**/.env
+**/htmlcov
+**/.coverage
+**/dist
+**/build
+**/*.egg-info
+apps/frontend/node_modules
+apps/frontend/.expo

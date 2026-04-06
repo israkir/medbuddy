@@ -18,7 +18,7 @@ BLACK := $(CURDIR)/$(VENV)/bin/black
 
 PORT ?= 8000
 
-# Podman or Docker — `compose.yaml` and `apps/backend/Containerfile` work with either.
+# Podman or Docker — `compose.yaml` and repo-root `Dockerfile` (context: `.`).
 CONTAINER ?= $(shell command -v podman >/dev/null 2>&1 && echo podman || echo docker)
 COMPOSE := $(CONTAINER) compose
 
@@ -52,7 +52,7 @@ endef
 	be-venv be-install be-dev be-dev-mock be-dev-real be-run be-run-prod be-run-prod-real \
 	be-test be-test-verbose be-test-cov be-lint be-fmt be-check \
 	be-compose be-build be-clean be-clean-all \
-	fe-install fe-dev fe-dev-mock fe-dev-api fe-build fe-lint fe-check fe-test \
+	fe-install fe-dev fe-dev-mock fe-dev-api fe-build fe-run-ios fe-run-android fe-lint fe-check fe-test \
 	pre-commit-install pre-commit-run
 
 .DEFAULT_GOAL := help
@@ -178,9 +178,9 @@ be-compose: ## Compose up API service (Podman or Docker — see CONTAINER)
 	@$(call banner,$(COMPOSE) up --build)
 	@$(COMPOSE) up --build
 
-be-build: ## Build API OCI image (Podman or Docker — see CONTAINER)
-	@$(call banner,$(CONTAINER) build -f $(BACKEND)/Containerfile -t medbuddy-api:local $(BACKEND))
-	@$(CONTAINER) build -f $(BACKEND)/Containerfile -t medbuddy-api:local "$(BACKEND)"
+be-build: ## Build API OCI image (Podman or Docker — see CONTAINER; context = repo root)
+	@$(call banner,$(CONTAINER) build -f Dockerfile -t medbuddy-api:local .)
+	@$(CONTAINER) build -f Dockerfile -t medbuddy-api:local .
 
 ##@ Backend — cleanup
 
@@ -217,6 +217,14 @@ fe-build: fe-install ## TypeScript check only (`npm run typecheck`; ship builds 
 	@$(call banner,npm run typecheck)
 	@cd $(FRONTEND) && npm run typecheck
 	@$(call ok,typecheck passed)
+
+fe-run-ios: fe-install ## Native dev build → iOS Simulator (requires Xcode)
+	@$(call banner,expo run:ios $(DIM)[Simulator]$(NO))
+	@cd $(FRONTEND) && npx expo run:ios
+
+fe-run-android: fe-install ## Native dev build → Android Emulator (requires SDK + AVD)
+	@$(call banner,expo run:android $(DIM)[Emulator]$(NO))
+	@cd $(FRONTEND) && npx expo run:android
 
 fe-lint: fe-install ## ESLint + TypeScript (same as fe-check)
 	@$(call banner,frontend ESLint + tsc)
