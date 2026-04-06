@@ -35,6 +35,8 @@ class Intent(str, Enum):
     LOG_VITAL = "log_vital"
     REQUEST_SUMMARY = "request_summary"
     UPDATE_PROFILE = "update_profile"
+    UPDATE_LOCALE = "update_locale"
+    OFF_TOPIC = "off_topic"
     GENERAL_QUESTION = "general_question"
 
 
@@ -89,6 +91,7 @@ class DoseEventReminderPayload:
     schedule: str
     scheduled_at: datetime
     user_timezone: str
+    user_locale: str
 
 
 @dataclass

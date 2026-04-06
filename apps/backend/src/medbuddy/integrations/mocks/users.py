@@ -197,6 +197,7 @@ class MockUserData(UserDataPort):
                     "reminder_sent_at": None,
                     "taken_at": None,
                     "timezone": tz_name,
+                    "user_locale": effective_user_locale(row.get("locale")),
                 }
                 out.append((did, at))
         return out
@@ -218,6 +219,7 @@ class MockUserData(UserDataPort):
             schedule=str(d["schedule"]),
             scheduled_at=d["scheduled_at"],
             user_timezone=str(d["timezone"]),
+            user_locale=str(d["user_locale"]),
         )
 
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:

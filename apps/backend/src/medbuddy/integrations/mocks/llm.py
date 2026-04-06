@@ -18,6 +18,7 @@ from medbuddy.models.domain import (
     MedicationRecord,
 )
 from medbuddy.protocols.ports import LLMPort
+from medbuddy.user_locale import parse_locale_request_from_text
 
 
 class MockLLM(LLMPort):
@@ -42,6 +43,13 @@ class MockLLM(LLMPort):
             return self._intent
         ut = user_text.strip()
         lowered = ut.lower()
+        if not parse_locale_request_from_text(ut) and re.search(
+            r"(?i)prefer\s+english|english\s+replies|i\s+want\s+english|"
+            r"i'?d\s+rather\s+(?:use|have|read)\s+english|"
+            r"請用中文回覆|改用繁體|traditional\s+chinese\s+only",
+            ut,
+        ):
+            return Intent.UPDATE_LOCALE
         med_add = "新增" in ut or "加入" in ut or lowered.startswith("add ")
         if not med_add and re.search(
             r"我叫|叫我|今年\s*\d{1,3}|\d{1,3}\s*歲|歲了|電話|手機|聯絡|過敏|備註|"
@@ -73,6 +81,19 @@ class MockLLM(LLMPort):
             or "mix with" in lowered
         ):
             return Intent.INTERACTION_CHECK
+        # Obvious non-medical chit-chat before broad "what's / explain" explain-medication heuristics
+        med_hint = re.search(
+            r"(?i)藥|medication|medicine|drug|pill|dose|remind|健康|血壓|血糖|醫|藥師|"
+            r"吃藥|服藥|過敏|症狀|symptom|prescri",
+            ut,
+        )
+        if not med_hint and re.search(
+            r"(?i)\b(weather|forecast|stock\s+market|nasdaq|joke|tell\s+me\s+a\s+story|"
+            r"who\s+won|recipe\s+for|write\s+a\s+poem)\b|"
+            r"天氣怎麼樣|今天天氣|講個笑話|股票|誰贏了|寫一首詩",
+            ut,
+        ):
+            return Intent.OFF_TOPIC
         if any(
             phrase in lowered
             for phrase in (
@@ -98,6 +119,26 @@ class MockLLM(LLMPort):
         if "血壓" in user_text or "血糖" in user_text:
             return Intent.LOG_VITAL
         return Intent.GENERAL_QUESTION
+
+    async def extract_locale_intent(self, user_text: str) -> str | None:
+        await asyncio.sleep(0)
+        direct = parse_locale_request_from_text(user_text)
+        if direct is not None:
+            return direct
+        ut = user_text.lower()
+        if re.search(
+            r"(?i)prefer\s+english|english\s+replies|i\s+want\s+english|"
+            r"i'?d\s+rather\s+(?:use|have|read)\s+english|only\s+english",
+            ut,
+        ) and not re.search(r"請用英文\s*說明", user_text):
+            return "en"
+        if re.search(
+            r"(?i)prefer\s+chinese|traditional\s+chinese|mandarin|zh[- ]?tw|"
+            r"請用中文|改用中文|only\s+chinese",
+            ut,
+        ):
+            return "zh-TW"
+        return None
 
     async def compose_reply(
         self,

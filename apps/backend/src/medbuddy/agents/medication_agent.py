@@ -8,7 +8,8 @@ Flow
 ----
 1. Load user context (profile + medications) in parallel.
 2. Classify intent via ``svc.llm.classify_intent()``.
-3. Select and run the appropriate tool.
+3. Locale change, hooks, then ``off_topic`` (fixed refusal), profile regex, tools, or
+   ``compose_reply`` fallback.
 4. Persist both turns to conversation store.
 5. Optionally cache LLM-composed replies for EXPLAIN / INTERACTION intents.
 """
@@ -29,6 +30,7 @@ from medbuddy.agents.tools.medication_crud import (
     ListMedicationsTool,
     RemoveMedicationTool,
 )
+from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.profile_intents import try_profile_intent_reply
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedBuddyError
@@ -37,6 +39,7 @@ from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
 from medbuddy.prompts.persona import build_patient_context_for_llm, get_system_persona
+from medbuddy.user_locale import effective_user_locale
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +98,7 @@ class MedicationAgent:
             len(user_text),
         )
 
-        locale = svc.settings.locale
+        locale = effective_user_locale(user_row.get("locale"))
         history = await svc.conversations.get_recent_turns(
             user_key, svc.settings.conversation_history_turns
         )
@@ -106,10 +109,29 @@ class MedicationAgent:
             ConversationTurn(role="user", content=user_text, at=datetime.now(UTC)),
         )
 
+        locale_reply = await try_locale_change_reply(
+            svc,
+            user_key=user_key,
+            user_text=user_text,
+            user_row=user_row,
+            intent=intent,
+            llm=svc.llm,
+        )
+        if locale_reply is not None:
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=locale_reply, at=datetime.now(UTC)),
+            )
+            return locale_reply
+
         # 1. Extension hooks (highest priority, can short-circuit)
         reply = await try_intent_hooks(intent, svc, user_text)
 
-        # 2. Profile update intent (regex-based, no LLM needed)
+        # 2. Off-topic: refuse without calling compose_reply (no LLM for the reply body)
+        if reply is None and intent == Intent.OFF_TOPIC:
+            reply = t("agent.off_topic", locale=locale)
+
+        # 3. Profile update intent (regex-based, no LLM needed)
         if reply is None and intent == Intent.UPDATE_PROFILE:
             reply = await try_profile_intent_reply(
                 svc,
@@ -119,7 +141,7 @@ class MedicationAgent:
                 locale=locale,
             )
 
-        # 3. Dispatch to registered tool
+        # 4. Dispatch to registered tool
         if reply is None:
             tool = _TOOL_MAP.get(intent)
             if tool is not None:
@@ -135,7 +157,7 @@ class MedicationAgent:
                 )
                 reply = result.reply
             else:
-                # 4. Free-form LLM fallback for unhandled intents
+                # 5. Free-form LLM fallback for unhandled intents
                 reply = await _compose_fallback_reply(
                     svc,
                     intent=intent,

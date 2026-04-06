@@ -18,7 +18,7 @@ async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
         log.debug("reminder skip: no pending row for dose_event_id=%s", dose_event_id)
         return False
 
-    locale = svc.settings.locale
+    locale = payload.user_locale
     tz = ZoneInfo(payload.user_timezone)
     local = payload.scheduled_at.astimezone(tz)
     time_str = local.strftime("%H:%M")

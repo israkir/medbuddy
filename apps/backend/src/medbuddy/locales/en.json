@@ -25,7 +25,8 @@
     "pending_body": "(Connect info.fda.gov.tw cache layer in MVP.)"
   },
   "agent": {
-    "generic_error": "The system could not complete your request right now. Please try again later or ask a family member for help."
+    "generic_error": "The system could not complete your request right now. Please try again later or ask a family member for help.",
+    "off_topic": "I’m here to help with your medications, reminders, and related health questions. I can’t help with that topic—try asking about your medicines, doses, or what you’d like to remember to take."
   },
   "mocks": {
     "drugs": {
@@ -106,5 +107,12 @@
   },
   "line": {
     "follow_welcome": "Welcome to MedBuddy! I can help you remember your medicines and answer medication questions (this does not replace your clinician or pharmacist). Please send one short message so I know you better: what to call you, your age (optional), a family/emergency contact, or allergies / important health notes—you can add more later."
+  },
+  "locale": {
+    "label_en": "English",
+    "label_zh_tw": "Traditional Chinese (Taiwan)",
+    "updated": "Reply language is now set to {label}.",
+    "unchanged": "Replies are already in {label}.",
+    "unclear": "I'm not sure which language you want. Try something like \"switch to English\" or \"use Chinese\"."
   }
 }

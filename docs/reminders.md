@@ -10,7 +10,7 @@ This document describes **proactive LINE push** reminders for scheduled medicati
 ## What it does *not* do (v1)
 
 - **No NLP** on free-text `medications.schedule`: the prototype uses **one daily local time** per user (`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`) in **`users.timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**) calendar days per medication.
-- **Standalone / Expo** local notifications are **not** implemented here; only **LINE push** when the user key is a LINE `userId` stored as `users.external_user_id`.
+- **Standalone HTTP app** local notifications are **not** implemented here; only **LINE push** when the user key is a LINE `userId` stored as `users.external_user_id`. (A reference **Expo** client is documented in [`frontend-expo.md`](frontend-expo.md) — it does not change reminder delivery.)
 - **Rich messages** (Flex) and **postback** “mark taken” are out of scope for this slice.
 
 ## Architecture
@@ -57,7 +57,7 @@ Defined and extended in [`apps/backend/supabase/schema.sql`](../apps/backend/sup
 
 | Object | Purpose |
 |--------|---------|
-| **`users.timezone`** | IANA name for daily reminder clock and LINE **`time_local`** in push copy (DB default `Asia/Taipei`). **Set by:** Postgres default on **`INSERT`** (LINE users without mobile onboarding); **`POST /v1/app/onboarding`** optional **`timezone`** (Expo sends device IANA); **`patch_user_profile`** with **`timezone`** for later changes (e.g. travel). |
+| **`users.timezone`** | IANA name for daily reminder clock and LINE **`time_local`** in push copy (DB default `Asia/Taipei`). **Set by:** Postgres default on **`INSERT`** (LINE users without standalone onboarding); **`POST /v1/app/onboarding`** optional **`timezone`** (HTTP clients typically send device IANA); **`patch_user_profile`** with **`timezone`** for later changes (e.g. travel). |
 | **`dose_events.scheduled_at`** | When the dose is due (timestamptz, stored in UTC). |
 | **`dose_events.taken_at`** | Optional adherence field (not required by the reminder job). |
 | **`dose_events.reminder_sent_at`** | Set after a successful push; idempotency / reconcile. |
@@ -124,7 +124,7 @@ If Redis or the **arq** process restarts, some due rows may never get a job. A l
 
 ## LINE quotas
 
-Push messages can count against LINE plan quotas; reminder copy is kept short. Product copy in the Expo app also notes reply vs push differences for pilots — see frontend locales if needed.
+Push messages can count against LINE plan quotas; reminder copy is kept short. The reference **Expo** client (`apps/frontend/`) may note reply vs push differences in its locales — see [`frontend-expo.md`](frontend-expo.md) and `apps/frontend/locales/` if needed.
 
 ## Tests
 

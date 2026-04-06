@@ -56,6 +56,8 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 - [ ] Optional: JSON logs, correlation IDs; readiness vs liveness; metrics/alerts (LINE vs **`/v1/app`**, LLM/STT failures).
 
+- [ ] **Performance and LLM cost:** Profile end-to-end application performance (assistant turns, reminders, mobile API); estimate and track **token usage** per path/provider; optimize prompts, context windows, caching, and model/routing choices to reduce latency and cost.
+
 ### Security and resilience
 
 - [ ] Timeouts/retries on outbound HTTP; rate limiting on public surfaces; review **`/internal-media`** when storage is shared.

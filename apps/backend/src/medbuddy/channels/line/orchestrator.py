@@ -11,6 +11,7 @@ from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
 from medbuddy.models.domain import MessageKind
+from medbuddy.user_locale import effective_user_locale
 
 log = logging.getLogger(__name__)
 
@@ -94,8 +95,8 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
     )
 
     if etype == "follow":
-        await svc.users.get_or_create_user(line_user_id)
-        loc = svc.settings.locale
+        row = await svc.users.get_or_create_user(line_user_id)
+        loc = effective_user_locale(row.get("locale"))
         await svc.line.reply_text(
             reply_token,
             t("line.follow_welcome", locale=loc),
