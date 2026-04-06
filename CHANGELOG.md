@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`GeminiLLM`** now uses the **`google-genai`** SDK (`genai.Client` and **`models.generate_content`**) instead of the legacy **`google.generativeai`** package, matching the **`medbuddy-api[llm]`** extra.
 - **Render production lock**: when host env **`RENDER`** is true (Render web services), settings force **`MOCK_EXTERNAL_SERVICES=false`**, **`DEBUG=false`**, and **`MEDBUDDY_INTEGRATION=real`** if it was mock. Blueprint sets **`DEBUG=false`** explicitly; see [`render.yaml`](render.yaml).
 - **Backend default integrations**: `MOCK_EXTERNAL_SERVICES` now defaults to **`false`** (real LINE/STT/TTS/LLM/drugs when configured). Local mock runs: `make be-dev` / `make be-dev-mock` or set `MOCK_EXTERNAL_SERVICES=true` / `MEDBUDDY_INTEGRATION=mock`.
 - **Consent flow removed**: LINE users can message the bot immediately (no follow-up quick-reply consent); **`POST /v1/app/consent`** and **`consent_accepted`** on **`GET /v1/app/me`** are gone. Supabase **`public.users`** no longer includes **`consent_accepted`** (existing DBs: drop the column or recreate from **`schema.sql`**).

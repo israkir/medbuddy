@@ -1,10 +1,11 @@
-"""Gemini adapter — requires optional dependency google-generativeai."""
+"""Gemini adapter — requires optional dependency google-genai."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import re
+from typing import Any
 
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationDraft, MedicationRecord
@@ -28,16 +29,19 @@ class GeminiLLM(LLMPort):
         intent_model: str = "gemini-1.5-flash",
     ) -> None:
         try:
-            import google.generativeai as genai  # type: ignore[import-untyped]
+            from google import genai
         except ImportError as e:
             raise ImportError(
                 "Install medbuddy-api with the `llm` extra: pip install 'medbuddy-api[llm]'"
             ) from e
-        genai.configure(api_key=api_key)
-        self._genai = genai
+        self._client: Any = genai.Client(api_key=api_key)
         self._intent_model = intent_model
         self._chat_model = intent_model
         self._locale = locale
+
+    def _generate_sync(self, model: str, prompt: str) -> str:
+        resp = self._client.models.generate_content(model=model, contents=prompt)
+        return (resp.text or "").strip()
 
     def _classify_sync(self, user_text: str) -> Intent:
         prompt = (
@@ -48,9 +52,7 @@ class GeminiLLM(LLMPort):
             "Reply with only the snake_case label.\n\n"
             f"User: {user_text}"
         )
-        model = self._genai.GenerativeModel(self._intent_model)
-        resp = model.generate_content(prompt)
-        raw = (resp.text or "").strip().lower()
+        raw = self._generate_sync(self._intent_model, prompt).lower()
         for intent in Intent:
             if re.search(rf"\b{re.escape(intent.value)}\b", raw):
                 return intent
@@ -82,9 +84,7 @@ class GeminiLLM(LLMPort):
             f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
             f"{t('gemini.reply_instruction', locale=loc)}"
         )
-        model = self._genai.GenerativeModel(self._chat_model)
-        resp = model.generate_content(prompt)
-        return (resp.text or "").strip()
+        return self._generate_sync(self._chat_model, prompt)
 
     async def compose_reply(
         self,
@@ -107,9 +107,7 @@ class GeminiLLM(LLMPort):
     def _simplify_sync(self, raw_label: str) -> str:
         loc = self._locale
         prompt = f"{t('gemini.simplify_intro', locale=loc)}{raw_label}"
-        model = self._genai.GenerativeModel(self._chat_model)
-        resp = model.generate_content(prompt)
-        return (resp.text or "").strip()
+        return self._generate_sync(self._chat_model, prompt)
 
     async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str:
         return await asyncio.to_thread(self._simplify_sync, raw_label)
@@ -122,9 +120,7 @@ class GeminiLLM(LLMPort):
             "name, dosage, schedule, instructions_zh (string or null).\n"
             f"User: {user_text}"
         )
-        model = self._genai.GenerativeModel(self._chat_model)
-        resp = model.generate_content(prompt)
-        raw = (resp.text or "").strip()
+        raw = self._generate_sync(self._chat_model, prompt)
         if not raw:
             return None
         try:
@@ -166,9 +162,7 @@ class GeminiLLM(LLMPort):
             'Return JSON only: {"medication_id":"<uuid>" or null}\n'
             f"User: {user_text}"
         )
-        model = self._genai.GenerativeModel(self._chat_model)
-        resp = model.generate_content(prompt)
-        raw = (resp.text or "").strip()
+        raw = self._generate_sync(self._chat_model, prompt)
         if not raw:
             return None
         try:
