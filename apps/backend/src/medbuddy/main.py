@@ -23,15 +23,12 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(settings.log_level)
     outbound_http: httpx.AsyncClient | None = None
-    stt_http: httpx.AsyncClient | None = None
     if not settings.mock_external_services:
         outbound_http = httpx.AsyncClient(timeout=httpx.Timeout(20.0))
-        stt_http = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
     try:
         app.state.services = build_app_services(
             settings,
             outbound_http=outbound_http,
-            stt_http=stt_http,
         )
         log.info(
             "MedBuddy started mock_external=%s locale=%s log_level=%s public_base_url=%s",
@@ -44,8 +41,6 @@ async def lifespan(app: FastAPI):
     finally:
         if outbound_http is not None:
             await outbound_http.aclose()
-        if stt_http is not None:
-            await stt_http.aclose()
 
 
 app = FastAPI(

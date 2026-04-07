@@ -37,6 +37,7 @@ from medbuddy.agents.tools.medication_crud import (
     UpdateMedicationTool,
 )
 from medbuddy.application.dose_clarification_resolve import try_resolve_pending_dose_clarification
+from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.medication_add_confirm_resolve import (
     try_resolve_pending_medication_add_confirmation,
 )
@@ -138,6 +139,21 @@ class MedicationAgent:
             user_key,
             ConversationTurn(role="user", content=user_text, at=datetime.now(UTC)),
         )
+
+        locale_reply = await try_locale_change_reply(
+            svc,
+            user_key=user_key,
+            user_text=user_text,
+            user_row=user_row,
+            intent=intent,
+            llm=svc.llm,
+        )
+        if locale_reply is not None:
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=locale_reply, at=datetime.now(UTC)),
+            )
+            return locale_reply
 
         med_confirm_reply = await try_resolve_pending_medication_add_confirmation(
             svc, user_key=user_key, user_text=user_text, locale=locale

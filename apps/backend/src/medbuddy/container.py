@@ -56,7 +56,6 @@ def build_app_services(
     settings: Settings,
     *,
     outbound_http: httpx.AsyncClient | None = None,
-    stt_http: httpx.AsyncClient | None = None,
 ) -> AppServices:
     if settings.mock_external_services:
         storage = MockObjectStorage()
@@ -96,18 +95,14 @@ def build_app_services(
 
     llm = _build_llm(settings)
 
-    if settings.google_speech_api_key and settings.google_speech_project_id:
+    if settings.google_speech_project_id:
         stt = GoogleSpeechToText(
-            api_key=settings.google_speech_api_key,
             project_id=settings.google_speech_project_id,
             location=settings.google_speech_location,
             language_code=settings.locale,
-            http_client=stt_http,
         )
     else:
-        log.warning(
-            "GOOGLE_SPEECH_API_KEY / GOOGLE_SPEECH_PROJECT_ID missing; using MockSpeechToText for STT"
-        )
+        log.warning("GOOGLE_SPEECH_PROJECT_ID missing; using MockSpeechToText for STT")
         stt = MockSpeechToText(locale=settings.locale)
 
     drug_caches = None

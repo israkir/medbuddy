@@ -657,7 +657,11 @@ class SupabaseUserData(UserDataPort):
 
         resp = await _run_q(q)
         rows = resp.data or []
-        log.info("DB dose_events.mark_reminder_sent: dose_event_id=%s updated=%d", dose_event_id, len(rows))
+        log.info(
+            "DB dose_events.mark_reminder_sent: dose_event_id=%s updated=%d",
+            dose_event_id,
+            len(rows),
+        )
         return len(rows) > 0
 
     async def try_increment_reminder_nudge(

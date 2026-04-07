@@ -45,7 +45,7 @@ class LineMessagingPort(Protocol):
 
 @runtime_checkable
 class SpeechToTextPort(Protocol):
-    async def transcribe_m4a(self, audio: bytes) -> str: ...
+    async def transcribe_m4a(self, audio: bytes, *, language_code: str | None = None) -> str: ...
 
 
 @runtime_checkable

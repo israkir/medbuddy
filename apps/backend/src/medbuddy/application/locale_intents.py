@@ -30,10 +30,15 @@ async def try_locale_change_reply(
 ) -> str | None:
     """Return a short ack if the message requests a locale change; otherwise ``None``."""
     current = effective_user_locale(user_row.get("locale"))
-    if intent != Intent.UPDATE_PROFILE:
+    if intent == Intent.EMERGENCY:
         return None
-    patch = await llm.extract_profile_patch(user_text, locale=current)
-    requested_raw = patch.get("locale")
+
+    requested_raw = await llm.extract_locale_intent(user_text)
+    if requested_raw is None:
+        # Keep compatibility with older routing behaviour where locale changes
+        # are extracted through the generic profile patch path.
+        patch = await llm.extract_profile_patch(user_text, locale=current)
+        requested_raw = patch.get("locale")
     if requested_raw is None:
         return None
     requested = normalize_locale_patch(requested_raw)
