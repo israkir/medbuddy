@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **GitHub Actions CI**: Workflow runs backend Black + Ruff + pytest and frontend ESLint + TypeScript on pushes to `main` and on pull requests.
 - **Emergency and side-effect intents**: Added `Intent.emergency` (fixed localized emergency reply, no LLM body generation) and `Intent.report_side_effects` with `ReportSideEffectsTool`.
 - **Medication update + richer adherence flows**: Added `UpdateMedicationTool`, `ReportMissedDoseTool`, `LogVitalTool`, and side-effect-aware follow-up handling in conversation flows.
 - **Medication-add confirmation state**: Added pending confirmation storage for incomplete medication drafts so users can confirm/cancel before save.
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Google STT transcription**: Normalize language tags sent to Speech-to-Text v2 (short `en`/`zh` → `en-US`/`zh-TW`, underscore → hyphen) so locale-derived codes match API expectations.
 - **Reminder materialization correctness**: Fixed multi-time-per-day expansion so `daily_local_hhmm_list` produces all expected `dose_events`.
 - **Dose-note persistence**: Follow-up adherence notes now merge into recent taken dose rows when applicable.
 - **Settings parsing**: Fixed startup parsing for comma-separated `MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`.
