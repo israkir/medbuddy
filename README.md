@@ -116,18 +116,22 @@ Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#
 
 ## Documentation
 
-| Resource | What you'll find |
-|----------|------------------|
-| [`docs/architecture.md`](docs/architecture.md) | **Technical design document** — architecture, data model, API reference, integrations, security |
-| [`docs/prd.md`](docs/prd.md) | **Product requirements** — vision, goals, personas, functional/non-functional requirements, roadmap hints |
-| [`docs/features.md`](docs/features.md) | Product features at a glance (LINE, HTTP API, assistant, caching, reminders) |
-| [`docs/use-cases.md`](docs/use-cases.md) | Narrated flows, example utterances, channels, intents |
-| [`docs/frontend-expo.md`](docs/frontend-expo.md) | **Reference / future:** Expo app only (not mixed with primary LINE + backend docs) |
-| [`docs/reminders.md`](docs/reminders.md) | LINE dose reminders: schema, arq/Redis, Compose, Render, reconcile |
-| [`docs/privacy.md`](docs/privacy.md) | PII handling, LLM redaction, profile parsing, compliance notes |
-| [`apps/backend/README.md`](apps/backend/README.md) | Package layout, env vars, mock vs real, LINE testing, deploy |
-| [`apps/frontend/README.md`](apps/frontend/README.md) | Expo workflow, mock vs API, i18n, simulator targets |
-| [`CHANGELOG.md`](CHANGELOG.md) | [Keep a Changelog](https://keepachangelog.com/) history |
+See **[`docs/index.md`](docs/index.md)** for the full documentation index, reading paths by audience, and a quick-lookup table.
+
+| Resource | Audience | What you'll find |
+|----------|----------|-----------------|
+| [`docs/architecture.md`](docs/architecture.md) | Engineers, security | Technical design — components, data model, API reference, LLM, caching, deployment |
+| [`docs/prd.md`](docs/prd.md) | Product, engineers | Vision, goals, personas, functional/non-functional requirements |
+| [`docs/features.md`](docs/features.md) | Product, engineers | Feature catalog — LINE, HTTP API, agent intents, reminders |
+| [`docs/use-cases.md`](docs/use-cases.md) | Engineers, product | Narrated flows, example utterances, assistant pipeline steps |
+| [`docs/reminders.md`](docs/reminders.md) | Engineers, operators | LINE dose reminders: schema, arq/Redis, Compose, Render, reconcile |
+| [`docs/privacy.md`](docs/privacy.md) | Engineers, compliance | PII boundaries, LLM redaction, compliance notes |
+| [`docs/llm-context.md`](docs/llm-context.md) | Developers, compliance | Per-call LLM input map — every `LLMPort` method with data sent and redaction applied |
+| [`docs/frontend-expo.md`](docs/frontend-expo.md) | Mobile engineers | **Reference / future:** Expo app — separate from primary LINE + backend docs |
+| [`apps/backend/README.md`](apps/backend/README.md) | Backend engineers | Package layout, env vars, mock vs real, LINE testing, deploy |
+| [`apps/frontend/README.md`](apps/frontend/README.md) | Frontend engineers | Expo screens, scripts, mock vs API, i18n, simulator targets |
+| [`TODO.md`](TODO.md) | Engineers, operators | Production readiness checklist (backend and frontend hardening) |
+| [`CHANGELOG.md`](CHANGELOG.md) | All | [Keep a Changelog](https://keepachangelog.com/) history |
 
 ---
 
