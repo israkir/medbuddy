@@ -11,10 +11,7 @@ from medbuddy.exceptions import MedicationExtractionError, MedicationNotFoundErr
 from medbuddy.i18n import t
 from medbuddy.models.domain import MedicationRecord
 from medbuddy.privacy.redact import redact_pii_text
-from medbuddy.prompts.persona import (
-    build_patient_context_for_chat_display,
-    build_patient_context_for_llm,
-)
+from medbuddy.prompts.persona import build_patient_context_for_llm, format_patient_medication_context
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
 log = logging.getLogger(__name__)
@@ -57,7 +54,7 @@ class ListMedicationsTool:
     ) -> ToolResult:
         if not medications:
             return ToolResult(reply=t("medication.list_empty", locale=locale))
-        body = build_patient_context_for_chat_display(user_row, medications, locale=locale)
+        body = format_patient_medication_context(medications, locale=locale)
         intro = t("medication.list_intro", locale=locale)
         return ToolResult(reply=f"{intro}\n{body}")
 

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Multi-daily reminders**: `dose_events` materialization only scheduled **one** local time per day (`iter_scheduled_dose_times_utc`), so “three times daily after meals for N days” produced **N** rows instead of **3×N**. Reminder metadata now supports **`daily_local_hhmm_list`**, structured extraction adds **`daily_reminder_local_hhmm_list`**, and **`iter_dose_instants_for_medication`** fans out each local time across the horizon (times still converted with **`patients.timezone`**).
+- **Dose notes after “I took it”**: If the user confirms a dose and later sends a side-effect / doctor note in a **follow-up** message, **`ConfirmDoseTool`** now merges that text into **`dose_events.notes`** on the most recent taken dose (within 48h). Previously, **`mark_pending_doses_taken`** only updated rows with **`taken_at` null**, so the note never persisted. Intent routing text now steers **`confirm_dose`** for these follow-ups.
 - **`Settings`**: **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** as comma-separated minutes (per **`.env.example`**) no longer crashes startup — **`pydantic-settings`** was JSON-decoding **`list[int]`** before validators, and values like **`15,30,60`** are not valid JSON for a list.
 
 ### Removed

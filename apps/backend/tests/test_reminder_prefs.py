@@ -100,3 +100,33 @@ def test_reminder_prefs_from_metadata_reads_nested_reminder() -> None:
 def test_reminder_prefs_invalid_hhmm_dropped(raw: dict, expected_hhmm: str | None) -> None:
     p = reminder_prefs_from_metadata(raw)
     assert p.daily_local_hhmm == expected_hhmm
+
+
+def test_three_local_times_per_day_times_horizon_yields_product() -> None:
+    """Breakfast/lunch/dinner × N days → 3×N dose_events (when all slots are after now)."""
+    now = datetime(2026, 4, 6, 23, 0, tzinfo=UTC)  # Asia/Taipei 2026-04-07 07:00
+    prefs = ReminderPrefs(
+        horizon_days=3,
+        daily_local_hhmm_list=("08:00", "12:30", "18:30"),
+    )
+    out = iter_dose_instants_for_medication(
+        prefs,
+        tz_name="Asia/Taipei",
+        default_local_hhmm="09:00",
+        default_horizon_days=14,
+        now_utc=now,
+    )
+    assert len(out) == 9
+
+
+def test_reminder_prefs_from_metadata_daily_list() -> None:
+    p = reminder_prefs_from_metadata(
+        {
+            "reminder": {
+                "daily_local_hhmm_list": ["18:30", "08:00", "12:30"],
+                "horizon_days": 2,
+            }
+        }
+    )
+    assert p.daily_local_hhmm_list == ("08:00", "12:30", "18:30")
+    assert p.horizon_days == 2

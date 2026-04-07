@@ -24,15 +24,25 @@ class ConfirmDoseTool:
     ) -> ToolResult:
         note = await svc.llm.extract_dose_confirmation_note(user_text, locale=locale)
         n = await svc.users.mark_pending_doses_taken(user_key, notes=note)
-        if n <= 0:
-            return ToolResult(reply=t("medication.confirm_dose_none", locale=locale))
-        if note:
-            return ToolResult(
-                reply=t(
-                    "medication.confirm_dose_recorded_with_note",
-                    locale=locale,
-                    count=n,
-                    note=note,
+        if n > 0:
+            if note:
+                return ToolResult(
+                    reply=t(
+                        "medication.confirm_dose_recorded_with_note",
+                        locale=locale,
+                        count=n,
+                        note=note,
+                    )
                 )
-            )
-        return ToolResult(reply=t("medication.confirm_dose_recorded", locale=locale, count=n))
+            return ToolResult(reply=t("medication.confirm_dose_recorded", locale=locale, count=n))
+        if note:
+            appended = await svc.users.append_note_to_recent_taken_dose(user_key, notes=note)
+            if appended > 0:
+                return ToolResult(
+                    reply=t(
+                        "medication.confirm_dose_note_appended",
+                        locale=locale,
+                        note=note,
+                    )
+                )
+        return ToolResult(reply=t("medication.confirm_dose_none", locale=locale))

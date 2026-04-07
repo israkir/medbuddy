@@ -195,7 +195,8 @@ class OpenAILLM(LLMPort):
     def _extract_dose_confirmation_note_sync(self, user_text: str, *, locale: str) -> str | None:
         _ = locale
         prompt = (
-            "The user is confirming they took a scheduled medication. "
+            "The user is talking about a scheduled medication dose they took (or are describing in a "
+            "follow-up right after confirming). "
             "If they mention a side effect, symptom, or anything they want noted for this dose "
             "(for their doctor or records), put it in note; otherwise note must be null.\n\n"
             f"User: {user_text}"
@@ -275,7 +276,7 @@ class OpenAILLM(LLMPort):
             f"{t('gemini.extract_medication_reminder_rules', locale=loc)}\n"
             "Return JSON only with keys: name, dosage, schedule, instructions, "
             "first_reminder_in_minutes, materialize_daily_reminders, reminder_horizon_days, "
-            "needs_horizon_confirmation, daily_reminder_local_hhmm.\n"
+            "needs_horizon_confirmation, daily_reminder_local_hhmm, daily_reminder_local_hhmm_list.\n"
             f"User: {user_text}"
         )
         try:

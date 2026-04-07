@@ -68,6 +68,7 @@ class MedicationDraft:
     reminder_horizon_days: int | None = None
     needs_horizon_confirmation: bool = False
     daily_reminder_local_hhmm: str | None = None
+    daily_reminder_local_hhmm_list: list[str] | None = None
 
 
 @dataclass

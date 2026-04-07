@@ -20,6 +20,7 @@ class ReminderPrefs:
     horizon_days: int | None = None
     needs_horizon_confirmation: bool = False
     daily_local_hhmm: str | None = None
+    daily_local_hhmm_list: tuple[str, ...] | None = None
 
 
 def reminder_prefs_from_metadata(raw_metadata: dict[str, Any] | None) -> ReminderPrefs:
@@ -36,6 +37,20 @@ def reminder_prefs_from_metadata(raw_metadata: dict[str, Any] | None) -> Reminde
     horizon_days: int | None = None
     if isinstance(horizon, (int, float)):
         horizon_days = int(horizon)
+    list_raw = rem.get("daily_local_hhmm_list")
+    parsed_list: list[str] = []
+    if isinstance(list_raw, list):
+        for item in list_raw:
+            if isinstance(item, str) and item.strip():
+                try:
+                    parse_hhmm(item.strip())
+                    if item.strip() not in parsed_list:
+                        parsed_list.append(item.strip())
+                except ValueError:
+                    pass
+    parsed_list.sort(key=lambda t: (parse_hhmm(t)[0], parse_hhmm(t)[1]))
+    daily_list: tuple[str, ...] | None = tuple(parsed_list) if parsed_list else None
+
     hh = rem.get("daily_local_hhmm")
     daily_hhmm: str | None = None
     if isinstance(hh, str) and hh.strip():
@@ -50,18 +65,24 @@ def reminder_prefs_from_metadata(raw_metadata: dict[str, Any] | None) -> Reminde
         horizon_days=horizon_days,
         needs_horizon_confirmation=bool(rem.get("needs_horizon_confirmation", False)),
         daily_local_hhmm=daily_hhmm,
+        daily_local_hhmm_list=daily_list,
     )
 
 
 def reminder_blob_from_draft(draft: MedicationDraft) -> dict[str, Any]:
     """Subset of draft fields persisted under raw_metadata['reminder']."""
-    return {
+    blob: dict[str, Any] = {
         "first_reminder_in_minutes": draft.first_reminder_in_minutes,
         "materialize_daily": draft.materialize_daily_reminders,
         "horizon_days": draft.reminder_horizon_days,
         "needs_horizon_confirmation": draft.needs_horizon_confirmation,
-        "daily_local_hhmm": draft.daily_reminder_local_hhmm,
     }
+    if draft.daily_reminder_local_hhmm_list:
+        blob["daily_local_hhmm_list"] = list(draft.daily_reminder_local_hhmm_list)
+        blob["daily_local_hhmm"] = draft.daily_reminder_local_hhmm_list[0]
+    elif draft.daily_reminder_local_hhmm:
+        blob["daily_local_hhmm"] = draft.daily_reminder_local_hhmm
+    return blob
 
 
 def iter_dose_instants_for_medication(
@@ -89,14 +110,20 @@ def iter_dose_instants_for_medication(
     if daily_ok:
         raw_h = prefs.horizon_days if prefs.horizon_days is not None else default_horizon_days
         horizon = max(1, min(90, int(raw_h)))
-        hhmm = (prefs.daily_local_hhmm or default_local_hhmm).strip()
-        daily_times = iter_scheduled_dose_times_utc(
-            tz_name=tz_name,
-            local_hhmm=hhmm,
-            horizon_days=horizon,
-            now_utc=now,
-        )
-        out.extend(daily_times)
+        if prefs.daily_local_hhmm_list:
+            hhmm_seq = list(prefs.daily_local_hhmm_list)
+        elif prefs.daily_local_hhmm:
+            hhmm_seq = [prefs.daily_local_hhmm.strip()]
+        else:
+            hhmm_seq = [default_local_hhmm.strip()]
+        for hhmm in hhmm_seq:
+            daily_times = iter_scheduled_dose_times_utc(
+                tz_name=tz_name,
+                local_hhmm=hhmm,
+                horizon_days=horizon,
+                now_utc=now,
+            )
+            out.extend(daily_times)
 
     return _dedupe_sorted(out)
 

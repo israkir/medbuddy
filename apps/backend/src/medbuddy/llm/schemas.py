@@ -47,7 +47,17 @@ class MedicationExtraction(BaseModel):
     )
     daily_reminder_local_hhmm: str | None = Field(
         default=None,
-        description="If the user gave a daily clock time (HH:MM local), set it; else null",
+        description="Single daily clock time (HH:MM local) when once per day; else null",
+    )
+    daily_reminder_local_hhmm_list: list[str] | None = Field(
+        default=None,
+        description=(
+            "Multiple local times per day (distinct HH:MM in the user's wall-clock timezone), "
+            "earliest-first, when they want fixed reminders more than once per day — e.g. after "
+            "breakfast/lunch/dinner, 早/午/晚, TID, three times daily. Use typical meal times if "
+            "they did not specify exact clocks (e.g. 08:00, 12:30, 18:30). Null if one daily time "
+            "suffices (use daily_reminder_local_hhmm) or defaults should apply."
+        ),
     )
 
 
@@ -118,14 +128,15 @@ class ProfilePatchExtraction(BaseModel):
 
 
 class DoseConfirmationNoteExtraction(BaseModel):
-    """Note to attach when the user confirms taking a dose."""
+    """Note to attach to a dose (same message or a follow-up after they confirmed)."""
 
     note: str | None = Field(
         default=None,
         max_length=500,
         description=(
             "If the user mentions a side effect, reaction, symptom, or anything to remember "
-            "for this dose (e.g. headache after taking it), capture it briefly; else null"
+            "for this dose (e.g. headache after taking it), including in a follow-up message; "
+            "else null"
         ),
     )
 
