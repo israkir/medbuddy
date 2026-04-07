@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Side effects & emergency routing (backend)**: New **`Intent.report_side_effects`** with **`ReportSideEffectsTool`** — best-effort OpenFDA/TFDA grounding plus **`compose_reply`** using **`gemini.medication_companion_side_effects`**. New **`Intent.emergency`** — **`MedicationAgent`** returns fixed localized **`agent.emergency`** (no LLM) before other hooks. Turn interpretation (**`intent_classification_prompt`**) and **`IntentClassification`** schema describe **`emergency`** (life-threatening, highest priority) and **`report_side_effects`** (currently experiencing, attributed to a med) vs **`explain_medication`** / **`confirm_dose`**.
+
 ### Changed
 
+- **LLM adapters (OpenAI + Gemini)**: **`_language_lock`** text is prepended and appended in **`compose_reply`**, medication-added compose, interaction check, and health-summary prompts so outputs stay in **`en`** or **`zh-TW`** per user locale.
+- **Health summary display**: **`HealthSummary.as_text`** uses **`health_summary.*`** locale keys instead of hard-coded Chinese section labels; symptom lists use **`health_summary.symptom_sep`** (**`en`**: comma; **`zh-TW`**: **、**).
+- **`gemini.medication_companion_explain`**: Adds a short **side effects** subsection in ordering (**`en`**, **`zh-TW`**).
 - **Backend structure & ops (standards alignment)**: **`LLMPort.drug_cache_provenance_id`** replaces **`isinstance(..., MockLLM)`** in agent tools for drug-cache provenance; **`InternalMediaPort`** + **`AppServices.internal_media`** serves **`GET /internal-media/{id}`** without HTTP routes importing storage globals; real mode reuses shared **`httpx.AsyncClient`** instances for OpenFDA (**`HttpDrugData`**) and STT (**`GoogleSpeechToText`**) with teardown in **`lifespan`**. Logging trims health-adjacent and webhook detail (medication names, full LINE events, raw drug-query strings in DEBUG). IANA timezone validation narrows exceptions to **`ZoneInfoNotFoundError`** / **`OSError`**.
 - **Turn interpretation (LLM)**: Replaced **`LLMPort.classify_intent`** with **`interpret_user_turn`**, returning **`TurnInterpretation`** (`intent` + **`record_pending_dose_as_taken`** + **`dose_adherence_note`**). **`IntentClassification`** is a single structured output; **`MedicationAgent`** runs **`ConfirmDoseTool`** only when an adherence slot is set, and the tool applies those fields directly (no second-pass dose-note extraction). Prompt/schema describe when to set adherence flags so ambiguous symptom/reply lines do not record **`taken_at`** by accident.
 

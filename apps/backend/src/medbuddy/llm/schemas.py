@@ -153,10 +153,14 @@ class IntentClassification(BaseModel):
 
     intent: str = Field(
         description=(
-            "Exactly one of: add_medication, list_medications, remove_medication, confirm_dose, "
-            "report_missed_dose, update_medication, explain_medication, interaction_check, "
-            "log_vital, request_summary, update_profile, off_topic, general_question. "
-            "Follow the system routing rules: each value maps to one assistant tool or fallback. "
+            "Exactly one of: emergency, add_medication, list_medications, remove_medication, "
+            "confirm_dose, report_missed_dose, update_medication, explain_medication, "
+            "report_side_effects, interaction_check, log_vital, request_summary, update_profile, "
+            "off_topic, general_question. "
+            "emergency = life-threatening symptoms (chest pain, can't breathe, stroke, severe "
+            "allergic reaction, loss of consciousness, poisoning) — highest priority. "
+            "report_side_effects = user is currently experiencing a symptom they attribute to "
+            "their medication (not hypothetical; not life-threatening). "
             "add_medication = save/track drug or dose reminders; explain_medication = ask what/why "
             "about a drug without adding to list; interaction_check = combine substances; "
             "general_question = only when no more specific intent fits."

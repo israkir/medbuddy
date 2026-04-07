@@ -59,6 +59,21 @@ except ImportError:
 
 T = TypeVar("T")
 
+_LANGUAGE_LOCK: dict[str, str] = {
+    "en": (
+        "LANGUAGE REQUIREMENT: You MUST reply in English only. "
+        "Do not switch to any other language regardless of the language used in conversation history or user input."
+    ),
+    "zh-TW": (
+        "語言規定：你的回覆必須使用繁體中文（台灣），"
+        "無論對話歷史或使用者訊息使用何種語言，都不得切換語言。"
+    ),
+}
+
+
+def _language_lock(locale: str) -> str:
+    return _LANGUAGE_LOCK.get(locale, _LANGUAGE_LOCK["zh-TW"])
+
 
 def _strip_json_fence(raw: str) -> str:
     text = raw.strip()
@@ -237,13 +252,16 @@ class OpenAILLM(LLMPort):
         hist_lines = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
         loc = locale or self._locale
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        lang_lock = _language_lock(loc)
         prompt = (
+            f"{lang_lock}\n\n"
             f"{system_persona}\n\n"
             f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
             f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
             f"{t('gemini.recent_conversation', locale=loc)}\n{hist_lines}\n\n"
             f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
-            f"{t('gemini.reply_instruction', locale=loc)}"
+            f"{t('gemini.reply_instruction', locale=loc)}\n\n"
+            f"{lang_lock}"
         )
         return self._generate_sync(self._model, prompt)
 
@@ -393,6 +411,7 @@ class OpenAILLM(LLMPort):
         locale: str,
     ) -> str:
         loc = locale or self._locale
+        lang_lock = _language_lock(loc)
         persona = get_system_persona(locale=loc)
         task = t("gemini.medication_added_companion", locale=loc)
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
@@ -412,11 +431,13 @@ class OpenAILLM(LLMPort):
             )
         appendix = reminder_compose_appendix(saved, loc)
         prompt = (
+            f"{lang_lock}\n\n"
             f"{persona}\n\n{task}\n\n"
             f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
             f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
             f"{facts}{extra}{appendix}\n\n"
-            f"{t('gemini.user_label', locale=loc)}{user_message}"
+            f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
+            f"{lang_lock}"
         )
         return self._generate_sync(self._model, prompt)
 
@@ -449,10 +470,12 @@ class OpenAILLM(LLMPort):
         locale: str,
     ) -> InteractionCheckResult:
         loc = locale or self._locale
+        lang_lock = _language_lock(loc)
         med_list = "\n".join(f"- {m.name} {m.dosage} ({m.schedule})" for m in medications)
         grounding = drug_grounding or t("gemini.no_drug_data", locale=loc)
         persona = get_system_persona(locale=loc)
         prompt = (
+            f"{lang_lock}\n\n"
             f"{persona}\n\n"
             f"{t('gemini.medication_companion_interactions', locale=loc)}\n\n"
             f"{t('gemini.interaction_structured_output_note', locale=loc)}\n\n"
@@ -498,6 +521,7 @@ class OpenAILLM(LLMPort):
     ) -> HealthSummaryResult:
         _ = user_row
         loc = locale or self._locale
+        lang_lock = _language_lock(loc)
         persona = get_system_persona(locale=loc)
 
         med_lines = (
@@ -515,6 +539,7 @@ class OpenAILLM(LLMPort):
         )
 
         prompt = (
+            f"{lang_lock}\n\n"
             f"{persona}\n\n"
             "You are generating a doctor-ready health summary for a patient.\n\n"
             f"Patient profile signals:\n{patient_context}\n\n"
@@ -526,7 +551,7 @@ class OpenAILLM(LLMPort):
             "3. Extracts any symptoms, side effects, or adherence issues mentioned recently\n"
             "4. Flags the top 3-5 concerns the doctor should know\n"
             "5. Suggests questions the patient might want to ask\n"
-            "6. Is written in the patient's language preference\n"
+            f"6. Is written ENTIRELY in the required language — {lang_lock}\n"
             "Do NOT include any PII (real names, phone numbers, ID numbers)."
         )
         return self._generate_structured_sync(self._model, prompt, HealthSummaryResult)
