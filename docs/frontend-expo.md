@@ -12,7 +12,7 @@
 |-------|--------|
 | **What this is** | A **reference client** and **UI prototype** for iOS and Android using the same backend assistant as LINE, via **`/v1/app/*`** when live API mode is enabled. |
 | **What this is not** | Not the shipped “MedBuddy product” in docs alongside LINE; not mixed with LINE webhook, push reminders, or backend-only features here. |
-| **Relationship to backend** | The **authoritative** contract for chat, onboarding, and profile is the **HTTP API** (`POST /v1/app/messages`, onboarding, etc.). This file only describes **how the Expo app consumes** that API and what exists in the **frontend codebase**. |
+| **Relationship to backend** | The **authoritative** contract for chat, onboarding, and profile is the **HTTP API** (`POST /v1/app/messages`, **`POST /v1/app/messages/voice`**, onboarding, etc.). This file only describes **how the Expo app consumes** that API and what exists in the **frontend codebase**. |
 
 **See also:** [`apps/frontend/README.md`](../apps/frontend/README.md) — install, scripts, mock vs API, simulators.
 
@@ -20,7 +20,7 @@
 
 ## Product vision (future)
 
-The app is positioned as a **potential standalone medication companion**: first-run onboarding, tabbed home experience, in-app “Medication helper” chat, optional read-aloud, and (when wired) the same **`run_assistant_text_turn`** behavior as LINE text. **Dose reminders** remain **LINE push only** in the current backend; the Expo app does **not** receive the same proactive reminder pipeline (see [`reminders.md`](reminders.md)).
+The app is positioned as a **potential standalone medication companion**: first-run onboarding, tabbed home experience, in-app “Medication helper” chat, **hold-to-talk → backend STT** (`/v1/app/messages/voice`), **automatic read-aloud** of replies in the user’s profile language (**expo-speech**), manual **read-aloud** on any bubble, and the same **`run_assistant_text_turn`** core as LINE text. **Dose reminders** remain **LINE push only** in the current backend; the Expo app does **not** receive the same proactive reminder pipeline (see [`reminders.md`](reminders.md)).
 
 ---
 
@@ -43,7 +43,7 @@ The app is positioned as a **potential standalone medication companion**: first-
 | **Medications** | Catalog, **`MedicationListCard`**, visit questions, **`MedicationQuestionsPanel`**, **expo-speech** listen via **`MedicationExplanationContext`** |
 | **Family** | Informational copy; placeholder invite (no backend) |
 | **Settings** | Language (zh-TW / en), persisted before splash hides |
-| **Medication helper (chat)** | `app/companion.tsx` — messages, **suggested prompts**, **read-aloud** (device speech synthesis), rotating chips / prompts toward meds and visit prep (see app for current UX) |
+| **Medication helper (chat)** | `app/companion.tsx` — messages, **hold mic** (expo-av) → **`sendCompanionVoiceMessage`** → backend STT + reply; **auto speak** reply via **expo-speech** (`locale` from **`GET /v1/app/me`** with i18n fallback); tab bar mic **hands off** recording via **AsyncStorage** + navigate to companion; **suggested prompts**, manual **read-aloud** on assistant bubbles |
 | **Visit summary** | Doctor-ready draft screen; may call **`GET /v1/app/summary`** when API mode is on; local **AsyncStorage** draft for offline or sharing |
 
 ---
@@ -53,7 +53,7 @@ The app is positioned as a **potential standalone medication companion**: first-
 | Mode | Behavior |
 |------|----------|
 | **`EXPO_PUBLIC_USE_MOCK_DATA=true`** (typical local dev) | No backend required; **`companionApi`** can persist onboarding-shaped data locally; chat returns **i18n-only** mock explanations. |
-| **`EXPO_PUBLIC_USE_MOCK_DATA=false`** | **`companionApi`** calls **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`GET /v1/app/summary`** with **`X-App-User-Id`** and optional **`Authorization: Bearer`** per backend config. |
+| **`EXPO_PUBLIC_USE_MOCK_DATA=false`** | **`companionApi`** calls **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`POST /v1/app/messages/voice`** (multipart), **`GET /v1/app/summary`** with **`X-App-User-Id`** and optional **`Authorization: Bearer`** per backend config. |
 
 **Commands:** `make fe-dev` / `make fe-dev-mock` vs `make fe-dev-api` (live backend) — see frontend README.
 
@@ -63,9 +63,10 @@ The app is positioned as a **potential standalone medication companion**: first-
 
 | Topic | Detail |
 |-------|--------|
-| **Hold-to-talk prototype** | May use **expo-av**; baseline shows an alert after recording — **not** wired to backend STT. **LINE voice** + Google Speech-to-Text is the supported voice path in the primary product docs. |
+| **Hold-to-talk → backend** | **expo-av** recording from **Medication helper** or the **tab bar** mic → **`POST /v1/app/messages/voice`** (`lib/companionApi.ts`). **STT** uses the user’s stored **`locale`** (`en` / `zh-TW`). Success path: show **transcript** + reply, then **expo-speech** reads the reply (profile locale, with i18n fallback). **Web:** voice upload not supported; use keyboard. **`useVoiceRecording`:** if **`onRecordingUri`** is set, the generic “saved” alert is skipped (companion / tab bar). |
+| **vs LINE** | **LINE:** voice note → STT → assistant → **text** reply only (same as typed messages). **Expo:** after **`POST /v1/app/messages/voice`**, the client **reads the reply aloud** with **expo-speech** in the user’s profile language (not server-synthesized audio). |
 | **Dose reminders** | Backend sends **LINE push** only for LINE `userId` users. **No** Expo local notifications in this codebase slice. |
-| **Keyboard / dictation** | Users can still dictate into the chat field via OS keyboard; that text follows the normal **`/v1/app/messages`** path. |
+| **Keyboard / dictation** | Users can still dictate into the chat field via OS keyboard; that text follows **`POST /v1/app/messages`**. |
 
 ---
 

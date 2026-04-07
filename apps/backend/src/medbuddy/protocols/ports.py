@@ -226,6 +226,19 @@ class UserDataPort(Protocol):
     ) -> list[DoseEventPendingCandidate]:
         """Pending doses scheduled at or before now, newest first."""
 
+    async def list_upcoming_dose_events(
+        self,
+        line_user_id: str,
+        *,
+        from_utc: datetime,
+        until_utc_exclusive: datetime,
+        max_items: int = 96,
+    ) -> list[DoseEventPendingCandidate]:
+        """Pending (not taken, not missed) doses with ``from_utc <= scheduled_at < until_utc_exclusive``.
+
+        Rows are ordered by ``scheduled_at`` ascending (soonest first).
+        """
+
     async def list_recent_taken_dose_candidates(
         self, line_user_id: str, *, max_items: int = 5
     ) -> list[DoseEventPendingCandidate]:

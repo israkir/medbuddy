@@ -17,7 +17,7 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 |------|----------------|-------|
 | **User message** (current turn) | Yes, **after redaction** | See `redact_pii_text` in `apps/backend/src/medbuddy/privacy/redact.py`. Redaction is pattern-based, not full PHI scrubbing. |
 | **Recent conversation turns** | Yes, **after redaction** | `redact_conversation_turns_for_llm` in the same module. |
-| **Patient “context” block** | Yes, **mostly de-identified** | Built with `build_patient_context_for_llm` in `apps/backend/src/medbuddy/prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule). |
+| **Patient “context” block** | Yes, **mostly de-identified** | Built via `patient_context_for_llm` → `build_patient_context_for_llm` in `apps/backend/src/medbuddy/application/patient_llm_context.py` + `prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule), and when present a **time-ordered upcoming dose** section from materialized **`dose_events`** (local times, drug names, dose/schedule text — same facts as LINE reminder targets). |
 | **Drug reference / label snippets** | Yes | From registries (e.g. OpenFDA), not end-user PII. |
 | **Turn interpretation** | Yes, on **redacted** user text | `MedicationAgent` → `LLMPort.interpret_user_turn` (intent + adherence slots; see `apps/backend/src/medbuddy/application/assistant_turn.py` → `MedicationAgent`). |
 | **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
@@ -32,7 +32,7 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 
 ## User-facing vs model-facing context
 
-- **`build_patient_context_for_llm`**: use for **all** prompts and cache fingerprints that should stay de-identified (`assistant_turn`, `compose_medication_added_reply` patient block, etc.).
+- **`patient_context_for_llm`** (preferred) / **`build_patient_context_for_llm`** with optional **`upcoming_doses_context`**: use for **all** prompts and cache fingerprints that should stay de-identified (`assistant_turn`, explain/interaction/side-effect/summary tools, `compose_medication_added_reply` patient block, etc.).
 - **`build_patient_context_for_chat_display`**: use when the **same thread** should show the user their **full** stored profile snippet (e.g. listing medications together with profile lines). This string is **not** intended for external LLM APIs.
 
 Conversation rows in the database are still stored from the **original** user message (for continuity with the product). Most assistant/tool paths pass **redacted** text into the LLM; **profile update**, **locale**, and **health summary** paths may use **raw** or **unredacted** strings as documented in **[llm-context.md](./llm-context.md)**.

@@ -1,5 +1,7 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/Colors';
 import { useVoiceRecording } from '@/hooks/useVoiceRecording';
 import { useColorScheme } from '@/components/useColorScheme';
+import { PENDING_VOICE_HANDOFF_KEY } from '@/lib/companionApi';
 
 const MIC_SIZE = 64;
 const MIC_ICON = 30;
@@ -28,7 +31,15 @@ export function UnifiedTabBar({ state, descriptors, navigation }: BottomTabBarPr
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const palette = Colors[colorScheme ?? 'light'];
-  const { recording, onPressIn, onPressOut } = useVoiceRecording();
+  const router = useRouter();
+  const { recording, onPressIn, onPressOut } = useVoiceRecording({
+    onRecordingUri: (uri) => {
+      void (async () => {
+        await AsyncStorage.setItem(PENDING_VOICE_HANDOFF_KEY, uri);
+        router.push('/companion');
+      })();
+    },
+  });
 
   const routes = state.routes;
   const homeRoute = routes[0];

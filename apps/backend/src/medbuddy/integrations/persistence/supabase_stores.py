@@ -785,6 +785,60 @@ class SupabaseUserData(UserDataPort):
             )
         return out
 
+    async def list_upcoming_dose_events(
+        self,
+        line_user_id: str,
+        *,
+        from_utc: datetime,
+        until_utc_exclusive: datetime,
+        max_items: int = 96,
+    ) -> list[DoseEventPendingCandidate]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        a = from_utc if from_utc.tzinfo else from_utc.replace(tzinfo=UTC)
+        b = (
+            until_utc_exclusive
+            if until_utc_exclusive.tzinfo
+            else until_utc_exclusive.replace(tzinfo=UTC)
+        )
+        from_iso = a.isoformat()
+        until_iso = b.isoformat()
+        limit = max(1, max_items)
+
+        def q_rows() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("id, scheduled_at, medications(name, dosage, schedule)")
+                .eq("patient_id", uid)
+                .is_("taken_at", "null")
+                .is_("missed_at", "null")
+                .gte("scheduled_at", from_iso)
+                .lt("scheduled_at", until_iso)
+                .order("scheduled_at", desc=False)
+                .limit(limit)
+                .execute()
+            )
+
+        resp = await _run_q(q_rows)
+        rows = resp.data or []
+        out: list[DoseEventPendingCandidate] = []
+        for r in rows:
+            med = r.get("medications")
+            if isinstance(med, list):
+                med = med[0] if med else None
+            if not isinstance(med, dict):
+                continue
+            out.append(
+                DoseEventPendingCandidate(
+                    dose_event_id=str(r["id"]),
+                    medication_name=str(med.get("name") or ""),
+                    dosage=str(med.get("dosage") or ""),
+                    schedule=str(med.get("schedule") or ""),
+                    scheduled_at=_parse_ts(r["scheduled_at"]),
+                )
+            )
+        return out
+
     async def list_recent_taken_dose_candidates(
         self, line_user_id: str, *, max_items: int = 5
     ) -> list[DoseEventPendingCandidate]:

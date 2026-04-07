@@ -92,6 +92,40 @@ async def test_app_messages_ok(mock_settings):
 
 
 @pytest.mark.asyncio
+async def test_app_messages_voice_ok(mock_settings):
+    mock_settings.mock_external_services = True
+    mock_settings.mobile_bearer_token = ""
+    app.state.services = build_app_services(mock_settings)
+    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/v1/app/messages/voice",
+                headers=_mobile_headers(user="u-voice-1"),
+                files={"file": ("clip.m4a", b"fake-m4a-audio", "audio/mp4")},
+            )
+            assert r.status_code == 200
+            data = r.json()
+            assert "reply" in data
+            assert "transcript" in data
+            assert data["transcript"]
+
+
+@pytest.mark.asyncio
+async def test_app_messages_voice_empty_file(mock_settings):
+    mock_settings.mock_external_services = True
+    mock_settings.mobile_bearer_token = ""
+    app.state.services = build_app_services(mock_settings)
+    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/v1/app/messages/voice",
+                headers=_mobile_headers(user="u-voice-empty"),
+                files={"file": ("empty.m4a", b"", "audio/mp4")},
+            )
+            assert r.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_app_messages_validation_empty_text(mock_settings):
     mock_settings.mock_external_services = True
     mock_settings.mobile_bearer_token = ""

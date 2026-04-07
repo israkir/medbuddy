@@ -67,6 +67,13 @@ class MessageReply(BaseModel):
     reply: str
 
 
+class MessageVoiceReply(BaseModel):
+    """Assistant reply after transcribing a voice upload (same text pipeline as ``MessageCreate``)."""
+
+    reply: str
+    transcript: str
+
+
 class MeResponse(BaseModel):
     app_user_id: str
     preferred_name: str | None = None

@@ -78,6 +78,14 @@ def _is_placeholder_dose_or_schedule(value: str, *, unspecified_label: str) -> b
     return x in _PLACEHOLDER_TOKENS
 
 
+def dose_or_schedule_display(value: str | None, *, unspecified_label: str) -> str:
+    """Map stored English/empty placeholders to the user's locale label for UI copy."""
+    raw = (value or "").strip()
+    if _is_placeholder_dose_or_schedule(raw, unspecified_label=unspecified_label):
+        return unspecified_label
+    return raw
+
+
 def medication_draft_needs_add_confirmation(
     draft: MedicationDraft, *, unspecified_label: str, user_text: str
 ) -> bool:

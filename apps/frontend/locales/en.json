@@ -80,8 +80,9 @@
   },
   "companion": {
     "title": "Medication helper",
-    "subtitle": "Short, plain answers about purpose, timing, and basic interaction cautions. Tap Read aloud on any reply. This does not replace your doctor or pharmacist.",
+    "subtitle": "Short, plain answers about purpose, timing, and basic interaction cautions. Hold the mic (here or in the tab bar) to ask by voice—the answer plays aloud in your profile language—or tap Read aloud on any reply. This does not replace your doctor or pharmacist.",
     "placeholder": "Type your question… (or use dictation on your keyboard)",
+    "voiceMicA11y": "Ask with your voice (hold)",
     "sendA11y": "Send question",
     "readAloud": "Read aloud",
     "readAloudA11y": "Read this answer aloud",

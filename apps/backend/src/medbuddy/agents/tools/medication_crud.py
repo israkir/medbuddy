@@ -10,17 +10,18 @@ from medbuddy.agents.base import ToolResult
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedicationExtractionError, MedicationNotFoundError
 from medbuddy.i18n import t
-from medbuddy.llm.medication_draft_build import medication_draft_needs_add_confirmation
+from medbuddy.llm.medication_draft_build import (
+    dose_or_schedule_display,
+    medication_draft_needs_add_confirmation,
+)
 from medbuddy.models.domain import (
     MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
 )
 from medbuddy.privacy.redact import redact_pii_text
-from medbuddy.prompts.persona import (
-    build_patient_context_for_llm,
-    format_patient_medication_context,
-)
+from medbuddy.application.patient_llm_context import patient_context_for_llm
+from medbuddy.prompts.persona import format_patient_medication_context
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,10 @@ async def persist_medication_add_from_draft(
     user_row = await svc.users.get_or_create_user(user_key)
     saved = await svc.users.add_medication(user_key, draft)
     meds_updated = await svc.users.list_medications(user_key)
-    patient_ctx = build_patient_context_for_llm(user_row, meds_updated, locale=locale)
+    await sync_and_enqueue_reminders(svc, user_key)
+    patient_ctx = await patient_context_for_llm(
+        svc, user_key, user_row, meds_updated, locale=locale, sync_dose_events_first=False
+    )
     drug_grounding = await _drug_grounding_text(svc, saved.name)
 
     try:
@@ -73,15 +77,14 @@ async def persist_medication_add_from_draft(
         )
     except Exception:
         log.exception("add_medication: compose_medication_added_reply failed; using fallback")
+        un = t("medication.unspecified", locale=locale)
         reply = t(
             "medication.added",
             locale=locale,
             name=saved.name,
-            dosage=saved.dosage,
-            schedule=saved.schedule,
+            dosage=dose_or_schedule_display(saved.dosage, unspecified_label=un),
+            schedule=dose_or_schedule_display(saved.schedule, unspecified_label=un),
         )
-
-    await sync_and_enqueue_reminders(svc, user_key)
     log.info(
         "add_medication: user_key=%s med_id=%s name_len=%d (from_draft)",
         user_key,
@@ -150,8 +153,8 @@ class AddMedicationTool:
                 "medication.add_confirm_prompt",
                 locale=locale,
                 name=draft.name,
-                dosage=draft.dosage,
-                schedule=draft.schedule,
+                dosage=dose_or_schedule_display(draft.dosage, unspecified_label=un),
+                schedule=dose_or_schedule_display(draft.schedule, unspecified_label=un),
                 instructions=instr_disp,
             )
             return ToolResult(reply=reply)
@@ -256,13 +259,14 @@ class UpdateMedicationTool:
             updated.id,
             ",".join(sorted(fields.keys())),
         )
+        un = t("medication.unspecified", locale=locale)
         return ToolResult(
             reply=t(
                 "medication.updated",
                 locale=locale,
                 name=updated.name,
-                dosage=updated.dosage,
-                schedule=updated.schedule,
+                dosage=dose_or_schedule_display(updated.dosage, unspecified_label=un),
+                schedule=dose_or_schedule_display(updated.schedule, unspecified_label=un),
                 instructions=(updated.instructions or "-"),
             ),
             structured=updated,

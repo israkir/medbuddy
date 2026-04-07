@@ -20,7 +20,10 @@ from typing import Any, TypeVar
 from medbuddy.exceptions import LLMParseError
 from medbuddy.i18n import t
 from medbuddy.llm.intent_classification_prompt import format_intent_classification_prompt
-from medbuddy.llm.medication_draft_build import medication_draft_from_extraction
+from medbuddy.llm.medication_draft_build import (
+    dose_or_schedule_display,
+    medication_draft_from_extraction,
+)
 from medbuddy.llm.turn_interpretation import (
     turn_interpretation_from_classification,
     turn_interpretation_on_parse_failure,
@@ -488,12 +491,13 @@ class OpenAILLM(LLMPort):
         persona = get_system_persona(locale=loc)
         task = t("gemini.medication_added_companion", locale=loc)
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        un = t("medication.unspecified", locale=loc)
         facts = t(
             "gemini.added_saved_facts",
             locale=loc,
             name=saved.name,
-            dosage=saved.dosage,
-            schedule=saved.schedule,
+            dosage=dose_or_schedule_display(saved.dosage, unspecified_label=un),
+            schedule=dose_or_schedule_display(saved.schedule, unspecified_label=un),
         )
         extra = ""
         if saved.instructions:
@@ -544,7 +548,12 @@ class OpenAILLM(LLMPort):
     ) -> InteractionCheckResult:
         loc = locale or self._locale
         lang_lock = _language_lock(loc)
-        med_list = "\n".join(f"- {m.name} {m.dosage} ({m.schedule})" for m in medications)
+        un = t("medication.unspecified", locale=loc)
+        med_list = "\n".join(
+            f"- {m.name} {dose_or_schedule_display(m.dosage, unspecified_label=un)} "
+            f"({dose_or_schedule_display(m.schedule, unspecified_label=un)})"
+            for m in medications
+        )
         grounding = drug_grounding or t("gemini.no_drug_data", locale=loc)
         persona = get_system_persona(locale=loc)
         prompt = (
@@ -596,10 +605,11 @@ class OpenAILLM(LLMPort):
         loc = locale or self._locale
         lang_lock = _language_lock(loc)
         persona = get_system_persona(locale=loc)
-
+        un = t("medication.unspecified", locale=loc)
         med_lines = (
             "\n".join(
-                f"- {m.name} {m.dosage}, {m.schedule}"
+                f"- {m.name} {dose_or_schedule_display(m.dosage, unspecified_label=un)}, "
+                f"{dose_or_schedule_display(m.schedule, unspecified_label=un)}"
                 + (f" | notes: {m.instructions}" if m.instructions else "")
                 for m in medications
             )

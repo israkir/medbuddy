@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from medbuddy.i18n import t
+from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 
 _PROFILE_GENDER_I18N: dict[str, str] = {
     "female": "prompts.gender_option_female",
@@ -39,18 +40,27 @@ def get_system_persona(*, locale: str) -> str:
 def format_patient_medication_context(meds: list, *, locale: str) -> str:
     if not meds:
         return t("prompts.no_medications", locale=locale)
-    lines = []
+    un = t("medication.unspecified", locale=locale)
+    lines: list[str] = []
+    any_incomplete = False
     for m in meds:
+        dosage = dose_or_schedule_display(m.dosage, unspecified_label=un)
+        schedule = dose_or_schedule_display(m.schedule, unspecified_label=un)
+        if dosage == un or schedule == un:
+            any_incomplete = True
         lines.append(
             t(
                 "prompts.medication_line",
                 locale=locale,
                 name=m.name,
-                dosage=m.dosage,
-                schedule=m.schedule,
+                dosage=dosage,
+                schedule=schedule,
             )
         )
-    return "\n".join(lines)
+    body = "\n".join(lines)
+    if any_incomplete:
+        body += "\n" + t("medication.list_hint_fill_dose_schedule", locale=locale)
+    return body
 
 
 def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str:
@@ -160,7 +170,13 @@ def build_patient_context_for_chat_display(
     return med_part
 
 
-def build_patient_context_for_llm(user_row: dict[str, Any], meds: list, *, locale: str) -> str:
+def build_patient_context_for_llm(
+    user_row: dict[str, Any],
+    meds: list,
+    *,
+    locale: str,
+    upcoming_doses_context: str | None = None,
+) -> str:
     """De-identified profile cues plus medications — safe for external model APIs."""
     signals = format_patient_profile_signals_for_llm(user_row, locale=locale)
     gaps = format_profile_gaps(user_row, locale=locale)
@@ -171,5 +187,9 @@ def build_patient_context_for_llm(user_row: dict[str, Any], meds: list, *, local
     if gaps:
         blocks.append(gaps)
     if blocks:
-        return "\n\n".join(blocks) + f"\n\n{med_part}"
-    return med_part
+        base = "\n\n".join(blocks) + f"\n\n{med_part}"
+    else:
+        base = med_part
+    if upcoming_doses_context and upcoming_doses_context.strip():
+        return f"{base}\n\n{upcoming_doses_context.strip()}"
+    return base

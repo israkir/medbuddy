@@ -35,10 +35,12 @@ gemini_llm    supabase_stores  drugs_http
 | **Channels** | `channels/line/` | LINE webhook, HMAC signature verification, event pipeline |
 | | `channels/mobile/` | Mobile REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
+| | `application/patient_llm_context.py` | `patient_context_for_llm()` — de-identified context plus materialized upcoming `dose_events` for LLM prompts |
 | | `application/profile_intents.py` | Profile updates when intent is `update_profile` (`extract_profile_patch`) |
 | **Agents** | `agents/medication_agent.py` | `MedicationAgent` — `interpret_user_turn` → maps `TurnInterpretation` to tools (adherence slots → `ConfirmDoseTool`) |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
-| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `RemoveMedicationTool` |
+| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `UpdateMedicationTool`, `RemoveMedicationTool` |
+| | `agents/tools/upcoming_doses.py` | `ListUpcomingDosesTool` (`upcoming_doses` intent) |
 | | `agents/tools/drug_lookup.py` | `ExplainMedicationTool` (grounding + LLM compose + cache) |
 | | `agents/tools/interaction_check.py` | `InteractionCheckTool` |
 | | `agents/tools/health_summary.py` | `GenerateHealthSummaryTool` (doctor-ready output) |
@@ -92,6 +94,7 @@ All protected routes require **`X-App-User-Id`** (4–128 chars) and, in product
 | `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes, **timezone**) |
 | `POST /v1/app/onboarding` | Bearer + User-Id | First-run profile save (optional **timezone** IANA; default **Asia/Taipei**) |
 | `POST /v1/app/messages` | Bearer + User-Id | Chat turn — `{"text":"…"}` → `{"reply":"…"}` |
+| `POST /v1/app/messages/voice` | Bearer + User-Id | Multipart **`file`** (audio) → STT (profile **`locale`**) → same assistant as text → `{"reply":"…","transcript":"…"}` |
 | `GET /v1/app/summary` | Bearer + User-Id | Doctor-ready structured health summary |
 
 ---

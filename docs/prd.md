@@ -35,11 +35,11 @@ The prototype validates **text-in, text-out** conversational interactions only. 
 | Dimension | In prototype scope | Out of prototype scope |
 |-----------|--------------------|------------------------|
 | **LINE** | Text messages → assistant → text replies. Dose reminder push is text only. | Voice notes and speech-to-text transcription as supported user journeys (engineering exploration only). |
-| **HTTP API** | `POST /v1/app/messages` with text body; same assistant core as LINE. | Voice upload, streaming, real-time audio. |
+| **HTTP API** | `POST /v1/app/messages` with text body; same assistant core as LINE. | **Prototype acceptance:** text chat only. **Engineering / reference Expo:** buffered voice upload (**`POST /v1/app/messages/voice`** → STT → text reply); streaming or WebSocket audio. |
 | **Feature set** | Closed set in §7: list/add/remove meds, explain, interaction check, confirm dose, profile/locale, health summary, general Q&A, off-topic refusal. | Open-domain "do anything" assistant behavior. |
 | **Mobile client** | HTTP API is callable by integrations and the reference Expo app. | Expo app as a co-equal validated channel. |
 
-> **Engineering note:** Repository code may ingest LINE voice audio via Google Speech-to-Text. Product acceptance for the prototype is defined on **text paths only** until a future phase explicitly promotes voice.
+> **Engineering note:** Repository code may ingest LINE voice audio via Google Speech-to-Text. **`POST /v1/app/messages/voice`** (reference Expo: upload → STT → same assistant; reply speech is on-device) may exist for experimentation. **Product acceptance** for the prototype remains defined on **text paths only** until a future phase explicitly promotes voice.
 
 ---
 
@@ -157,7 +157,7 @@ Requirements are feature-level. Implementation details are in [`tdd.md`](tdd.md)
 |----|-------------|-----------|
 | A-1 | A single assistant pipeline handles both LINE text and HTTP text with identical behavior. | Yes |
 | A-2 | Each user turn is classified into a structured intent with adherence fields before tool dispatch. Recent (redacted) conversation history informs classification for short follow-ups. | Yes |
-| A-3 | The following intents are supported: list medications, add medication, remove medication, update medication, explain medication, check interactions, confirm dose, report missed dose, report side effects, log vital, request summary, update profile (including locale and timezone), general question, off-topic. | Yes |
+| A-3 | The following intents are supported: list medications, **upcoming doses** (time-ordered schedule from `dose_events`), add medication, remove medication, update medication, explain medication, check interactions, confirm dose, report missed dose, report side effects, log vital, request summary, update profile (including locale and timezone), general question, off-topic. | Yes |
 | A-4 | General questions and vital logging produce a composed reply without mandatory drug data prefetch. | Yes |
 | A-5 | When a medication is added, reminder preferences extracted from the user's message drive dose event creation. | Yes |
 

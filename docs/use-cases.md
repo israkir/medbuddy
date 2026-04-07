@@ -65,28 +65,29 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 | **`GET /v1/app/me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. |
 | **`POST /v1/app/onboarding`** | No | **`UserDataPort.save_onboarding_profile`** — name, optional age, gender, contacts, notes, **IANA `timezone`**, **`locale`** (`en` \| `zh-TW`). |
 | **`POST /v1/app/messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn(user_key=app_user_id, user_text=…)`** → `{"reply":"…"}`. |
+| **`POST /v1/app/messages/voice`** | **Yes** | Multipart **`file`** → **STT** (`transcribe_m4a`, language from profile **`locale`**) → **`run_assistant_text_turn`** on transcript → `{"reply":"…","transcript":"…"}`. |
 | **`GET /v1/app/summary`** | No (dedicated tool path) | **`GenerateHealthSummaryTool`** with full history/meds — structured **doctor summary** JSON (+ `plain_text`), not the same JSON shape as chat-only summary text. |
 
-**Reference UI:** Expo **`Medication helper`** calls **`POST /v1/app/messages`** when live API mode is on — see [`frontend-expo.md`](frontend-expo.md).
+**Reference UI:** Expo **`Medication helper`** calls **`POST /v1/app/messages`** and **`POST /v1/app/messages/voice`** when live API mode is on — see [`frontend-expo.md`](frontend-expo.md).
 
 ---
 
 ## 2. Assistant pipeline (`run_assistant_text_turn`)
 
-All **chat** turns share this flow (LINE text/voice transcript and **`POST /v1/app/messages`**).
+All **chat** turns share this flow (LINE text/voice transcript, **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** after STT).
 
 1. **Redact** PII before turn interpretation (`redact_pii_text`).
 2. **Load** user row + medication list **and** recent conversation turns **in parallel**; **`interpret_user_turn`** via **`LLM`** with optional **recent redacted dialogue** (`recent_context`) so short follow-ups align with the prior assistant turn (or `MockLLM` in tests).
 3. **Append** the **user** turn to conversation store (raw text).
 4. **Intent hooks** — optional pilot short-circuit (**§5**).
-5. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.8**). *`interpret_user_turn` + recent context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
-6. **`update_profile`** — **`extract_profile_patch`** (structured LLM) + `patch_user_profile` (**§3.7**) including locale/timezone changes.
-7. **Tool dispatch** — `list` / `add` / `update` / `remove` / **`confirm_dose`** (only when interpretation includes adherence slots; **§3.9**) / `explain` / `interaction_check` / `log_vital` / `request_summary` (**§3**).
-8. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`general_question`**), **or** when intent is **`confirm_dose`** but **neither** **`record_pending_dose_as_taken`** nor **`dose_adherence_note`** is set (**§3.9**).
+5. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.9**). *`interpret_user_turn` + recent context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
+6. **`update_profile`** — **`extract_profile_patch`** (structured LLM) + `patch_user_profile` (**§3.8**) including locale/timezone changes.
+7. **Tool dispatch** — `list` / **`upcoming_doses`** / `add` / `update` / `remove` / **`confirm_dose`** (only when interpretation includes adherence slots; **§3.10**) / `explain` / `interaction_check` / `log_vital` / `request_summary` (**§3**).
+8. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`general_question`**), **or** when intent is **`confirm_dose`** but **neither** **`record_pending_dose_as_taken`** nor **`dose_adherence_note`** is set (**§3.10**).
 9. **Append** the **assistant** turn and return reply text.
 
 **Routing** uses the configured **`Intent`** enum for the primary tool/fallback branch ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
-`add_medication`, `update_medication`, `list_medications`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `emergency`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.9**).
+`add_medication`, `update_medication`, `list_medications`, `upcoming_doses`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `emergency`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.10**).
 
 ---
 
@@ -105,7 +106,19 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.2 `add_medication`
+### 3.2 `upcoming_doses`
+
+| | |
+|--|--|
+| **Scenario** | User asks **when** to take medicines next — soon, later, rest of today, this week, “what’s next,” etc. — from **materialized** reminders, not only static list copy. |
+| **Examples** | “What should I take later today?” · 「接下來要吃什麼藥」 · “What’s my schedule?” |
+| **Outcome** | **`ListUpcomingDosesTool`**: **`UserDataPort.sync_upcoming_dose_events`**, then **`list_upcoming_dose_events`** over a sliding window (**local midnight** through **7 days**, pending rows only), formatted in the user’s **`patients.timezone`**. **No** LLM compose for the list body. |
+| **Contrast** | **`list_medications`** (**§3.1**) is inventory (name, dose, schedule text). **`upcoming_doses`** is clock-ordered **`dose_events`**. Empty schedule means no pending rows in the window (e.g. no reminder metadata yet). |
+| **Errors** | Same generic agent error pattern as other tools. |
+
+---
+
+### 3.3 `add_medication`
 
 | | |
 |--|--|
@@ -117,7 +130,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.3 `remove_medication`
+### 3.4 `remove_medication`
 
 | | |
 |--|--|
@@ -128,7 +141,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.4 `explain_medication`
+### 3.5 `explain_medication`
 
 | | |
 |--|--|
@@ -139,7 +152,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.5 `interaction_check`
+### 3.6 `interaction_check`
 
 | | |
 |--|--|
@@ -149,7 +162,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.6 `request_summary` (in chat)
+### 3.7 `request_summary` (in chat)
 
 | | |
 |--|--|
@@ -160,7 +173,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.7 `update_profile`
+### 3.8 `update_profile`
 
 | | |
 |--|--|
@@ -171,7 +184,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.8 `off_topic`
+### 3.9 `off_topic`
 
 | | |
 |--|--|
@@ -182,7 +195,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.9 `confirm_dose`
+### 3.10 `confirm_dose`
 
 | | |
 |--|--|
@@ -193,7 +206,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.10 `report_missed_dose`
+### 3.11 `report_missed_dose`
 
 | | |
 |--|--|
@@ -203,7 +216,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.11 `update_medication`
+### 3.12 `update_medication`
 
 | | |
 |--|--|
@@ -214,11 +227,11 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.12 `log_vital` · `general_question`
+### 3.13 `log_vital` · `general_question`
 
 | | |
 |--|--|
-| **Scenario** | Vital sign in text, small talk, or general medication-adjacent chat. `log_vital` has a dedicated extraction + save tool, while `general_question` goes through conversational fallback (`request_summary` is handled by **`GenerateHealthSummaryTool`** — **§3.6**). |
+| **Scenario** | Vital sign in text, small talk, or general medication-adjacent chat. `log_vital` has a dedicated extraction + save tool, while `general_question` goes through conversational fallback (`request_summary` is handled by **`GenerateHealthSummaryTool`** — **§3.7**). |
 | **Examples** | 「藥物過量了怎麼辦」 · “What if I doubled my dose?” · 「血壓 130/85」 · 「早安」 |
 | **Outcome** | For **`log_vital`**: extract and persist vital data via `LogVitalTool` (acknowledge or ask for missing details). For **`general_question`**: **`compose_reply`** with persona + **de-identified** patient context + history and the user’s **locale**. |
 | **Prefetch** | Only **`explain_medication`**, **`interaction_check`**, and (after successful save) **`add_medication`** load drug grounding inside the main turn. |
@@ -239,7 +252,7 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Scenario:** Pilot intercepts a classified intent before fixed refusals, profile, tools, or fallback.
 
-**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.9**) → **`compose_reply`** fallback.
+**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.10**) → **`compose_reply`** fallback.
 
 ---
 
@@ -251,7 +264,7 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Behavior:** **`dose_events`** rebuild from extraction prefs + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. Free-text **`schedule`** echoed but **v1** does not expand to multiple times per day.
 
-**Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.9**), **`taken_at`** can be set without LINE postback.
+**Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.10**), **`taken_at`** can be set without LINE postback.
 
 **Full reference:** [`reminders.md`](reminders.md).
 
@@ -262,4 +275,4 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 - Clinical diagnosis or replacing clinician/pharmacist judgment.
 - **Full TFDA HTTP** — stub returns empty; mocks may imitate TFDA.
 - **LINE `postback`** handling** — no user-facing action yet.
-- **Reference Expo** hold-to-talk → backend STT — see [`frontend-expo.md`](frontend-expo.md); **LINE audio** + Google Speech-to-Text is supported.
+- **Reference Expo** hold-to-talk → **`POST /v1/app/messages/voice`** — see [`frontend-expo.md`](frontend-expo.md). **LINE** voice notes use the same STT → assistant pipeline, but replies are **text-only** on LINE (Expo adds on-device read-aloud after the HTTP voice turn).

@@ -17,7 +17,8 @@ from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
-from medbuddy.prompts.persona import build_patient_context_for_llm, get_system_persona
+from medbuddy.application.patient_llm_context import patient_context_for_llm
+from medbuddy.prompts.persona import get_system_persona
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +45,9 @@ class ExplainMedicationTool:
         **_: Any,
     ) -> ToolResult:
         safe_text = redact_pii_text(user_text)
-        patient_ctx = build_patient_context_for_llm(user_row, medications, locale=locale)
+        patient_ctx = await patient_context_for_llm(
+            svc, user_key, user_row, medications, locale=locale
+        )
 
         # Personalization cache check
         if svc.drug_caches is not None:

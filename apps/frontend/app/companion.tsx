@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Link, Stack, type Href } from 'expo-router';
@@ -19,7 +20,13 @@ import { Text, View } from '@/components/Themed';
 import { fontSize } from '@/constants/accessibility';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { sendCompanionMessage } from '@/lib/companionApi';
+import { useVoiceRecording } from '@/hooks/useVoiceRecording';
+import {
+  fetchMeProfile,
+  PENDING_VOICE_HANDOFF_KEY,
+  sendCompanionMessage,
+  sendCompanionVoiceMessage,
+} from '@/lib/companionApi';
 
 type Bubble = { role: 'user' | 'assistant'; text: string };
 
@@ -63,18 +70,45 @@ export default function CompanionScreen() {
   );
   const [peekKey, setPeekKey] = useState<(typeof ENGAGEMENT_KEYS)[number] | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const speechLang = i18n.language.startsWith('zh') ? 'zh-TW' : 'en-US';
+  const [profileLocale, setProfileLocale] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMeProfile()
+      .then((p) => {
+        if (!cancelled && typeof p.locale === 'string') {
+          setProfileLocale(p.locale);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProfileLocale(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const speechLang =
+    profileLocale === 'en'
+      ? 'en-US'
+      : profileLocale === 'zh-TW'
+        ? 'zh-TW'
+        : i18n.language.startsWith('zh')
+          ? 'zh-TW'
+          : 'en-US';
 
   const speak = useCallback(
     (text: string) => {
       Speech.stop();
       Speech.speak(text, {
         language: speechLang,
-        rate: i18n.language.startsWith('zh') ? 0.88 : 0.92,
+        rate: speechLang.startsWith('zh') ? 0.88 : 0.92,
         pitch: 1,
       });
     },
-    [i18n.language, speechLang]
+    [speechLang]
   );
 
   useEffect(
@@ -136,6 +170,62 @@ export default function CompanionScreen() {
       setSending(false);
     }
   }, [input, sending, t]);
+
+  const processVoiceUri = useCallback(
+    async (uri: string) => {
+      const trimmed = uri.trim();
+      if (!trimmed || sending) {
+        return;
+      }
+      setError(null);
+      setPeekKey(null);
+      setSending(true);
+      try {
+        const { reply, transcript } = await sendCompanionVoiceMessage(trimmed);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'user', text: transcript },
+          { role: 'assistant', text: reply },
+        ]);
+        speak(reply);
+        if (Math.random() < PEEK_ROLL) {
+          const pool = ENGAGEMENT_KEYS;
+          setPeekKey(pool[Math.floor(Math.random() * pool.length)]!);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : t('companion.errorUnknown');
+        setError(msg);
+        setMessages((prev) => [...prev, { role: 'assistant', text: t('companion.errorAssistant') }]);
+      } finally {
+        setSending(false);
+      }
+    },
+    [sending, speak, t]
+  );
+
+  const { recording: voiceRecording, onPressIn: voicePressIn, onPressOut: voicePressOut } =
+    useVoiceRecording({
+      onRecordingUri: (uri) => {
+        void processVoiceUri(uri);
+      },
+    });
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        const pending = await AsyncStorage.getItem(PENDING_VOICE_HANDOFF_KEY);
+        if (!pending || cancelled) {
+          return;
+        }
+        await AsyncStorage.removeItem(PENDING_VOICE_HANDOFF_KEY);
+        await processVoiceUri(pending);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [processVoiceUri])
+  );
 
   const appendSuggestion = (q: string) => {
     setInput((prev) => (prev.trim() ? `${prev.trim()} ${q}` : q));
@@ -301,6 +391,29 @@ export default function CompanionScreen() {
             ]}
             accessibilityLabel={t('companion.placeholder')}
           />
+          {Platform.OS !== 'web' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('companion.voiceMicA11y')}
+              accessibilityHint={t('voice.permissionBody')}
+              disabled={sending}
+              onPressIn={() => {
+                void voicePressIn();
+              }}
+              onPressOut={() => {
+                void voicePressOut();
+              }}
+              style={({ pressed }) => [
+                styles.voiceSendBtn,
+                {
+                  backgroundColor: voiceRecording ? palette.tint : palette.voiceButtonBg,
+                  borderColor: palette.voiceButtonBorder,
+                  opacity: sending ? 0.45 : pressed ? 0.88 : 1,
+                },
+              ]}>
+              <FontAwesome name="microphone" size={20} color={palette.onPrimary} />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('companion.sendA11y')}
@@ -451,5 +564,13 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  voiceSendBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
   },
 });

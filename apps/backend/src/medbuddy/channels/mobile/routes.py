@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.application.assistant_turn import run_assistant_text_turn
@@ -17,6 +18,7 @@ from medbuddy.channels.mobile.schemas import (
     MedicationSummaryItemResponse,
     MessageCreate,
     MessageReply,
+    MessageVoiceReply,
     OnboardingSubmit,
 )
 from medbuddy.user_locale import effective_user_locale
@@ -25,9 +27,13 @@ from medbuddy.deps import get_services
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedBuddyError
 
+log = logging.getLogger(__name__)
+
 _summary_tool = GenerateHealthSummaryTool()
 
 router = APIRouter(prefix="/v1/app", tags=["standalone-app"])
+
+_MAX_VOICE_MESSAGE_BYTES = 10 * 1024 * 1024
 
 
 def _onboarding_ts_iso(value: Any) -> str | None:
@@ -126,6 +132,46 @@ async def app_post_message(
         user_text=body.text,
     )
     return MessageReply(reply=reply)
+
+
+@router.post("/messages/voice", response_model=MessageVoiceReply)
+async def app_post_voice_message(
+    ctx: MobileAuthContext = Depends(require_mobile_auth),
+    svc: AppServices = Depends(get_services),
+    file: UploadFile = File(...),
+) -> MessageVoiceReply:
+    """Transcribe a short voice clip (m4a/aac from the client), then run one assistant turn."""
+    user_row = await svc.users.get_or_create_user(ctx.app_user_id)
+    locale = effective_user_locale(user_row.get("locale"))
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=422, detail="empty_audio")
+    if len(raw) > _MAX_VOICE_MESSAGE_BYTES:
+        raise HTTPException(status_code=413, detail="audio_too_large")
+
+    try:
+        user_text = (await svc.stt.transcribe_m4a(raw, language_code=locale)).strip()
+    except Exception as exc:
+        log.error(
+            "app voice message: STT failed user=%s bytes=%d",
+            ctx.app_user_id,
+            len(raw),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="transcription_unavailable",
+        ) from exc
+
+    if not user_text:
+        raise HTTPException(status_code=422, detail="transcription_empty")
+
+    reply = await run_assistant_text_turn(
+        svc,
+        user_key=ctx.app_user_id,
+        user_text=user_text,
+    )
+    return MessageVoiceReply(reply=reply, transcript=user_text)
 
 
 @router.get("/summary", response_model=HealthSummaryResponse)
