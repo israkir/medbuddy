@@ -92,7 +92,9 @@ def format_patient_profile_signals_for_llm(user_row: dict[str, Any], *, locale: 
     contact = user_row.get("emergency_contact")
     parts: list[str] = []
     if isinstance(name, str) and name.strip():
-        parts.append(t("prompts.llm_signal_has_preferred_name", locale=locale))
+        parts.append(
+            t("prompts.llm_preferred_address_form", locale=locale, name=name.strip())
+        )
     if isinstance(age, int):
         parts.append(
             t(

@@ -1,0 +1,163 @@
+# LLM inputs: what we send and how privacy is applied
+
+This document describes **what data** each backend LLM call includes, **which redaction or de-identification** applies, and where it lives in code. It complements **[privacy.md](./privacy.md)** (operational goals and limits) with a **per-call** map.
+
+**Audience:** Developers working on prompts, tools, or compliance reviews.
+
+---
+
+## Shared building blocks
+
+### User message redaction (`redact_pii_text`)
+
+Used on the **current turn** before many LLM calls. Pattern-based masking for emails, common phone shapes (including Taiwan `09…`), and long digit runs (see `apps/backend/src/medbuddy/privacy/redact.py`). **Not** full clinical de-identification: free-text names and many international formats may remain.
+
+### Conversation history redaction (`redact_conversation_turns_for_llm`)
+
+Maps each turn’s `content` through `redact_pii_text`. Used wherever tools pass **history** into `compose_reply` and for **intent classification** recent context.
+
+**Exception:** `generate_health_summary` currently embeds **last 20 conversation turns without this redaction step** in the Gemini/OpenAI adapters (see below)—treat as higher sensitivity.
+
+### Patient context for external LLMs (`build_patient_context_for_llm`)
+
+Built in `apps/backend/src/medbuddy/prompts/persona.py`. Typically includes:
+
+| Block | Contents |
+|--------|-----------|
+| Profile signals | Preferred **form of address** (when the user saved one—so the model can greet them naturally), **age band** (not exact age), self-reported sex/gender label, flags that health notes or emergency contact exist (without raw note/contact text). |
+| Profile gaps | Localized lines describing profile fields **not** yet stored (so the model may ask one item when relevant). |
+| Medications | Lines from the user’s saved list: drug **name**, **dosage**, **schedule** (`format_patient_medication_context`). |
+
+**Not** included: raw `health_notes`, `emergency_contact` strings, exact `age_years`.
+
+### Patient context for **display** only (`build_patient_context_for_chat_display`)
+
+Full profile text for **user-facing** strings (e.g. listing meds with profile lines). **Do not** pass this blob to third-party LLM APIs; use `build_patient_context_for_llm` for model prompts and cache fingerprints.
+
+### Locale scaffolding
+
+Prompts are assembled with localized headers and instructions from `apps/backend/src/medbuddy/locales/*.json` (e.g. `prompts.system_persona`, `gemini.patient_background`, `gemini.reference`, `gemini.reply_instruction`, task-specific `gemini.medication_companion_*`).
+
+---
+
+## Per `LLMPort` method (what goes to the model)
+
+Implementation reference: `apps/backend/src/medbuddy/protocols/ports.py` (`LLMPort`). Concrete adapters: `integrations/gemini_llm.py`, `integrations/openai_llm.py` (same contract).
+
+### `classify_intent`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| Current user message | **Redacted** (`safe_text` in `MedicationAgent`). |
+| `recent_context` | Last few turns formatted as `role: content` after **redaction** (`_recent_context_for_intent` → `redact_conversation_turns_for_llm`). |
+| Prompt body | `format_intent_classification_prompt` (`medbuddy/llm/intent_classification_prompt.py`); structured JSON output → `Intent`. |
+
+### `compose_reply`
+
+Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_lookup.py`), and **Interaction check** fallback when structured interaction analysis is unavailable.
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `system_persona` | `get_system_persona` + optional task appendix (e.g. `gemini.medication_companion_explain` or `gemini.medication_companion_interactions`). |
+| `patient_context` | `build_patient_context_for_llm`. |
+| `drug_grounding` | Registry snippets (TFDA / OpenFDA) or placeholder `gemini.no_drug_data`. Not end-user PII. |
+| `history` | **Redacted** turns. **Interaction fallback** passes `history=[]` in the tool. |
+| `user_message` | **Redacted** (`safe_text`). |
+| Closing | `gemini.reply_instruction`. |
+
+**Explain medication:** Drug registry fetch uses the **original** `user_text` string for the HTTP lookup to TFDA/OpenFDA; the **LLM** still sees **redacted** `safe_text` as the user line.
+
+### `compose_medication_added_reply`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `patient_context` | `build_patient_context_for_llm` after the new med is saved. |
+| `drug_grounding` | TFDA/OpenFDA snippets for the **saved drug name**. |
+| `saved` | Authoritative `name`, `dosage`, `schedule`, optional `instructions` in the prompt. |
+| `user_message` | **Redacted** (`safe_text`). |
+
+### `check_interactions_structured`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `user_message` | **Redacted** (`safe_text`). |
+| `patient_context` | `build_patient_context_for_llm`. |
+| `medications` | Explicit list lines (name, dosage, schedule) in the adapter prompt. |
+| `drug_grounding` | OpenFDA (and optional warnings excerpt) from the user query, or placeholder. |
+| History | **Not** included in the structured Gemini/OpenAI prompt (unlike `compose_reply`). |
+
+### `extract_medication_draft`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User text | **Redacted** (`safe_text` in `AddMedicationTool`). Structured extraction → `MedicationDraft`. |
+
+### `resolve_medication_removal_id`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User text | **Redacted** (`safe_text`). |
+| Medications | JSON catalog of `id` + `name` only. |
+
+### `extract_profile_patch`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User message | **Raw** `user_text` (not passed through `redact_pii_text` in `try_profile_intent_reply`). Intentional so the model can extract names and contacts the user asked to store; increases exposure of PII in the provider API relative to redacted flows. |
+
+### `extract_locale_intent`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User message | **Raw** `user_text` in `try_locale_change_reply`. Short prompt for locale resolution. |
+
+### `extract_dose_confirmation_note`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User message | **Raw** `user_text` in `ConfirmDoseTool` (side-effect / context note extraction). |
+
+### `generate_health_summary`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `patient_context` | `build_patient_context_for_llm`. |
+| Medications | Name, dosage, schedule, and **per-med `instructions`** (user notes) in the adapter prompt. |
+| Recent conversation | **Last 20 turns** embedded as `[role] content` in Gemini/OpenAI adapters. **Not** run through `redact_conversation_turns_for_llm` today—treat as **more sensitive** than `compose_reply` history. |
+| Prompt | Instructs the model not to output PII in the structured summary; does not remove PII from the **input** conversation. |
+
+### `simplify_drug_text_to_patient_zh`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `raw_label` | Label or registry text to simplify for the patient (not a user chat message). Locale-specific intro string. |
+
+---
+
+## Drug registry (“grounding”) data
+
+Snippets from **TFDA** and/or **OpenFDA** are factual drug label excerpts, not patient identifiers. They are combined with patient context and user questions in explain / interaction / add-medication flows as described above.
+
+---
+
+## Caching (`drug_personalization_cache`)
+
+Personalized replies for explain/interaction intents are keyed by a fingerprint that includes **hashed** `patient_context` from `build_patient_context_for_llm` and **redacted** query text where applicable (`apps/backend/src/medbuddy/drug_cache_keys.py`). Cached reply text may still be sensitive; treat storage under your retention policy.
+
+---
+
+## Quick file map
+
+| Concern | Location |
+|--------|----------|
+| Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
+| Patient context builders | `apps/backend/src/medbuddy/prompts/persona.py` |
+| Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py` |
+| LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/gemini_llm.py`, `openai_llm.py` |
+| Privacy overview | [docs/privacy.md](./privacy.md) |
+
+---
+
+## Changelog discipline
+
+When you change what is sent to an LLM (new fields, redaction, or prompts), update this doc and **[CHANGELOG.md](../CHANGELOG.md)** as appropriate.

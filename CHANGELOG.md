@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **`docs/llm-context.md`**: Per-**`LLMPort`** map of what each call sends to the model, redaction vs raw user text, patient context contents, registry grounding, caching, and privacy exceptions (e.g. health-summary conversation, profile extraction). **`docs/privacy.md`** cross-links it and aligns tables with current behavior (preferred address in **`build_patient_context_for_llm`**).
 - **Architecture & product docs**: Refreshed **`docs/architecture.md`**, **`docs/reminders.md`**, **`docs/privacy.md`**, **`docs/use-cases.md`**, **`docs/features.md`**, and **`apps/backend/README.md`** for **`MedicationAgent`**-only routing, shared **`intent_classification_prompt`**, LLM profile/locale extraction, and removal of **`medication_intents`** / **`parse_locale_request_from_text`** / obsolete **`profile_parse`** references.
 - **Docs sweep**: Align **`docs/architecture.md`** with **`supabase/schema.sql`** and document **`LLM_PROVIDER`** (Gemini/OpenAI); fix **`docs/reminders.md`** configuration table; document dual LLM and Render env in **`README.md`**, **`docs/features.md`**, **`apps/backend/README.md`**; reduce overlap between **`docs/features.md`** and **`docs/use-cases.md`**; refresh **`TODO.md`** and **`apps/backend/.env.example`** comments; trim **`docs/privacy.md`**.
 - **`TODO.md`**: Item to **semantically** cache drug-related questions (vs normalized exact text in **`drug_cache_keys.py`**).
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Assistant**: LLM patient background now includes the user’s stored **preferred form of address** so replies can greet them by name; system persona and locale strings were updated accordingly (other profile text remains de-identified as before).
 - **Mock LLM (tests only)**: **`MockLLM`** no longer infers intent from keywords or parses medication/locale/removal text with regex. Tests pass explicit **`intent=`** and optional **`medication_draft`**, **`locale_intent`**, **`removal_medication_id`** to mirror structured LLM outputs. Production routing remains **`classify_intent`** + tool extractions on OpenAI/Gemini only.
 - **User locale**: Removed **`parse_locale_request_from_text`** (regex UI-locale detection). Reply language changes rely on **`update_locale`** + **`extract_locale_intent`**.
 - **Copy (en / zh-TW)**: Softer **`agent.off_topic`**, **`agent.generic_error`**, **`medication.*`**, **`locale.unclear`**, and **`profile.update_unclear`** strings; intent-classification intro text is slightly warmer.
@@ -45,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).
 
 ### Fixed
+
+- **`drug_personalization_cache.medication_id`**: **`resolve_medication_id_for_personalization`** now matches user text against **base names** (text before `(`) and the **first token** of multi-word Latin names, so stored labels like **`阿斯匹靈 (81mg)`** or **`Metformin HCl`** still resolve when the user only says **`阿斯匹靈`** or **`metformin`**. Explain and interaction tools optionally merge **redacted** text for the same check. **`SupabaseDrugCaches.save_personalized_reply`** was already persisting the field; it was often **`NULL`** because resolution failed on formatted list names.
 
 - **Assistant add-medication**: Requests phrased as “set a reminder for [drug] …” were often classified as **`general_question`**, so **`compose_reply`** ran instead of **`AddMedicationTool`** — no medication row and no **`dose_events`**. **`classify_intent`** structured-output prompts (OpenAI + Gemini) and the **`IntentClassification.intent`** schema description now steer reminder / scheduling / “add to my list” phrasing with a concrete drug or dose to **`add_medication`** (intent is LLM-only; no string heuristics after classification).
 - **English locale prompts**: **`locales/en.json`** `prompts.system_persona` and **`gemini.reply_instruction`** no longer instruct the model to reply in Traditional Chinese; they now match **`en`** (clear, simple English). This removes a contradiction with task-specific English instructions (e.g. medication-added and reminder appendix copy), which caused Chinese replies after switching away from Chinese.

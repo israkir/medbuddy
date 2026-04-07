@@ -88,7 +88,11 @@ class ExplainMedicationTool:
                 user_text=safe_text,
                 patient_context=patient_ctx,
             )
-            med_cache_id = resolve_medication_id_for_personalization(medications, user_text)
+            med_cache_id = resolve_medication_id_for_personalization(
+                medications,
+                user_text,
+                extra_query_text=safe_text if safe_text != user_text else None,
+            )
             prov_source = grounding_source or (
                 "mock_llm" if isinstance(svc.llm, MockLLM) else svc.settings.active_llm_model_id
             )

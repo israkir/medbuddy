@@ -3,7 +3,7 @@
 from medbuddy.prompts.persona import build_patient_context_for_llm
 
 
-def test_llm_context_omits_raw_preferred_name() -> None:
+def test_llm_context_includes_preferred_name_for_addressing_omits_other_raw_profile() -> None:
     user_row = {
         "preferred_name": "Secret User",
         "age_years": 71,
@@ -11,8 +11,7 @@ def test_llm_context_omits_raw_preferred_name() -> None:
         "health_notes": "diabetes",
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="en")
-    assert "Secret" not in ctx
-    assert "User" not in ctx
+    assert "Secret User" in ctx
     assert "diabetes" not in ctx
     assert "71" not in ctx
     assert "70" in ctx
