@@ -1,271 +1,348 @@
-# MedBuddy — Product Requirements Document (PRD)
+# MedBuddy — Product Requirements Document
 
-**Version:** 1.1 (prototype-aligned, 2026-04)  
-**Status:** **Software prototype** — not a medical device, not for clinical decision-making, not production-grade healthcare software without separate compliance work.  
-**Owner:** Product + engineering (monorepo: `apps/backend`, optional `apps/frontend`)
+## Table of contents
 
----
-
-## Disclaimer
-
-MedBuddy is a **software prototype**. It is **not** a substitute for professional medical advice, diagnosis, or treatment. All copy, prompts, and UX must preserve this boundary. **No warranty** of outcomes, availability, or regulatory fit is implied by this document.
-
----
-
-## Prototype scope: text-only interactions and bounded features
-
-This PRD treats the **product prototype** as **text in, text out** for all **conversational** interactions. That keeps validation focused: **`interpret_user_turn`** (intent + adherence slots), tool dispatch, persistence, and safety copy — without multimodal variance.
-
-| Dimension | Prototype (this PRD) | Out of prototype product scope |
-|-----------|----------------------|--------------------------------|
-| **LINE** | **Text messages** → assistant → **text replies**. Reminder **push** is text-only. | Voice notes, speech-to-text, text-to-speech as **supported** user journeys (the codebase may contain experimental hooks; they are **not** part of the validated prototype feature set). |
-| **HTTP API** | **`POST /v1/app/messages`** with **text** body; same assistant core as LINE. | Voice upload, streaming, or real-time audio as a first-class API. |
-| **Feature set** | **Closed** set documented in **§6** and [`features.md`](features.md) (list / add / remove meds, explain, interaction check, confirm dose, profile/locale, summary, general Q&A band, off-topic refusal). | arbitrarily open-domain “do anything” assistant behavior. |
-
-**Why text-only for the prototype:** lower cost to test, easier logging and review for safety copy, and a clear ceiling for what “works” before adding STT/TTS latency, failure modes, and accessibility expectations.
-
-**Engineering note:** Repository code paths for LINE audio (e.g. Google Speech-to-Text / TTS) may exist for experimentation; **product acceptance** for the prototype is defined on **text** paths only until a later phase explicitly adds voice (see **§10 Growth**).
+1. [Introduction](#1-introduction)
+2. [Prototype scope and boundaries](#2-prototype-scope-and-boundaries)
+3. [Problem statement](#3-problem-statement)
+4. [Strategic goals](#4-strategic-goals)
+5. [Target users and personas](#5-target-users-and-personas)
+6. [User journeys](#6-user-journeys)
+7. [Functional requirements](#7-functional-requirements)
+8. [Non-functional requirements](#8-non-functional-requirements)
+9. [Out of scope](#9-out-of-scope)
+10. [Success metrics](#10-success-metrics)
+11. [Risks and mitigations](#11-risks-and-mitigations)
+12. [Assumptions and dependencies](#12-assumptions-and-dependencies)
+13. [Open decisions](#13-open-decisions)
+14. [Phased roadmap](#14-phased-roadmap)
+15. [Related documentation](#15-related-documentation)
 
 ---
 
-## 1. Vision (long-term)
+## 1. Introduction
 
-**MedBuddy** is a **patient-facing medication companion**: help people **remember what they take**, **understand medications** in plain language, **surface interaction cautions** where reference data exists, and **support adherence** via familiar messaging — starting with **LINE** and a **shared HTTP API** for integrations and future clients (including a **reference Expo** app).
+MedBuddy is a **patient-facing medication companion** that helps people remember what they take, understand their medications in plain language, flag potential interaction concerns, and support adherence — delivered through **LINE Messaging** (the dominant chat platform in Taiwan) and a shared **HTTP API** for integrations and future clients.
 
-**For the prototype:** prioritize **LINE text** + **FastAPI** + **HTTP text chat**; keep the feature set **explicit and testable** (see §6).
-
----
-
-## 2. Problem statement
-
-Patients often struggle to:
-
-- Maintain an accurate mental model of **what** they take, **when**, and **why**.
-- Remember **doses** in daily life without intrusive tooling.
-- Ask **reference-grounded** (but still non-diagnostic) questions about drugs and combinations.
-- Prepare a **concise summary** for a clinic visit in their own language.
-
-Existing tools are frequently app-centric, English-only, or disconnected from conversational channels already used daily (e.g. messaging apps in Taiwan and similar markets).
+The current phase is a **text-only prototype** targeting a small controlled pilot on LINE. Success means completing the add / list / remind / confirm adherence cycle reliably for a real cohort, with honest safety disclaimers and bilingual (Traditional Chinese / English) support, before expanding modality or scale.
 
 ---
 
-## 3. Goals and non-goals
+## 2. Prototype scope and boundaries
 
-### 3.1 Product goals (prototype)
+The prototype validates **text-in, text-out** conversational interactions only. This scope boundary is intentional: lower cost to test, easier safety-copy review, and a clear ceiling for what "works" before adding STT/TTS failure modes and latency.
 
-| ID | Goal | Measurable direction (prototype-level) |
-|----|------|--------------------------------------|
-| G1 | **Reliable medication list** via natural **text** | Add/list/remove flows persist correctly with Supabase; tests cover agent tools. |
-| G2 | **Understandable answers** | Explain/interaction intents use registry grounding (OpenFDA) where available; caching reduces repeat cost. |
-| G3 | **Adherence support on LINE (text)** | `dose_events` materialized; **text** reminders and optional **text** nudges; chat **text** “I took it” marks adherence. |
-| G4 | **Bilingual experience** | User `locale` (`en`, `zh-TW`) drives replies, LINE welcome, and reminders; onboarding can set locale/timezone. |
-| G5 | **Privacy-aware LLM use** | Pattern redaction and layered patient context for external model calls; documented in `privacy.md`. |
+| Dimension | In prototype scope | Out of prototype scope |
+|-----------|--------------------|------------------------|
+| **LINE** | Text messages → assistant → text replies. Dose reminder push is text only. | Voice notes, STT/TTS as supported user journeys (engineering exploration only). |
+| **HTTP API** | `POST /v1/app/messages` with text body; same assistant core as LINE. | Voice upload, streaming, real-time audio. |
+| **Feature set** | Closed set in §7: list/add/remove meds, explain, interaction check, confirm dose, profile/locale, health summary, general Q&A, off-topic refusal. | Open-domain "do anything" assistant behavior. |
+| **Mobile client** | HTTP API is callable by integrations and the reference Expo app. | Expo app as a co-equal validated channel. |
 
-### 3.2 Non-goals (explicit)
-
-| ID | Non-goal | Notes |
-|----|----------|--------|
-| NG0 | **Voice as part of prototype acceptance** | STT/TTS may exist in code; **prototype sign-off is text-only** (§0). |
-| NG1 | **Clinical diagnosis or prescribing** | Assistant refuses off-topic and avoids replacing professionals. |
-| NG2 | **Full Taiwan FDA (TFDA) live integration** | Stub until real client; OpenFDA is the primary registry path today. |
-| NG3 | **Rich LINE Flex / postback “mark taken”** | Reminders are **text** push; adherence is **chat text** via **`interpret_user_turn`** adherence fields + **`ConfirmDoseTool`** (intent often `confirm_dose`). |
-| NG4 | **Local push notifications for standalone HTTP users** | LINE-only reminder delivery in current prototype scope. |
-| NG5 | **Expo app as co-equal channel** | Expo is **reference / future**; see `frontend-expo.md`. |
-| NG6 | **Production regulatory clearance** | Out of scope for prototype; any real-world deploy needs separate legal/clinical review. |
+> **Engineering note:** Repository code paths for LINE audio (Google Speech-to-Text / TTS) may exist for experimentation. Product acceptance for the prototype is defined on **text paths only** until a future phase explicitly promotes voice.
 
 ---
 
-## 4. Target users and personas
+## 3. Problem statement
 
-### 4.1 Primary persona: “Home medication manager”
+Patients managing chronic medications in Taiwan and similar markets face three persistent gaps:
 
-- **Adults** managing their own chronic medications or a family member’s list.
-- **Comfortable with LINE** (or willing to use it for med support).
-- **Traditional Chinese (zh-TW)** or **English** preference.
-- **Prototype:** interacts in **typed text**; large-type / accessibility refinements may follow in Growth.
+1. **Mental model fragmentation** — people struggle to maintain an accurate, up-to-date picture of what they take, when, and why, particularly when managing medications for a family member or across multiple prescribers.
 
-### 4.2 Secondary persona: “Integrator / mobile pilot”
+2. **Adherence without friction** — reminder tools are either too intrusive (standalone apps requiring behavior change) or too passive (paper instructions). Most patients already use LINE daily; a medication companion inside that familiar channel removes the adoption barrier.
 
-- Engineers or partners calling **`/v1/app/*`** with `X-App-User-Id` (and optional bearer) for the same **text** assistant without LINE.
+3. **Language and information asymmetry** — most drug-reference tools are English-only or use clinical language that is inaccessible to patients. Pharmacy consultations are short; patients leave without plain-language answers to follow-up questions.
 
-### 4.3 Anti-persona
-
-- Users expecting **emergency triage**, **dose optimization**, or **replacing a pharmacist** — out of scope; messaging must redirect to professionals.
+Existing tools are app-centric, English-only, or disconnected from conversational channels already embedded in daily life in Taiwan.
 
 ---
 
-## 5. User journeys (high level)
+## 4. Strategic goals
 
-1. **Onboard** — LINE follow or app onboarding; preferred name, optional demographics, emergency contact, health notes; **timezone** and **locale** where applicable (**text** profile updates via `update_profile` on LINE).
-2. **Build the list** — User **types** medications in natural language; system persists and confirms with **grounded** acknowledgment when drug data is available.
-3. **Day-to-day** — User **types** questions: what a drug is for, interactions, list meds, vitals in text, or **doctor-ready summary**.
-4. **Adherence** — System schedules **`dose_events`**; LINE sends **text** reminder and optional **text** nudges; user **types** adherence; **`interpret_user_turn`** sets slots and **`ConfirmDoseTool`** records **`taken_at`** / dose notes when appropriate.
-5. **Visit prep (reference app)** — Optional Expo flow (still **text-first** in API terms unless explicitly extended); see `frontend-expo.md`.
+Goals are ordered by priority. Each has a measurable acceptance criterion for the prototype phase.
 
-**Deeper flows and utterances:** `docs/use-cases.md`
-
----
-
-## 6. Functional requirements (prototype feature set)
-
-Requirements are **themes**; detailed acceptance-style bullets live in **`docs/features.md`**. **Prototype validation applies only to rows that assume text I/O** unless a future phase promotes voice.
-
-### 6.1 Channels
-
-| Req ID | Requirement | Prototype? |
-|--------|-------------|------------|
-| C-1 | LINE webhook accepts verified events; **text** messages run shared assistant turn; **text** reply. | **Yes** |
-| C-2 | LINE **audio** → STT → assistant → optional TTS | **No** — engineering exploratory only; not in prototype acceptance (§0). |
-| C-3 | HTTP `/v1/app/health`, `/info`, `/me`, **`POST /messages` (text)**, onboarding, `/summary` with documented auth model. | **Yes** (text chat) |
-| C-4 | Internal **reminder reconcile** endpoint for cron-style safety net. | **Yes** (staging/pilot) |
-
-### 6.2 Assistant and intents (closed set for prototype)
-
-| Req ID | Requirement | Prototype? |
-|--------|-------------|------------|
-| A-1 | Single pipeline `run_assistant_text_turn` for LINE **text** and HTTP **text** chat. | **Yes** |
-| A-2 | LLM **`interpret_user_turn`** (intent + structured adherence fields) with recent **redacted** dialogue for short follow-ups. | **Yes** |
-| A-3 | Tools: list/add/remove medications, explain medication, interaction check, confirm dose, health summary, profile update, locale change, off-topic handling. | **Yes** |
-| A-4 | `general_question` / `log_vital` fall back to composed reply without automatic drug prefetch. | **Yes** |
-| A-5 | Medication add stores **reminder preferences** in metadata when extracted (drives `dose_events`). | **Yes** |
-
-### 6.3 Data and persistence
-
-| Req ID | Requirement | Prototype? |
-|--------|-------------|------------|
-| D-1 | Supabase (pilot): patients, medications, conversations, drug caches, dose events; RLS for `anon` key usage. | **Yes** |
-| D-2 | Drug reference cache (OpenFDA-backed) and per-patient personalization cache for explain/interaction. | **Yes** |
-| D-3 | In-memory mocks when Supabase unset (CI/local). | **Yes** |
-
-### 6.4 Reminders (LINE, text push)
-
-| Req ID | Requirement | Prototype? |
-|--------|-------------|------------|
-| R-1 | After add/remove medication, rebuild upcoming `dose_events` per prefs and defaults (including multi-daily local times where implemented). | **Yes** |
-| R-2 | Redis + arq deferred jobs push **text** LINE reminders; optional **text** nudge chain. | **Yes** (environment-dependent) |
-| R-3 | **Text** chat, when interpretation sets **`record_pending_dose_as_taken`**, sets `taken_at` on matching pending events. | **Yes** |
-| R-4 | Reminder copy respects user **locale**. | **Yes** |
-
-### 6.5 Localization
-
-| Req ID | Requirement | Prototype? |
-|--------|-------------|------------|
-| L-1 | Backend locales `zh-TW` and `en`; per-user `locale` overrides process default. | **Yes** |
-| L-2 | Timezone (IANA) from patient record drives scheduling and reminder copy. | **Yes** |
-
-### 6.6 Operations and quality
-
-| Req ID | Requirement | Prototype? |
-|--------|-------------|------------|
-| O-1 | Structured logging without raw user content in shared logs. | **Yes** |
-| O-2 | Makefile / CI checks documented; behavior changes recorded in `CHANGELOG.md`. | **Yes** |
+| ID | Goal | Prototype acceptance criterion |
+|----|------|-------------------------------|
+| **G1** | **Reliable medication list** via natural text | Add/list/remove flows persist correctly end-to-end. Test suite covers all CRUD paths. Zero data-loss incidents in pilot cohort. |
+| **G2** | **Understandable drug answers** | Explain and interaction-check responses are grounded in registry data (OpenFDA) where available. Responses contain no diagnosis language. Qualitative review confirms plain-language readability. |
+| **G3** | **Adherence support on LINE (text)** | Dose events materialize after a medication is added. Text reminders deliver. User can confirm a dose by typing; confirmation is recorded. |
+| **G4** | **Bilingual experience** | User locale (`en`, `zh-TW`) drives all replies, reminders, and onboarding. Locale can be changed via conversation. Both locales are validated by a native speaker in the pilot. |
+| **G5** | **Privacy-aware LLM use** | Pattern-based PII redaction applied before every LLM call. Patient context sent to LLM is de-identified (no raw name, exact age, health notes). Documented in `privacy.md`; no undocumented expansion of LLM context. |
 
 ---
 
-## 7. Non-functional requirements (prototype-appropriate)
+## 5. Target users and personas
 
-| NFR ID | Area | Requirement |
-|--------|------|-------------|
-| N-1 | **Architecture** | Hexagonal ports/adapters; swappable LLM (Gemini/OpenAI) and integrations. |
-| N-2 | **Security** | LINE signature verification in real mode; mobile bearer optional; cron secret for internal reconcile; secrets in env only. |
-| N-3 | **Privacy** | Documented redaction and LLM context policy (`privacy.md`, `llm-context.md`). Prototype must not expand LLM context beyond documented boundaries without revisiting privacy docs. |
-| N-4 | **Deployability** | Docker + Compose; Render blueprint; mock mode for demos without keys. |
-| N-5 | **Reliability** | Reconcile endpoint mitigates missed reminder jobs; dose model supports idempotent-ish adherence marking. |
-| N-6 | **Expectations** | No SLA commitments for prototype; “best effort” suitable for **small controlled pilots** only. |
+### 5.1 Primary persona: Home medication manager
 
----
+**Who:** Adults (40–75) managing their own chronic medications, or a caregiver managing a family member's regimen. Fluent in Traditional Chinese; may have basic English.
 
-## 8. Integrations (dependency summary)
+**Job to be done:** "When I'm unsure about my medications or forget whether I took a dose, I want to ask a quick question in LINE and get a plain-language answer or confirmation — without switching apps or waiting for my next pharmacy visit."
 
-| Integration | Role | Prototype need |
-|-------------|------|----------------|
-| LINE Messaging API | Webhook + **text** reply + **text** push reminders | **Yes** (primary channel) |
-| LLM (Gemini or OpenAI) | `interpret_user_turn`, compose, structured extract | **Yes** |
-| Supabase Postgres | Persistence | **Yes** for real pilot |
-| Redis + arq | Reminder workers | **Yes** if reminders in pilot |
-| OpenFDA HTTP | Label grounding | **Yes** (explain/interaction grounding) |
-| Google Speech-to-Text | LINE STT | **No** for prototype product acceptance |
-| edge-tts | LINE TTS | **No** for prototype product acceptance |
+**Key behaviors:**
+- Uses LINE daily for family communication.
+- Has 2–6 chronic medications; list changes occasionally.
+- Forgets doses 1–3 times per week.
+- Avoids English medical vocabulary; wants answers in conversational Chinese.
 
-**Full matrix:** root `README.md`, `apps/backend/README.md`
+**Pain points:**
+- Drug inserts are printed in clinical language.
+- Pharmacy consultations are short; follow-up questions have no easy channel.
+- Reminder apps feel like extra work to set up and maintain.
 
----
+### 5.2 Secondary persona: API integrator
 
-## 9. Metrics and validation (prototype)
+**Who:** Engineers or clinical partners calling `/v1/app/*` directly (scripts, integrations, or the reference Expo app) with a stable user ID.
 
-Success for the **text** prototype is judged by:
+**Job to be done:** "I need to embed the same medication assistant core into my integration or test environment without depending on LINE."
 
-- **Correctness:** pytest (and manual scripts) for agent turns, reminders materialization, locale/timezone behavior.
-- **Qualitative review:** sample **text** dialogs in `use-cases.md`; no diagnosis language in default persona; off-topic refusals feel consistent.
-- **Operational (pilot):** webhook stability, reminder delivery where Redis is enabled, reconcile drill.
-- **Explicitly not required for prototype:** voice success rate, WER, TTS quality, or multimodal analytics.
+### 5.3 Anti-persona
+
+Users expecting **emergency triage**, **dose calculation optimization**, or a replacement for a pharmacist or physician. All messaging must redirect these users to appropriate professional channels.
 
 ---
 
-## 10. Phased roadmap: MVP, Growth, Global
+## 6. User journeys
 
-Horizons are **product intent**, not guarantees. They assume continued investment and separate decisions on compliance for anything beyond a lab/pilot.
+### 6.1 Onboarding
 
-### 10.1 MVP — up to ~3 months (harden the text prototype)
+User follows or opens the LINE bot (or calls `/v1/app/onboarding`). System greets in the detected locale and prompts for a preferred name and optional timezone. Profile is saved. Disclaimer is displayed.
 
-**Objective:** A **credible, text-only** medication companion on **LINE + HTTP** for a **small pilot**, with a **frozen** intent/tool surface and honest disclaimers.
+**Success state:** User is greeted by name, locale is set, and disclaimer is visible before any medical content.
 
-| Theme | Goals (realistic) |
-|-------|-------------------|
-| **Core text UX** | Stable flows for §6 intents; clear failure messages; onboarding + profile + locale + timezone validated on real Supabase. |
-| **Grounding** | OpenFDA path reliable for common queries; personalization/reference caches TTL’d and observable in logs (not PII). |
-| **Reminders** | Text reminders + reconcile proven in one staging/pilot environment; chat adherence (**`interpret_user_turn`** + **`ConfirmDoseTool`**) validated with testers. |
-| **Quality** | Test suite green; documented runbooks for deploy and cron; pilot feedback captured (simple form or interviews). |
-| **Governance** | Disclaimer visible; internal policy for who may use the trial; no marketing as a “medical product.” |
+### 6.2 Building the medication list
 
-**Exit criteria (example):** pilot cohort completes add/list/reminder/confirm cycle without data loss; team signs off that **text-only** scope is what was tested.
+User types a medication name (and optional dosage, schedule) in natural language. System extracts the structured details, confirms with the user in plain language, and optionally surfaces basic drug reference information (indication, key warnings) when registry data is available.
 
-### 10.2 Growth — up to ~1 year (expand modality, depth, and readiness)
+**Success state:** Medication appears in the user's list with correct name, dosage, and schedule. User receives a grounded acknowledgment, not a generic "saved."
 
-**Objective:** Move from “works in a pilot” toward “could serve a wider audience” **without** claiming full global or regulatory readiness.
+### 6.3 Day-to-day question answering
 
-| Theme | Goals (realistic) |
-|-------|-------------------|
-| **Voice (optional product)** | If demand is clear: promote LINE **audio** to **supported** — STT/TTS SLAs, failure fallbacks (“please type or retry”), and updated PRD acceptance. |
-| **Retention & adherence** | Follow-up chat to **adjust reminder preferences**; richer adherence views; consider caregiver-facing **read-only** summaries (policy-dependent). |
-| **Regional data** | TFDA or additional registries **where legally and technically viable**; improved cache strategy (e.g. semantic drug Q&A caching per `TODO.md`). |
-| **Mobile** | Exp beyond reference: auth model, cost controls, optional local notifications **if** product strategy leaves LINE-only reminders. |
-| **Operability** | Cost/latency budgets for LLM; basic product analytics; incident response playbook; content safety review loop for new prompts. |
+User types questions like "what is this medication for?", "can I take these two together?", "show me my medication list", or logs a vital sign. System responds with de-identified, registry-grounded answers where available, and clearly signals when professional advice is needed.
 
-**Exit criteria (example):** repeatable monthly cost per active user; voice (if launched) meets agreed error-rate bar; roadmap for compliance review **if** moving past informal pilots.
+**Success state:** User receives a plain-language, accurate, non-diagnostic answer. Off-topic requests (e.g. "diagnose my pain") receive a consistent refusal with a referral prompt.
 
-### 10.3 Global — after ~1 year (scale and jurisdiction-aware product)
+### 6.4 Adherence cycle
 
-**Objective:** Only pursue **after** Growth indicates demand and **after** legal/clinical review — not implied by the prototype repo.
+System sends a scheduled **text** reminder via LINE push at the user's configured local time. User replies "I took it" or similar phrasing. System confirms the dose was recorded.
 
-| Theme | Goals (realistic, non-committing) |
-|-------|-----------------------------------|
-| **Markets** | Multi-region deploy with **data residency** options; languages beyond `en` / `zh-TW` driven by market research. |
-| **Compliance posture** | Deliberate classification (e.g. wellness vs regulated software) per country; DPIA / HIPAA / comparable workflows **if** handling PHI at scale. |
-| **Ecosystem** | EMR-friendly export formats; institutional pilots; optional B2B packaging **if** business model supports it. |
-| **UX** | Native apps and/or rich LINE UI as **primary** channels; accessibility standards (WCAG-aware) for voice and visual UI. |
+**Success state:** Reminder delivered at the correct local time. User's typed confirmation is recognized and recorded. Missed doses can be reported.
 
-**Guardrail:** “Global” here means **capability direction**, not a promise of worldwide launch.
+### 6.5 Visit preparation
+
+User requests a summary. System produces a structured, doctor-ready summary in the user's locale: medications, recent changes, any noted symptoms or vitals, and a space for questions.
+
+**Success state:** Summary is coherent, bilingual-ready, and contains no diagnosis language. Suitable for the user to share with a clinician.
 
 ---
 
-## 11. Open questions
+## 7. Functional requirements
 
-1. **Regulatory / market**: jurisdiction-specific claims copy, data residency, and whether the offering remains general wellness vs regulated software.
-2. **Identity**: long-term auth model beyond `X-App-User-Id` + optional bearer for standalone clients.
-3. **Clinical partnerships**: whether summary formats need institution-specific templates.
-4. **Voice promotion**: criteria to move LINE audio from “engineering only” to **Growth** acceptance (accuracy, cost, accessibility).
+Requirements are feature-level. Implementation details are in [`tdd.md`](tdd.md).
+
+### 7.1 Channels
+
+| ID | Requirement | Prototype |
+|----|-------------|-----------|
+| C-1 | LINE webhook accepts verified text message events; assistant processes and replies with text. | Yes |
+| C-2 | LINE follow event creates a user record and sends a localized welcome message with disclaimer. | Yes |
+| C-3 | HTTP `POST /messages` accepts a text body, runs the same assistant pipeline as LINE, and returns a text reply. | Yes |
+| C-4 | HTTP endpoints for health check, user profile (`/me`), onboarding, and summary are documented and functional. | Yes |
+| C-5 | Internal reminder reconcile endpoint allows a cron job to re-enqueue missed reminder deliveries. | Yes |
+| C-6 | LINE audio message → STT → assistant → optional TTS reply. | **No** — engineering exploratory only. |
+
+### 7.2 Conversation and intent handling
+
+| ID | Requirement | Prototype |
+|----|-------------|-----------|
+| A-1 | A single assistant pipeline handles both LINE text and HTTP text with identical behavior. | Yes |
+| A-2 | Each user turn is classified into a structured intent with adherence fields before tool dispatch. Recent (redacted) conversation history informs classification for short follow-ups. | Yes |
+| A-3 | The following intents are supported: list medications, add medication, remove medication, update medication, explain medication, check interactions, confirm dose, report missed dose, report side effects, log vital, request summary, update profile (including locale and timezone), general question, off-topic. | Yes |
+| A-4 | General questions and vital logging produce a composed reply without mandatory drug data prefetch. | Yes |
+| A-5 | When a medication is added, reminder preferences extracted from the user's message drive dose event creation. | Yes |
+
+### 7.3 Data and persistence
+
+| ID | Requirement | Prototype |
+|----|-------------|-----------|
+| D-1 | User profiles, medications, conversation history, drug cache, and dose events persist in Supabase (Postgres) with row-level security. | Yes |
+| D-2 | A shared drug reference cache (OpenFDA-backed) and a per-patient personalized reply cache reduce repeated external calls and LLM costs. | Yes |
+| D-3 | When Supabase is not configured, in-memory mocks allow the full application to run for local development and CI without external keys. | Yes |
+
+### 7.4 Reminders
+
+| ID | Requirement | Prototype |
+|----|-------------|-----------|
+| R-1 | Adding or removing a medication rebuilds upcoming dose events according to user preferences and system defaults. | Yes |
+| R-2 | A background worker delivers text LINE reminders at the scheduled local time using deferred job queuing (Redis). | Yes (when Redis configured) |
+| R-3 | When a user's typed message indicates they took a dose, the pending dose event is marked as taken. | Yes |
+| R-4 | Missed dose reporting marks the most recent pending dose event as missed. | Yes |
+| R-5 | Reminder text respects the user's locale. | Yes |
+
+### 7.5 Localization
+
+| ID | Requirement | Prototype |
+|----|-------------|-----------|
+| L-1 | Backend supports `zh-TW` and `en` locales. Per-user locale overrides the server default. | Yes |
+| L-2 | User timezone (IANA string) drives dose scheduling and reminder message copy. Default is `Asia/Taipei`. | Yes |
+| L-3 | User can change their locale and timezone through a conversational update. | Yes |
+
+### 7.6 Operations
+
+| ID | Requirement | Prototype |
+|----|-------------|-----------|
+| O-1 | Structured logs record assistant activity (intent, user key, medication count) without raw user message text. | Yes |
+| O-2 | CI checks, Makefile targets, and a CHANGELOG are maintained for all behavior-affecting changes. | Yes |
 
 ---
 
-## 12. Related documentation
+## 8. Non-functional requirements
+
+| ID | Attribute | Requirement | Prototype target |
+|----|-----------|-------------|-----------------|
+| N-1 | **Architecture** | Hexagonal ports/adapters; swappable LLM provider and storage without touching business logic. | Enforced via protocol interfaces; documented in `tdd.md`. |
+| N-2 | **Security** | LINE signature verification in real mode. Internal cron endpoint protected by a shared secret. Secrets loaded from environment only, never from code. | No known bypasses. Documented auth model. |
+| N-3 | **Privacy** | PII redaction applied before every external LLM call. Patient context sent to LLM must not exceed documented de-identification boundaries. | See `privacy.md`. |
+| N-4 | **Deployability** | Docker + Compose for local. Render blueprint for cloud. Mock mode available for demos without any API keys. | One-command local start; one-click Render deploy. |
+| N-5 | **Reliability** | Reconcile endpoint mitigates missed reminder jobs after Redis/worker restarts. Adherence marking is idempotent. | Reconcile demonstrated in staging. |
+| N-6 | **Latency** | Assistant text turn responds within 5 seconds at p90 for typical inputs. | Best-effort for prototype; no SLA commitment. |
+| N-7 | **Expectations** | No SLA commitments for prototype. Suitable for small controlled pilots only. | Documented explicitly. |
+
+---
+
+## 9. Out of scope
+
+| ID | Item | Rationale |
+|----|------|-----------|
+| NG-1 | Voice as part of prototype acceptance | STT/TTS may exist in code; prototype sign-off is text-only (§2). |
+| NG-2 | Clinical diagnosis or prescribing guidance | Regulatory and liability boundary; prompts enforce this. |
+| NG-3 | TFDA live API integration | Stub until a real client; OpenFDA is the primary registry today. |
+| NG-4 | Rich LINE Flex messages or postback "mark taken" | Reminders are plain text; adherence is chat-text only in v1. |
+| NG-5 | Local push notifications for standalone HTTP users | LINE-only reminder delivery in current scope. |
+| NG-6 | Expo app as a co-equal validated channel | Reference / future; see `frontend-expo.md`. |
+| NG-7 | Production regulatory clearance (HIPAA, TFDA, MDR) | Any real-world clinical deployment needs separate legal and clinical review. |
+| NG-8 | Per-user authentication beyond shared bearer token | Shared bearer token is sufficient for a controlled pilot; per-user auth is a Growth-phase item. |
+
+---
+
+## 10. Success metrics
+
+Prototype success is judged against these criteria at pilot conclusion.
+
+| Goal | Metric | Target |
+|------|--------|--------|
+| G1 — Reliable list | Zero data-loss incidents across pilot cohort. Add/remove round-trip covered by automated tests. | 100% test pass rate; 0 production data-loss reports. |
+| G2 — Understandable answers | Qualitative review: sample text dialogs in `use-cases.md` contain no diagnosis language. OpenFDA grounding fires for ≥ 80% of explain/interaction queries for common drugs. | Reviewer sign-off on sample set. |
+| G3 — Adherence support | Reminder delivery success rate in staging environment. At least one full add → remind → confirm cycle validated with a tester. | ≥ 95% delivery on staging. End-to-end cycle validated. |
+| G4 — Bilingual | Both `zh-TW` and `en` locales validated by a native speaker. Locale can be switched mid-conversation. | Native speaker sign-off on both locales. |
+| G5 — Privacy | No raw PII fields observed in LLM prompts during audit of 20 sample turns. | 0 violations in audit. |
+
+**Explicitly not required for prototype:** voice success rate, word error rate (WER), TTS quality, multimodal analytics, cost-per-user.
+
+---
+
+## 11. Risks and mitigations
+
+| ID | Risk | Likelihood | Impact | Mitigation |
+|----|------|------------|--------|------------|
+| R-1 | LLM produces diagnosis language or unsafe medical advice | Medium | High | System persona prompt enforces non-diagnostic framing; qualitative review before pilot. |
+| R-2 | OpenFDA data unavailable or returns no results for a drug | High | Low | System degrades gracefully: LLM-only reply without registry grounding; `llm_meta.source` records the gap. |
+| R-3 | Redis/worker failure causes missed reminders | Medium | Medium | Reconcile endpoint re-enqueues due reminders on cron schedule (15–60 min). |
+| R-4 | PII leakage to LLM via free-text user messages | Medium | High | Pattern-based redaction applied; system prompt instructs model on masked content. Residual risk documented in `privacy.md`. |
+| R-5 | LINE webhook delivery failure or timeouts | Low | Medium | LINE requires a 200 ACK immediately; reply is async after ACK. Retry by LINE platform on failure. |
+| R-6 | Pilot cohort misunderstands prototype as a medical device | Medium | High | Disclaimer in onboarding, reminder messages, and summary responses. Internal policy for who may use the trial. |
+
+---
+
+## 12. Assumptions and dependencies
+
+### Assumptions
+
+- Users are comfortable typing in LINE and have an active LINE account.
+- OpenFDA provides sufficient coverage for the common drugs in the pilot cohort; TFDA is not required for initial validation.
+- Supabase and Redis are available in the pilot environment; in-memory mocks are only for CI and demo.
+- A single timezone (`Asia/Taipei`) covers the majority of the pilot cohort.
+
+### External dependencies
+
+| Dependency | Owner | Risk if unavailable |
+|------------|-------|---------------------|
+| LINE Messaging API | LINE Corporation | Primary channel unavailable |
+| LLM provider (Gemini or OpenAI) | Google / OpenAI | All assistant turns fail |
+| Supabase (Postgres) | Supabase | Persistence unavailable; fallback to in-memory mocks only in dev |
+| Redis + arq | Self-managed / Render Key Value | Reminder delivery disabled; reconcile path degrades to no-op |
+| OpenFDA HTTP API | FDA | Drug grounding unavailable; LLM-only replies |
+
+---
+
+## 13. Open decisions
+
+| ID | Decision | Owner | Due | Notes |
+|----|----------|-------|-----|-------|
+| OD-1 | Regulatory classification: general wellness vs regulated software for Taiwan market | Legal / Product | Before Growth phase | Determines what claims copy can say and whether TFDA registration is required. |
+| OD-2 | Long-term identity model for HTTP API users (beyond shared bearer token) | Engineering | Growth phase | Options: per-user JWT, OAuth, device attestation. |
+| OD-3 | Criteria to promote LINE audio from "engineering exploratory" to a supported product feature | Product | Growth phase | Requires accuracy target, cost model, fallback behavior, and updated PRD. |
+| OD-4 | Institution-specific summary formats for clinical partnerships | Product | Growth phase | Depends on whether any clinical partner enters the pilot. |
+| OD-5 | Data residency requirements for Taiwan regulations | Legal | Before any international expansion | Relevant for Global phase. |
+
+---
+
+## 14. Phased roadmap
+
+Horizons are product intent, not guarantees. Each phase requires an explicit go/no-go decision against its exit criteria before the next phase begins.
+
+### 14.1 Prototype → MVP (0–3 months)
+
+**Objective:** A credible, text-only medication companion on LINE + HTTP for a small controlled pilot, with a frozen intent surface and honest disclaimers.
+
+| Theme | Exit criteria |
+|-------|--------------|
+| **Core text UX** | All §7 intents stable. Onboarding, profile update, locale/timezone all validated on real Supabase. Clear failure messages for all error states. |
+| **Drug grounding** | OpenFDA path reliable for common queries. Reference and personalization caches observable in logs (no PII). |
+| **Reminders** | Text reminders proven in one staging/pilot environment. Chat-based adherence confirmation validated with testers. Reconcile endpoint tested after a simulated worker restart. |
+| **Quality** | Test suite fully green. Runbooks for deploy and cron documented. Pilot feedback captured (form or structured interviews). |
+| **Governance** | Disclaimer visible at onboarding and in summaries. Internal policy defining who may participate in the trial. No external marketing as a "medical product." |
+
+**Go criteria:** Pilot cohort completes add/list/reminder/confirm cycle without data loss. Team signs off that text-only scope is what was tested.
+
+### 14.2 MVP → Growth (3–12 months)
+
+**Objective:** Move from "works in a pilot" toward "could serve a wider audience" — without claiming full regulatory readiness.
+
+| Theme | Goals |
+|-------|-------|
+| **Voice (conditional)** | If demand is clear: promote LINE audio to a supported feature with STT/TTS SLAs, failure fallbacks ("please type or retry"), and updated PRD acceptance criteria. |
+| **Retention and adherence** | Conversational adjustment of reminder preferences. Richer adherence history view. Consider caregiver-facing read-only summaries (policy review required). |
+| **Regional data** | TFDA or additional registries where legally and technically viable. Improved caching strategy. |
+| **Mobile** | Reference Expo app beyond prototype: auth model hardened, cost controls, optional local notifications if the product strategy extends beyond LINE. |
+| **Operability** | Cost and latency budgets per LLM call. Basic product analytics (active users, intent distribution). Incident response playbook. Content safety review loop for new prompts. |
+
+**Go criteria:** Repeatable monthly cost per active user modeled. Any promoted voice feature meets an agreed error-rate threshold. Compliance review roadmap in place if moving past informal pilots.
+
+### 14.3 Growth → Global (12+ months)
+
+**Objective:** Only pursue after Growth indicates demand **and** after legal/clinical review — not implied by the prototype.
+
+| Theme | Direction |
+|-------|-----------|
+| **Markets** | Multi-region deploy with data residency options. Additional languages driven by market research. |
+| **Compliance** | Deliberate classification per country (wellness vs regulated software). DPIA / HIPAA / comparable workflows if handling PHI at scale. |
+| **Ecosystem** | EMR-friendly export formats. Institutional pilots. Optional B2B packaging. |
+| **UX** | Native apps and/or rich LINE UI as primary channels. Accessibility standards (WCAG-aware). |
+
+> **Guardrail:** "Global" describes a capability direction, not a committed worldwide launch.
+
+---
+
+## 15. Related documentation
 
 | Document | Purpose |
 |----------|---------|
-| [`features.md`](features.md) | Capability catalog (product/engineering alignment). |
+| [`features.md`](features.md) | Capability catalog — product/engineering alignment on each feature. |
 | [`use-cases.md`](use-cases.md) | Narrated flows and example utterances. |
-| [`architecture.md`](architecture.md) | Technical design, API reference, data model. |
-| [`reminders.md`](reminders.md) | Dose reminders operations detail. |
-| [`privacy.md`](privacy.md) | PII and LLM boundaries. |
-| [`frontend-expo.md`](frontend-expo.md) | Reference Expo client only. |
-| [`../README.md`](../README.md) | Repo overview and quick start. |
+| [`tdd.md`](tdd.md) | Technical design, API reference, data model, deployment topology. |
+| [`reminders.md`](reminders.md) | Dose reminder operations and scheduling detail. |
+| [`privacy.md`](privacy.md) | PII redaction scope and LLM context boundaries. |
+| [`llm-context.md`](llm-context.md) | What is and is not sent to the LLM. |
+| [`frontend-expo.md`](frontend-expo.md) | Reference Expo client — screens, mock mode, and limitations. |
+| [`../README.md`](../README.md) | Repo overview and quick-start guide. |

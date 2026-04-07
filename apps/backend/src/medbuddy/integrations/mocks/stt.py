@@ -11,7 +11,7 @@ class MockSpeechToText(SpeechToTextPort):
         self.fixed_transcript = fixed_transcript or t("mocks.stt.default_transcript", locale=locale)
         self.last_audio_len = 0
 
-    async def transcribe_m4a(self, audio: bytes) -> str:
+    async def transcribe_m4a(self, audio: bytes, *, language_code: str | None = None) -> str:
         await asyncio.sleep(0)
         self.last_audio_len = len(audio)
         return self.fixed_transcript

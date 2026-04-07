@@ -7,8 +7,6 @@ import logging
 from typing import Any
 from urllib.parse import parse_qs
 
-import httpx
-
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
@@ -153,17 +151,17 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             log.warning("LINE flow: user_id=%s audio message without id", line_user_id)
             return
         log.info("LINE flow: user_id=%s inbound audio message_id=%s", line_user_id, mid)
+        row = await svc.users.get_or_create_user(line_user_id)
+        loc = effective_user_locale(row.get("locale"))
         raw = await svc.line.get_message_content(str(mid))
         try:
-            user_text = await svc.stt.transcribe_m4a(raw)
-        except httpx.HTTPError:
+            user_text = await svc.stt.transcribe_m4a(raw, language_code=loc)
+        except Exception:
             log.error(
-                "LINE flow: user_id=%s STT failed with HTTP error; sending fallback reply",
+                "LINE flow: user_id=%s STT failed; sending fallback reply",
                 line_user_id,
                 exc_info=True,
             )
-            row = await svc.users.get_or_create_user(line_user_id)
-            loc = effective_user_locale(row.get("locale"))
             await svc.line.reply_text(reply_token, t("agent.generic_error", locale=loc))
             return
         log.info(

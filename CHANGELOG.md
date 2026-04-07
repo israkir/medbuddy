@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Turn interpretation contract**: Replaced `classify_intent` with `interpret_user_turn` returning `TurnInterpretation` (`intent`, `record_pending_dose_as_taken`, `dose_adherence_note`), and wired `ConfirmDoseTool` to those structured fields.
 - **Per-user locale behavior**: Standardized locale-aware responses across compose, interaction, medication-added responses, health summary labels, LINE welcome, and reminder pushes.
 - **Integration/runtime wiring**: Improved container and app wiring (`InternalMediaPort`, shared HTTP clients in real mode, safer logging defaults, stricter timezone validation).
+- **Google Cloud Speech-to-Text**: Replaced REST + `GOOGLE_SPEECH_API_KEY` usage with the official `google-cloud-speech` v2 client (Application Default Credentials). `SpeechToTextPort.transcribe_m4a` accepts optional per-request `language_code`; LINE passes the user's effective locale for transcription.
+- **Locale change detection**: Language-switch requests use structured `extract_locale_intent` first (fallback to profile patch), run early in `MedicationAgent`, and intent classification steers phrasing to `update_profile` where appropriate.
 - **Supabase naming and schema alignment**: Consolidated profile storage around `patients`/`patient_id` and updated persistence adapters accordingly.
 - **Integration package structure**: Reorganized backend adapters into `integrations/llm/`, `integrations/stt/`, and `integrations/persistence/`, and updated imports/tests/docs to match.
 
@@ -40,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Refreshed technical and product docs to align with current APIs and assistant behavior:
-  `README.md`, `apps/backend/README.md`, `docs/architecture.md`, `docs/features.md`,
+  `README.md`, `apps/backend/README.md`, `docs/tdd.md`, `docs/features.md`,
   `docs/use-cases.md`, `docs/reminders.md`, `docs/privacy.md`, `docs/llm-context.md`,
   and `docs/prd.md`.
 

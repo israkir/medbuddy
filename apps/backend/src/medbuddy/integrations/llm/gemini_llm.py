@@ -150,9 +150,7 @@ class GeminiLLM(LLMPort):
             response_schema=schema,
         )
         try:
-            resp = self._client.models.generate_content(
-                model=model, contents=prompt, config=config
-            )
+            resp = self._client.models.generate_content(model=model, contents=prompt, config=config)
         except Exception:
             log.error(
                 "Gemini structured generate_content failed: model=%s schema=%s prompt_chars=%d",

@@ -40,7 +40,7 @@ See the per-app READMEs for day-to-day development details.
     Redis + arq          OpenFDA / TFDA
 ```
 
-The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern. See [`docs/architecture.md`](docs/architecture.md) for the full technical design.
+The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern. See [`docs/tdd.md`](docs/tdd.md) for the full technical design.
 
 ---
 
@@ -110,7 +110,7 @@ make be-compose       # podman/docker compose up --build
 | `GET /v1/app/summary` | Doctor-ready health summary |
 | `POST /internal/reminders/reconcile` | Cron safety net for dose reminders |
 
-Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#api-reference).
+Full API reference: [`docs/tdd.md#api-reference`](docs/tdd.md#api-reference).
 
 ---
 
@@ -120,7 +120,7 @@ See **[`docs/index.md`](docs/index.md)** for the full documentation index, readi
 
 | Resource | Audience | What you'll find |
 |----------|----------|-----------------|
-| [`docs/architecture.md`](docs/architecture.md) | Engineers, security | Technical design — components, data model, API reference, LLM, caching, deployment |
+| [`docs/tdd.md`](docs/tdd.md) | Engineers, security | Technical design — components, data model, API reference, LLM, caching, deployment |
 | [`docs/prd.md`](docs/prd.md) | Product, engineers | Vision, goals, personas, functional/non-functional requirements |
 | [`docs/features.md`](docs/features.md) | Product, engineers | Feature catalog — LINE, HTTP API, agent intents, reminders |
 | [`docs/use-cases.md`](docs/use-cases.md) | Engineers, product | Narrated flows, example utterances, assistant pipeline steps |
@@ -144,7 +144,7 @@ See **[`docs/index.md`](docs/index.md)** for the full documentation index, readi
 | **Supabase (Postgres)** | Users, medications, conversations, drug caches, dose events | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
 | **Redis + arq** | Deferred dose reminder jobs | `REDIS_URL` |
 | **OpenFDA HTTP** | Drug label grounding | automatic (HTTP) |
-| **Google Speech-to-Text** | Speech-to-text for LINE voice | `GOOGLE_SPEECH_API_KEY`, `GOOGLE_SPEECH_PROJECT_ID` |
+| **Google Speech-to-Text** | Speech-to-text for LINE voice | `GOOGLE_SPEECH_PROJECT_ID`; `GOOGLE_APPLICATION_CREDENTIALS` (or other ADC); optional `GOOGLE_SPEECH_LOCATION` |
 | **edge-tts** | Text-to-speech for LINE voice replies | installed via `[tts]` extra |
 
 All integrations have **mock adapters** — run the full stack locally with `MEDBUDDY_INTEGRATION=mock`.

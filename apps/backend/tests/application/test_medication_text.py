@@ -79,11 +79,11 @@ async def test_messages_add_medication_when_classifier_returns_add_intent(mock_s
     try:
         with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                    r = await client.post(
-                        "/v1/app/messages",
-                        json={"text": "add majezik 100mg daily after meal, in 2 mins"},
-                        headers=_headers(user=uid),
-                    )
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "add majezik 100mg daily after meal, in 2 mins"},
+                    headers=_headers(user=uid),
+                )
     finally:
         app.dependency_overrides.pop(get_services, None)
     assert r.status_code == 200

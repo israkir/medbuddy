@@ -46,6 +46,23 @@ async def test_assistant_locale_llm_fallback_paraphrase() -> None:
 
 
 @pytest.mark.asyncio
+async def test_assistant_updates_locale_even_when_classifier_misses() -> None:
+    settings = Settings(mock_external_services=True)
+    from medbuddy.container import build_app_services
+
+    svc = build_app_services(settings)
+    svc.llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale_intent="en")
+    key = "U-locale-classifier-miss"
+    await svc.users.get_or_create_user(key)
+    reply = await run_assistant_text_turn(
+        svc, user_key=key, user_text="can you talk to me in english"
+    )
+    assert "English" in reply or "english" in reply.lower()
+    row = await svc.users.get_or_create_user(key)
+    assert row.get("locale") == "en"
+
+
+@pytest.mark.asyncio
 async def test_assistant_unchanged_when_already_english() -> None:
     settings = Settings(mock_external_services=True)
     from medbuddy.container import build_app_services

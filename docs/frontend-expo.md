@@ -1,6 +1,6 @@
 # MedBuddy — Reference mobile client (Expo)
 
-**Status:** **Future product / reference only.** This document describes the **Expo (React Native)** app under `apps/frontend/` for engineers and product planning. It is **not** part of the primary **LINE Messaging + FastAPI** capability story documented in [`features.md`](features.md), [`use-cases.md`](use-cases.md), and [`architecture.md`](architecture.md).
+**Status:** **Future product / reference only.** This document describes the **Expo (React Native)** app under `apps/frontend/` for engineers and product planning. It is **not** part of the primary **LINE Messaging + FastAPI** capability story documented in [`features.md`](features.md), [`use-cases.md`](use-cases.md), and [`tdd.md`](tdd.md).
 
 **Disclaimer:** MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
 
@@ -81,5 +81,5 @@ Frontend logging and analytics are **not** documented as part of the backend obs
 |----------|------|
 | [`features.md`](features.md) | Primary feature catalog (LINE + backend HTTP API); short pointer to this file |
 | [`use-cases.md`](use-cases.md) | Assistant and LINE scenarios; HTTP one-turn flow without Expo-specific UI |
-| [`architecture.md`](architecture.md) | System design; HTTP client shown generically |
+| [`tdd.md`](tdd.md) | System design; HTTP client shown generically |
 | [`apps/frontend/README.md`](../apps/frontend/README.md) | Day-to-day Expo development |

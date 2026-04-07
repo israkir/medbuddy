@@ -130,10 +130,6 @@ class Settings(BaseSettings):
             "supabase_anon_key",
         ),
     )
-    google_speech_api_key: str = Field(
-        default="",
-        validation_alias=AliasChoices("GOOGLE_SPEECH_API_KEY", "google_speech_api_key"),
-    )
     google_speech_project_id: str = Field(
         default="",
         validation_alias=AliasChoices("GOOGLE_SPEECH_PROJECT_ID", "google_speech_project_id"),

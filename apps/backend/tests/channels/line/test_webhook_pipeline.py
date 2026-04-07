@@ -15,7 +15,7 @@ from medbuddy.engine.types import AppServices
 
 
 class _FailingStt:
-    async def transcribe_m4a(self, audio: bytes) -> str:
+    async def transcribe_m4a(self, audio: bytes, *, language_code: str | None = None) -> str:
         raise httpx.HTTPError("stt unavailable")
 
 
@@ -125,7 +125,7 @@ async def test_follow_sends_welcome_text(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_audio_stt_http_error_replies_with_generic_error(mock_settings):
+async def test_orchestrator_audio_stt_error_replies_with_generic_error(mock_settings):
     mock_settings.mock_external_services = True
     svc: AppServices = __import__(
         "medbuddy.container",

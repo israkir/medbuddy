@@ -138,7 +138,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 |------|------|------|
 | **LINE** | `integrations/mocks/line.py` | `integrations/line_client.py` — needs `LINE_CHANNEL_ACCESS_TOKEN` |
 | **LLM** | `integrations/mocks/llm.py` | `integrations/llm/gemini_llm.py` or `integrations/llm/openai_llm.py` — set `LLM_PROVIDER` and `GEMINI_API_KEY` or `OPENAI_API_KEY`; install `[llm]` extra |
-| **STT** | `integrations/mocks/stt.py` | `integrations/stt/stt_google.py` — needs `GOOGLE_SPEECH_API_KEY` and `GOOGLE_SPEECH_PROJECT_ID` |
+| **STT** | `integrations/mocks/stt.py` | `integrations/stt/stt_google.py` — needs `GOOGLE_SPEECH_PROJECT_ID` and Application Default Credentials |
 | **TTS** | `integrations/mocks/tts.py` | `integrations/edge_tts_service.py` — install `[tts]` extra |
 | **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
 | **Object storage** | In-memory mock | `integrations/local_public_storage.py` when `PUBLIC_BASE_URL` is set |
@@ -153,9 +153,9 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `LLM_PROVIDER` | `gemini` (default) or `openai` — see `GEMINI_*` / `OPENAI_*` below |
 | `GEMINI_API_KEY` | Google Gemini when `LLM_PROVIDER=gemini` (default model `gemini-2.5-flash`; override via `GEMINI_MODEL`) |
 | `OPENAI_API_KEY` | OpenAI when `LLM_PROVIDER=openai` (default model `gpt-4.1-mini`; override via `OPENAI_MODEL`) |
-| `GOOGLE_SPEECH_API_KEY` | Google Speech-to-Text API key (use key restrictions and rotation) |
 | `GOOGLE_SPEECH_PROJECT_ID` | Google Cloud project id for Speech-to-Text V2 endpoint |
 | `GOOGLE_SPEECH_LOCATION` | Speech-to-Text V2 location (`global` default) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service-account JSON for Google client libraries (or use workload identity/metadata credentials) |
 | `PUBLIC_BASE_URL` | HTTPS origin for audio URLs LINE fetches |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Postgres persistence (use anon key, never service role) |
 | `REDIS_URL` | arq job queue for dose reminders |
