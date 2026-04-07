@@ -16,9 +16,12 @@ from medbuddy.models.domain import (
     MedicationDraft,
     MedicationRecord,
     TurnInterpretation,
+    VitalLogRecord,
 )
+from medbuddy.llm.schemas import MedicationUpdateResolution, VitalLogExtraction
 
-# Keys: ``preferred_name``, ``age_years``, ``gender``, ``emergency_contact``, ``health_notes``.
+# Keys: ``preferred_name``, ``age_years``, ``gender``, ``emergency_contact``,
+# ``health_notes``, ``timezone``, ``locale``.
 ProfilePatch = dict[str, Any]
 
 
@@ -94,6 +97,18 @@ class LLMPort(Protocol):
         *,
         locale: str,
     ) -> str | None: ...
+
+    async def resolve_medication_update(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        *,
+        locale: str,
+    ) -> MedicationUpdateResolution | None: ...
+
+    async def extract_vital_log(
+        self, user_text: str, *, locale: str
+    ) -> VitalLogExtraction | None: ...
 
     async def compose_medication_added_reply(
         self,
@@ -186,6 +201,20 @@ class UserDataPort(Protocol):
 
     async def delete_medication(self, line_user_id: str, medication_id: str) -> bool: ...
 
+    async def patch_medication(
+        self, line_user_id: str, medication_id: str, fields: dict[str, Any]
+    ) -> MedicationRecord | None: ...
+
+    async def add_vital_log(
+        self,
+        line_user_id: str,
+        *,
+        kind: str,
+        display_summary: str,
+        payload: dict[str, Any],
+        notes: str | None = None,
+    ) -> VitalLogRecord: ...
+
     async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
         """Replace future pending dose rows and return ``(dose_event_id, scheduled_at)`` for enqueue."""
         ...
@@ -209,6 +238,10 @@ class UserDataPort(Protocol):
     ) -> bool: ...
 
     async def mark_pending_doses_taken(
+        self, line_user_id: str, *, notes: str | None = None
+    ) -> int: ...
+
+    async def mark_pending_doses_missed(
         self, line_user_id: str, *, notes: str | None = None
     ) -> int: ...
 

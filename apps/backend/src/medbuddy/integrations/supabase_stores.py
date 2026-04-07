@@ -15,6 +15,7 @@ from medbuddy.models.domain import (
     DoseEventReminderPayload,
     MedicationDraft,
     MedicationRecord,
+    VitalLogRecord,
 )
 from medbuddy.reminders.prefs import (
     iter_dose_instants_for_medication,
@@ -80,6 +81,30 @@ def _med_row_to_record(row: dict[str, Any]) -> MedicationRecord:
         schedule=row["schedule"],
         instructions=ins if isinstance(ins, str) or ins is None else str(ins),
         raw_metadata=raw,
+    )
+
+
+def _vital_row_to_record(row: dict[str, Any]) -> VitalLogRecord:
+    raw = row.get("payload")
+    if not isinstance(raw, dict):
+        raw = {}
+    notes = row.get("notes")
+    nout: str | None
+    if notes is None:
+        nout = None
+    elif isinstance(notes, str):
+        nout = notes.strip() or None
+    else:
+        nout = str(notes)
+    ra = row.get("recorded_at")
+    recorded = _parse_ts(ra) if ra is not None else datetime.now(UTC)
+    return VitalLogRecord(
+        id=str(row["id"]),
+        kind=str(row["kind"]),
+        display_summary=str(row["display_summary"]),
+        payload=raw,
+        notes=nout,
+        recorded_at=recorded,
     )
 
 
@@ -311,6 +336,78 @@ class SupabaseUserData(UserDataPort):
         rows = resp.data or []
         return len(rows) > 0
 
+    async def patch_medication(
+        self, line_user_id: str, medication_id: str, fields: dict[str, Any]
+    ) -> MedicationRecord | None:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        payload: dict[str, Any] = {}
+        if "name" in fields and isinstance(fields["name"], str):
+            v = fields["name"].strip()
+            if v:
+                payload["name"] = v
+        if "dosage" in fields and isinstance(fields["dosage"], str):
+            v = fields["dosage"].strip()
+            if v:
+                payload["dosage"] = v
+        if "schedule" in fields and isinstance(fields["schedule"], str):
+            v = fields["schedule"].strip()
+            if v:
+                payload["schedule"] = v
+        if "instructions" in fields:
+            raw = fields["instructions"]
+            if raw is None:
+                payload["instructions"] = None
+            elif isinstance(raw, str):
+                payload["instructions"] = raw.strip() or None
+        if not payload:
+            return None
+
+        def upd() -> Any:
+            return (
+                self._client.table("medications")
+                .update(payload)
+                .eq("patient_id", uid)
+                .eq("id", medication_id)
+                .execute()
+            )
+
+        resp = await _run_q(upd)
+        rows = resp.data or []
+        if not rows:
+            return None
+        return _med_row_to_record(rows[0])
+
+    async def add_vital_log(
+        self,
+        line_user_id: str,
+        *,
+        kind: str,
+        display_summary: str,
+        payload: dict[str, Any],
+        notes: str | None = None,
+    ) -> VitalLogRecord:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        n = (notes or "").strip() or None
+        body: dict[str, Any] = {
+            "patient_id": uid,
+            "kind": kind.strip(),
+            "display_summary": display_summary.strip(),
+            "payload": dict(payload),
+            "notes": n,
+        }
+
+        def insert() -> Any:
+            return self._client.table("vital_logs").insert(body).execute()
+
+        resp = await _run_q(insert)
+        rows = resp.data or []
+        if not rows:
+            msg = "Supabase vital_logs insert returned no row"
+            raise RuntimeError(msg)
+        return _vital_row_to_record(rows[0])
+
     async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
@@ -370,7 +467,9 @@ class SupabaseUserData(UserDataPort):
         def q_dose() -> Any:
             return (
                 self._client.table("dose_events")
-                .select("id, patient_id, medication_id, scheduled_at, reminder_sent_at, taken_at")
+                .select(
+                    "id, patient_id, medication_id, scheduled_at, reminder_sent_at, taken_at, missed_at"
+                )
                 .eq("id", dose_event_id)
                 .limit(1)
                 .execute()
@@ -381,7 +480,11 @@ class SupabaseUserData(UserDataPort):
         if not drows:
             return None
         dr = drows[0]
-        if dr.get("reminder_sent_at") is not None or dr.get("taken_at") is not None:
+        if (
+            dr.get("reminder_sent_at") is not None
+            or dr.get("taken_at") is not None
+            or dr.get("missed_at") is not None
+        ):
             return None
         uid = str(dr["patient_id"])
         mid = str(dr["medication_id"])
@@ -447,7 +550,7 @@ class SupabaseUserData(UserDataPort):
                 self._client.table("dose_events")
                 .select(
                     "id, patient_id, medication_id, scheduled_at, reminder_sent_at, "
-                    "taken_at, reminder_nudge_count"
+                    "taken_at, missed_at, reminder_nudge_count"
                 )
                 .eq("id", dose_event_id)
                 .limit(1)
@@ -459,7 +562,7 @@ class SupabaseUserData(UserDataPort):
         if not drows:
             return None
         dr = drows[0]
-        if dr.get("taken_at") is not None:
+        if dr.get("taken_at") is not None or dr.get("missed_at") is not None:
             return None
         if dr.get("reminder_sent_at") is None:
             return None
@@ -550,6 +653,7 @@ class SupabaseUserData(UserDataPort):
                 .eq("id", dose_event_id)
                 .eq("reminder_nudge_count", expected_nudge_count)
                 .is_("taken_at", "null")
+                .is_("missed_at", "null")
                 .execute()
             )
 
@@ -570,6 +674,7 @@ class SupabaseUserData(UserDataPort):
                 .select("scheduled_at")
                 .eq("patient_id", uid)
                 .is_("taken_at", "null")
+                .is_("missed_at", "null")
                 .lte("scheduled_at", now_iso)
                 .order("scheduled_at", desc=True)
                 .limit(1)
@@ -597,6 +702,7 @@ class SupabaseUserData(UserDataPort):
                 .eq("patient_id", uid)
                 .eq("scheduled_at", target_ts)
                 .is_("taken_at", "null")
+                .is_("missed_at", "null")
                 .execute()
             )
 
@@ -618,6 +724,7 @@ class SupabaseUserData(UserDataPort):
                 .select("id, scheduled_at, medications(name, dosage, schedule)")
                 .eq("patient_id", uid)
                 .is_("taken_at", "null")
+                .is_("missed_at", "null")
                 .lte("scheduled_at", now_iso)
                 .order("scheduled_at", desc=True)
                 .limit(limit)
@@ -744,6 +851,7 @@ class SupabaseUserData(UserDataPort):
                     .eq("id", eid)
                     .eq("patient_id", uid)
                     .is_("taken_at", "null")
+                    .is_("missed_at", "null")
                     .lte("scheduled_at", now_iso)
                     .execute()
                 )
@@ -752,6 +860,55 @@ class SupabaseUserData(UserDataPort):
             rows = uresp.data or []
             total += len(rows)
         return total
+
+    async def mark_pending_doses_missed(self, line_user_id: str, *, notes: str | None = None) -> int:
+        """Set ``missed_at`` on the most recent past pending dose instant (all meds at that time)."""
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
+
+        def q_latest() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("scheduled_at")
+                .eq("patient_id", uid)
+                .is_("taken_at", "null")
+                .is_("missed_at", "null")
+                .lte("scheduled_at", now_iso)
+                .order("scheduled_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q_latest)
+        rows = resp.data or []
+        if not rows:
+            return 0
+        target_ts = rows[0]["scheduled_at"]
+
+        payload: dict[str, Any] = {"missed_at": now_iso}
+        if notes is not None:
+            n = notes.strip()
+            if len(n) > 500:
+                n = n[:500]
+            if n:
+                payload["notes"] = n
+
+        def q_update() -> Any:
+            return (
+                self._client.table("dose_events")
+                .update(payload)
+                .eq("patient_id", uid)
+                .eq("scheduled_at", target_ts)
+                .is_("taken_at", "null")
+                .is_("missed_at", "null")
+                .execute()
+            )
+
+        uresp = await _run_q(q_update)
+        updated = uresp.data or []
+        return len(updated)
 
     async def append_note_to_dose_events(
         self,
@@ -887,6 +1044,7 @@ class SupabaseUserData(UserDataPort):
                 .lte("scheduled_at", b.isoformat())
                 .is_("reminder_sent_at", "null")
                 .is_("taken_at", "null")
+                .is_("missed_at", "null")
                 .execute()
             )
 

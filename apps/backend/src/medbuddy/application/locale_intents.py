@@ -1,4 +1,4 @@
-"""Detect and apply chat-driven locale changes (LINE and mobile share the same user store)."""
+"""Legacy locale helper (kept for compatibility, now routed via update_profile)."""
 
 from __future__ import annotations
 
@@ -28,17 +28,14 @@ async def try_locale_change_reply(
     intent: Intent,
     llm: LLMPort,
 ) -> str | None:
-    """Return a short ack if the message requests a locale change; otherwise ``None``.
-
-    Uses :meth:`~medbuddy.protocols.ports.LLMPort.extract_locale_intent` when the
-    classifier returns ``update_locale``.
-    """
+    """Return a short ack if the message requests a locale change; otherwise ``None``."""
     current = effective_user_locale(user_row.get("locale"))
-    if intent != Intent.UPDATE_LOCALE:
+    if intent != Intent.UPDATE_PROFILE:
         return None
-    requested_raw = await llm.extract_locale_intent(user_text)
+    patch = await llm.extract_profile_patch(user_text, locale=current)
+    requested_raw = patch.get("locale")
     if requested_raw is None:
-        return t("locale.unclear", locale=current)
+        return None
     requested = normalize_locale_patch(requested_raw)
     if requested is None:
         return t("locale.unclear", locale=current)

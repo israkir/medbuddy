@@ -36,7 +36,7 @@ gemini_llm    supabase_stores  drugs_http
 | | `channels/mobile/` | Mobile REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
 | | `application/profile_intents.py` | Profile updates when intent is `update_profile` (`extract_profile_patch`) |
-| | `application/locale_intents.py` | Locale changes when intent is `update_locale` (`extract_locale_intent`) |
+| | `application/locale_intents.py` | Legacy locale helper (locale updates are now handled via `update_profile`) |
 | **Agents** | `agents/medication_agent.py` | `MedicationAgent` — `interpret_user_turn` → maps `TurnInterpretation` to tools (adherence slots → `ConfirmDoseTool`) |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
 | | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `RemoveMedicationTool` |

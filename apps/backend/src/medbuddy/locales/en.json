@@ -7,6 +7,8 @@
     "added_first_reminder_plus_daily": "[Scheduled] A first reminder in about {minutes} minutes plus daily reminders at a fixed time were set. Mention both briefly.",
     "added_daily_horizon_days": "[Scheduled] Daily reminders were set for about {days} days as requested. You may confirm in one short sentence.",
     "resolve_remove_intro": "Which medication does the user want to stop or remove? JSON only.",
+    "resolve_update_intro": "Which existing medication should be updated, and which fields should change? Use only explicit user instructions. If unclear medication, return null medication_id. JSON only.",
+    "extract_vital_intro": "Extract one vital sign measurement from the user message. Choose kind: blood_pressure, blood_glucose, weight, heart_rate, temperature, spo2, or other.\nRules:\n- blood_pressure: systolic and diastolic integers (mmHg). Parse \"120/80\", \"120 over 80\".\n- blood_glucose: blood_glucose_mg_dl as number (mg/dL).\n- weight: weight_kg as number (kilograms). Convert lb to kg if needed (1 lb ≈ 0.453592 kg).\n- heart_rate: heart_rate_bpm integer.\n- temperature: temperature_celsius as number; convert °F to °C if needed (C = (F−32)×5/9).\n- spo2: spo2_percent integer 50–100 (\"oxygen 98\" → 98).\n- other: other_label + other_value when nothing else fits.\nInclude optional notes for context (e.g. before breakfast). Return JSON only with keys: kind, systolic, diastolic, blood_glucose_mg_dl, weight_kg, heart_rate_bpm, temperature_celsius, spo2_percent, other_label, other_value, notes.",
     "no_drug_data": "(No extra drug reference data.)",
     "patient_background": "Patient context (profile and medication list):",
     "reference": "Reference:",
@@ -58,6 +60,9 @@
     "list_intro": "Your current medications:",
     "list_empty": "You don’t have any medications saved yet. When you’re ready, tell me a drug name and I’ll help you add it.",
     "removed": "Removed from your list: {name}.",
+    "updated": "Updated {name}. Dose: {dosage}. Schedule: {schedule}. Notes: {instructions}",
+    "update_not_found": "I’m not sure which medication to update. Please include the medication name.",
+    "update_incomplete": "I found {name}, but I need what to change (name, dose, schedule, or note).",
     "remove_not_found": "I couldn’t find that one on your list — try the drug name again, or ask to see your medications.",
     "confirm_dose_none": "I don’t see a recent dose waiting to be checked off. If you meant a certain time or medicine, tell me a little more and I’ll try again.",
     "confirm_dose_ambiguous": "I see more than one dose that could match. Which one did you take?\n{options}\nYou can reply with the medication name and time, or say \"all\" if you took all listed doses.",
@@ -65,7 +70,21 @@
     "confirm_dose_clarify_invalid": "Please reply with one of the numbers shown (for example 1 or 2), or say \"all\" if that applies.",
     "confirm_dose_recorded": "Got it—I’ve marked {count} dose(s) as taken. Thanks for letting me know.",
     "confirm_dose_recorded_with_note": "Got it—I’ve marked {count} dose(s) as taken and saved your note: {note}",
-    "confirm_dose_note_appended": "Got it—I’ve added that to your most recent dose record: {note}"
+    "confirm_dose_note_appended": "Got it—I’ve added that to your most recent dose record: {note}",
+    "missed_dose_recorded": "Thanks for telling me. I’ve marked {count} dose(s) as missed.",
+    "missed_dose_none": "I don’t see a pending recent dose to mark as missed right now."
+  },
+  "vital": {
+    "logged": "Got it — I’ve saved that for you: {summary}.",
+    "log_incomplete": "I didn’t catch a clear reading. Could you say it again? For example: “blood pressure 120 over 80,” “sugar 95,” or “weight 70 kg.”",
+    "summary_blood_pressure": "blood pressure {systolic}/{diastolic} mmHg",
+    "summary_blood_glucose": "blood glucose {value} mg/dL",
+    "summary_weight": "weight {value} kg",
+    "summary_heart_rate": "heart rate {value} bpm",
+    "summary_temperature": "temperature {value} °C",
+    "summary_spo2": "oxygen saturation {value}%",
+    "summary_other": "{label}: {value}",
+    "other_unknown_label": "reading"
   },
   "reminder": {
     "line_push": "Reminder ({time_local}): time for {name} ({dosage}). On your schedule: {schedule}. If unsure, check with your pharmacist or clinician.",
@@ -108,6 +127,9 @@
     "ack_contact": "emergency contact “{contact}”",
     "ack_notes": "health notes “{notes}”",
     "ack_gender": "sex/gender “{label}”",
+    "ack_locale": "reply language “{label}”",
+    "ack_timezone": "timezone “{timezone}”",
+    "ack_timezone_cleared": "timezone cleared",
     "updated": "Got it—I have saved: {summary}. You can update anytime.",
     "update_unclear": "Happy to help — in one short message, could you share what you’d like saved? For example how to call you, age if you’re comfortable, a contact for emergencies, or allergies / important health notes. Example: “My name is Mei, I’m 72.”"
   },

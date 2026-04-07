@@ -6,7 +6,9 @@ from medbuddy.i18n import t
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
     InteractionCheckResult,
+    MedicationUpdateResolution,
     MedicationSummaryItem,
+    VitalLogExtraction,
 )
 from medbuddy.models.domain import (
     ConversationTurn,
@@ -42,6 +44,8 @@ class MockLLM(LLMPort):
         record_pending_dose_as_taken: bool | None = None,
         medication_draft: MedicationDraft | None = None,
         removal_medication_id: str | None = None,
+        medication_update: MedicationUpdateResolution | None = None,
+        vital_log: VitalLogExtraction | None = None,
         locale_intent: str | None = None,
     ) -> None:
         self._intent = intent
@@ -52,6 +56,8 @@ class MockLLM(LLMPort):
         self._record_pending_dose_as_taken = record_pending_dose_as_taken
         self._medication_draft = medication_draft
         self._removal_medication_id = removal_medication_id
+        self._medication_update = medication_update
+        self._vital_log = vital_log
         self._locale_intent = locale_intent
         self.last_interpret_user_turn_input: str | None = None
 
@@ -148,6 +154,22 @@ class MockLLM(LLMPort):
             schedule=saved.schedule,
             drug_summary=summary,
         )
+
+    async def resolve_medication_update(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        *,
+        locale: str,
+    ) -> MedicationUpdateResolution | None:
+        await asyncio.sleep(0)
+        _ = (user_text, medications, locale)
+        return self._medication_update
+
+    async def extract_vital_log(self, user_text: str, *, locale: str) -> VitalLogExtraction | None:
+        await asyncio.sleep(0)
+        _ = (user_text, locale)
+        return self._vital_log
 
     async def check_interactions_structured(
         self,

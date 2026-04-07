@@ -57,7 +57,7 @@ Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_
 |------|-----------|
 | Per-call LLM inputs and privacy exceptions | [docs/llm-context.md](./llm-context.md) |
 | Redaction | `apps/backend/src/medbuddy/privacy/redact.py` |
-| Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `agents/medication_agent.py`, `profile_intents.py`, `locale_intents.py` |
+| Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `agents/medication_agent.py`, `profile_intents.py` |
 | De-identified vs display context | `apps/backend/src/medbuddy/prompts/persona.py` |
 | Tests | `apps/backend/tests/test_privacy_redact.py`, `test_persona_llm_safe.py` |
 

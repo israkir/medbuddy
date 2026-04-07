@@ -12,6 +12,7 @@ from medbuddy.models.domain import (
     DoseEventReminderPayload,
     MedicationDraft,
     MedicationRecord,
+    VitalLogRecord,
 )
 from medbuddy.reminders.prefs import (
     iter_dose_instants_for_medication,
@@ -54,6 +55,7 @@ class MockUserData(UserDataPort):
         self._settings = settings
         self._users: dict[str, dict[str, Any]] = {}
         self._meds: dict[str, list[MedicationRecord]] = {}
+        self._vitals: dict[str, list[VitalLogRecord]] = {}
         self._doses: dict[str, dict[str, Any]] = {}
         self._dose_clarification: dict[str, dict[str, Any] | None] = {}
 
@@ -176,6 +178,74 @@ class MockUserData(UserDataPort):
                 return True
         return False
 
+    async def patch_medication(
+        self, line_user_id: str, medication_id: str, fields: dict[str, Any]
+    ) -> MedicationRecord | None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        meds = self._meds.get(line_user_id, [])
+        for i, m in enumerate(meds):
+            if m.id != medication_id:
+                continue
+            name = m.name
+            dosage = m.dosage
+            schedule = m.schedule
+            instructions = m.instructions
+            if "name" in fields and isinstance(fields["name"], str) and fields["name"].strip():
+                name = fields["name"].strip()
+            if (
+                "dosage" in fields
+                and isinstance(fields["dosage"], str)
+                and fields["dosage"].strip()
+            ):
+                dosage = fields["dosage"].strip()
+            if (
+                "schedule" in fields
+                and isinstance(fields["schedule"], str)
+                and fields["schedule"].strip()
+            ):
+                schedule = fields["schedule"].strip()
+            if "instructions" in fields:
+                raw = fields["instructions"]
+                if raw is None:
+                    instructions = None
+                elif isinstance(raw, str):
+                    instructions = raw.strip() or None
+            updated = MedicationRecord(
+                id=m.id,
+                name=name,
+                dosage=dosage,
+                schedule=schedule,
+                instructions=instructions,
+                raw_metadata=dict(m.raw_metadata),
+            )
+            meds[i] = updated
+            return updated
+        return None
+
+    async def add_vital_log(
+        self,
+        line_user_id: str,
+        *,
+        kind: str,
+        display_summary: str,
+        payload: dict[str, Any],
+        notes: str | None = None,
+    ) -> VitalLogRecord:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        n = (notes or "").strip() or None
+        rec = VitalLogRecord(
+            id=str(uuid.uuid4()),
+            kind=kind.strip(),
+            display_summary=display_summary.strip(),
+            payload=dict(payload),
+            notes=n,
+            recorded_at=datetime.now(UTC),
+        )
+        self._vitals.setdefault(line_user_id, []).append(rec)
+        return rec
+
     async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
         await asyncio.sleep(0)
         row = await self.get_or_create_user(line_user_id)
@@ -217,6 +287,7 @@ class MockUserData(UserDataPort):
                     "scheduled_at": at,
                     "reminder_sent_at": None,
                     "taken_at": None,
+                    "missed_at": None,
                     "notes": None,
                     "reminder_nudge_count": 0,
                     "last_nudge_at": None,
@@ -233,7 +304,11 @@ class MockUserData(UserDataPort):
         d = self._doses.get(dose_event_id)
         if not d:
             return None
-        if d.get("reminder_sent_at") is not None or d.get("taken_at") is not None:
+        if (
+            d.get("reminder_sent_at") is not None
+            or d.get("taken_at") is not None
+            or d.get("missed_at") is not None
+        ):
             return None
         return DoseEventReminderPayload(
             dose_event_id=dose_event_id,
@@ -260,7 +335,7 @@ class MockUserData(UserDataPort):
         d = self._doses.get(dose_event_id)
         if not d:
             return None
-        if d.get("taken_at") is not None:
+        if d.get("taken_at") is not None or d.get("missed_at") is not None:
             return None
         if d.get("reminder_sent_at") is None:
             return None
@@ -295,7 +370,7 @@ class MockUserData(UserDataPort):
     ) -> bool:
         await asyncio.sleep(0)
         d = self._doses.get(dose_event_id)
-        if not d or d.get("taken_at") is not None:
+        if not d or d.get("taken_at") is not None or d.get("missed_at") is not None:
             return False
         if int(d.get("reminder_nudge_count") or 0) != expected_nudge_count:
             return False
@@ -341,6 +416,8 @@ class MockUserData(UserDataPort):
             if d["line_user_id"] != line_user_id or d["user_internal_id"] != uid:
                 continue
             if d.get("taken_at") is not None:
+                continue
+            if d.get("missed_at") is not None:
                 continue
             if d["scheduled_at"] > now:
                 continue
@@ -393,6 +470,7 @@ class MockUserData(UserDataPort):
             if d["line_user_id"] == line_user_id
             and d["user_internal_id"] == uid
             and d.get("taken_at") is None
+            and d.get("missed_at") is None
             and d["scheduled_at"] <= now
         ]
         if not candidates:
@@ -406,6 +484,36 @@ class MockUserData(UserDataPort):
         for d in candidates:
             if d["scheduled_at"] == target_ts:
                 d["taken_at"] = now
+                if note_val:
+                    d["notes"] = note_val
+                n += 1
+        return n
+
+    async def mark_pending_doses_missed(self, line_user_id: str, *, notes: str | None = None) -> int:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        now = datetime.now(UTC)
+        candidates = [
+            d
+            for d in self._doses.values()
+            if d["line_user_id"] == line_user_id
+            and d["user_internal_id"] == uid
+            and d.get("taken_at") is None
+            and d.get("missed_at") is None
+            and d["scheduled_at"] <= now
+        ]
+        if not candidates:
+            return 0
+        target_ts = max(d["scheduled_at"] for d in candidates)
+        note_val: str | None = None
+        if notes is not None:
+            nstrip = notes.strip()
+            note_val = nstrip[:500] if nstrip else None
+        n = 0
+        for d in candidates:
+            if d["scheduled_at"] == target_ts:
+                d["missed_at"] = now
                 if note_val:
                     d["notes"] = note_val
                 n += 1
@@ -430,6 +538,7 @@ class MockUserData(UserDataPort):
             if d["line_user_id"] == line_user_id
             and d["user_internal_id"] == uid
             and d.get("taken_at") is None
+            and d.get("missed_at") is None
             and d["scheduled_at"] <= now
         ]
         candidates.sort(key=lambda c: c.scheduled_at, reverse=True)
@@ -508,6 +617,7 @@ class MockUserData(UserDataPort):
             if d["scheduled_at"] <= b
             and d.get("reminder_sent_at") is None
             and d.get("taken_at") is None
+            and d.get("missed_at") is None
         ]
 
     def seed_medication(self, line_user_id: str, med: MedicationRecord) -> None:

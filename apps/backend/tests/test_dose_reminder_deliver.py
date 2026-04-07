@@ -33,3 +33,23 @@ async def test_deliver_sends_line_push_and_marks_sent() -> None:
     again = await deliver_dose_reminder(svc, dose_id)
     assert again is False
     assert len(svc.line.pushes) == 1
+
+
+@pytest.mark.asyncio
+async def test_deliver_skips_when_dose_already_marked_missed() -> None:
+    settings = Settings(mock_external_services=True)
+    svc = build_app_services(settings)
+    key = "U-test-line-missed"
+    await svc.users.get_or_create_user(key)
+    await svc.users.add_medication(
+        key,
+        MedicationDraft(name="Aspirin", dosage="100mg", schedule="QD"),
+    )
+    jobs = await svc.users.sync_upcoming_dose_events(key)
+    assert len(jobs) >= 1
+    dose_id, _ = jobs[0]
+    svc.users._doses[dose_id]["missed_at"] = True  # noqa: SLF001
+
+    sent = await deliver_dose_reminder(svc, dose_id)
+    assert sent is False
+    assert len(svc.line.pushes) == 0

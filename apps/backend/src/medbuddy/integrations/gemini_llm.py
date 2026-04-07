@@ -33,9 +33,11 @@ from medbuddy.llm.schemas import (
     InteractionCheckResult,
     LocaleIntentExtraction,
     MedicationExtraction,
+    MedicationUpdateResolution,
     MedicationSummaryItem,
     ProfilePatchExtraction,
     RemovalResolution,
+    VitalLogExtraction,
 )
 from medbuddy.models.domain import (
     ConversationTurn,
@@ -48,6 +50,8 @@ from medbuddy.models.domain import (
 from medbuddy.prompts.persona import get_system_persona
 from medbuddy.protocols.ports import LLMPort, ProfilePatch
 from medbuddy.reminders.prefs import reminder_compose_appendix
+from medbuddy.user_locale import normalize_locale_patch
+from medbuddy.user_timezone import normalize_timezone_patch
 
 log = logging.getLogger(__name__)
 
@@ -170,6 +174,8 @@ class GeminiLLM(LLMPort):
         prompt = (
             "Extract profile fields the user wants to save. Only fill a field if it is clearly "
             "stated. Use null for anything not explicitly given. "
+            "Profile fields may include preferred name, age, gender, emergency contact, health notes, "
+            "timezone, and reply language (en/zh-TW). "
             "Do not treat one-off medication side effects or dose comments as health_notes — "
             "those belong in conversation, not the long-term profile unless they say they want "
             "it saved on their profile or as allergies.\n\n"
@@ -184,7 +190,15 @@ class GeminiLLM(LLMPort):
             return {}
         data = extracted.model_dump(exclude_none=True)
         out: ProfilePatch = {}
-        for key in ("preferred_name", "age_years", "gender", "emergency_contact", "health_notes"):
+        for key in (
+            "preferred_name",
+            "age_years",
+            "gender",
+            "emergency_contact",
+            "health_notes",
+            "timezone",
+            "locale",
+        ):
             if key not in data:
                 continue
             val = data[key]
@@ -202,6 +216,14 @@ class GeminiLLM(LLMPort):
                 allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
                 if g in allowed:
                     out[key] = g
+            elif key == "locale":
+                normalized = normalize_locale_patch(val)
+                if normalized is not None:
+                    out[key] = normalized
+            elif key == "timezone":
+                normalized_tz = normalize_timezone_patch(val)
+                if normalized_tz is not None:
+                    out[key] = normalized_tz
             elif isinstance(val, str) and val.strip():
                 out[key] = val.strip()
         return out
@@ -337,6 +359,54 @@ class GeminiLLM(LLMPort):
     ) -> str | None:
         loc = locale or self._locale
         return await asyncio.to_thread(self._resolve_remove_sync, user_text, medications, loc)
+
+    def _resolve_update_sync(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        locale: str,
+    ) -> MedicationUpdateResolution | None:
+        loc = locale
+        catalog = [
+            {"id": m.id, "name": m.name, "dosage": m.dosage, "schedule": m.schedule}
+            for m in medications
+        ]
+        prompt = (
+            f"{t('gemini.resolve_update_intro', locale=loc)}\n"
+            f"Medications: {json.dumps(catalog, ensure_ascii=False)}\n"
+            "Return JSON only with keys: medication_id, name, dosage, schedule, instructions, clear_instructions.\n"
+            f"User: {user_text}"
+        )
+        try:
+            return self._generate_structured_sync(
+                self._chat_model, prompt, MedicationUpdateResolution
+            )
+        except LLMParseError:
+            log.warning("resolve_update: structured parse failed")
+            return None
+
+    async def resolve_medication_update(
+        self,
+        user_text: str,
+        medications: list[MedicationRecord],
+        *,
+        locale: str,
+    ) -> MedicationUpdateResolution | None:
+        loc = locale or self._locale
+        return await asyncio.to_thread(self._resolve_update_sync, user_text, medications, loc)
+
+    def _extract_vital_sync(self, user_text: str, locale: str) -> VitalLogExtraction | None:
+        loc = locale
+        prompt = f"{t('gemini.extract_vital_intro', locale=loc)}\nUser: {user_text}"
+        try:
+            return self._generate_structured_sync(self._chat_model, prompt, VitalLogExtraction)
+        except LLMParseError:
+            log.warning("extract_vital: structured parse failed")
+            return None
+
+    async def extract_vital_log(self, user_text: str, *, locale: str) -> VitalLogExtraction | None:
+        loc = locale or self._locale
+        return await asyncio.to_thread(self._extract_vital_sync, user_text, loc)
 
     # ------------------------------------------------------------------
     # LLMPort — medication-added reply

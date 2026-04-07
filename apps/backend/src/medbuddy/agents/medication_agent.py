@@ -27,13 +27,15 @@ from medbuddy.agents.tools.drug_lookup import ExplainMedicationTool
 from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.agents.tools.interaction_check import InteractionCheckTool
 from medbuddy.agents.tools.confirm_dose import ConfirmDoseTool
+from medbuddy.agents.tools.log_vital import LogVitalTool
+from medbuddy.agents.tools.report_missed_dose import ReportMissedDoseTool
 from medbuddy.agents.tools.medication_crud import (
     AddMedicationTool,
     ListMedicationsTool,
     RemoveMedicationTool,
+    UpdateMedicationTool,
 )
 from medbuddy.application.dose_clarification_resolve import try_resolve_pending_dose_clarification
-from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.profile_intents import try_profile_intent_reply
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedBuddyError
@@ -55,18 +57,24 @@ log = logging.getLogger(__name__)
 _list_tool = ListMedicationsTool()
 _add_tool = AddMedicationTool()
 _remove_tool = RemoveMedicationTool()
+_update_tool = UpdateMedicationTool()
 _explain_tool = ExplainMedicationTool()
 _interaction_tool = InteractionCheckTool()
 _summary_tool = GenerateHealthSummaryTool()
 _confirm_dose_tool = ConfirmDoseTool()
+_report_missed_dose_tool = ReportMissedDoseTool()
+_log_vital_tool = LogVitalTool()
 
 _TOOL_MAP: dict[Intent, Any] = {
     Intent.LIST_MEDICATIONS: _list_tool,
     Intent.ADD_MEDICATION: _add_tool,
+    Intent.UPDATE_MEDICATION: _update_tool,
     Intent.REMOVE_MEDICATION: _remove_tool,
     Intent.CONFIRM_DOSE: _confirm_dose_tool,
+    Intent.REPORT_MISSED_DOSE: _report_missed_dose_tool,
     Intent.EXPLAIN_MEDICATION: _explain_tool,
     Intent.INTERACTION_CHECK: _interaction_tool,
+    Intent.LOG_VITAL: _log_vital_tool,
     Intent.REQUEST_SUMMARY: _summary_tool,
 }
 
@@ -134,21 +142,6 @@ class MedicationAgent:
                 ConversationTurn(role="assistant", content=clarify_reply, at=datetime.now(UTC)),
             )
             return clarify_reply
-
-        locale_reply = await try_locale_change_reply(
-            svc,
-            user_key=user_key,
-            user_text=user_text,
-            user_row=user_row,
-            intent=intent,
-            llm=svc.llm,
-        )
-        if locale_reply is not None:
-            await svc.conversations.append_turn(
-                user_key,
-                ConversationTurn(role="assistant", content=locale_reply, at=datetime.now(UTC)),
-            )
-            return locale_reply
 
         # 1. Extension hooks (highest priority, can short-circuit)
         reply = await try_intent_hooks(intent, svc, user_text)
@@ -249,10 +242,16 @@ async def _run_tool_safe(tool: Any, **kwargs: Any) -> ToolResult:
 
 
 def _user_error_message(exc: MedBuddyError, *, locale: str) -> str:
-    from medbuddy.exceptions import MedicationExtractionError, MedicationNotFoundError
+    from medbuddy.exceptions import (
+        MedicationExtractionError,
+        MedicationNotFoundError,
+        VitalExtractionError,
+    )
 
     if isinstance(exc, MedicationExtractionError):
         return t("medication.add_incomplete", locale=locale)
+    if isinstance(exc, VitalExtractionError):
+        return t("vital.log_incomplete", locale=locale)
     if isinstance(exc, MedicationNotFoundError):
         return t("medication.remove_not_found", locale=locale)
     return t("agent.generic_error", locale=locale)

@@ -9,6 +9,8 @@ from medbuddy.models.domain import Intent
 
 def map_intent_label(label: str) -> Intent:
     raw = label.strip().lower()
+    if raw == "update_locale":
+        return Intent.UPDATE_PROFILE
     for intent in Intent:
         if raw == intent.value:
             return intent
