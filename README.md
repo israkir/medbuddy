@@ -140,7 +140,7 @@ Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#
 | **Supabase (Postgres)** | Users, medications, conversations, drug caches, dose events | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
 | **Redis + arq** | Deferred dose reminder jobs | `REDIS_URL` |
 | **OpenFDA HTTP** | Drug label grounding | automatic (HTTP) |
-| **Whisper HTTP** | Speech-to-text for LINE voice | `WHISPER_SERVICE_URL` |
+| **Google Speech-to-Text** | Speech-to-text for LINE voice | `GOOGLE_SPEECH_API_KEY`, `GOOGLE_SPEECH_PROJECT_ID` |
 | **edge-tts** | Text-to-speech for LINE voice replies | installed via `[tts]` extra |
 
 All integrations have **mock adapters** — run the full stack locally with `MEDBUDDY_INTEGRATION=mock`.

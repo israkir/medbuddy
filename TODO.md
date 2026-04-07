@@ -28,7 +28,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 - [ ] **`PUBLIC_BASE_URL`** — HTTPS origin LINE uses for TTS fetch URLs.
 
-- [ ] LLM: **`GEMINI_*`** or **`OPENAI_*`** per **`LLM_PROVIDER`**; optional Whisper, etc.
+- [ ] LLM: **`GEMINI_*`** or **`OPENAI_*`** per **`LLM_PROVIDER`**
 
 - [ ] Secrets from a managed store; document rotation.
 

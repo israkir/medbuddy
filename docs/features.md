@@ -43,7 +43,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 - Webhook endpoint accepts verified LINE events when `LINE_CHANNEL_SECRET` is set; mock mode may skip signature verification (see backend README).
 - New followers get a deterministic **welcome** from i18n (`get_or_create_user`); this path does **not** call `run_assistant_text_turn`.
 - Text messages map LINE `userId` → `user_key` → `run_assistant_text_turn(user_key, user_text)` → reply as LINE text (or batch with audio for voice replies).
-- Voice messages: download audio → STT (Whisper HTTP or mock) → same assistant pipeline on transcript; optional TTS returns a short-lived public URL under `/internal-media/...` with batch audio + text and TTL cleanup.
+- Voice messages: download audio → STT (Google Speech-to-Text or mock) → same assistant pipeline on transcript; optional TTS returns a short-lived public URL under `/internal-media/...` with batch audio + text and TTL cleanup.
 
 **Implementation**
 
@@ -51,7 +51,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 **Configuration**
 
-- `LINE_CHANNEL_SECRET`, `PUBLIC_BASE_URL` (for TTS fetch), Whisper/TTS service settings as documented in the backend README.
+- `LINE_CHANNEL_SECRET`, `PUBLIC_BASE_URL` (for TTS fetch), Google STT/TTS service settings as documented in the backend README.
 
 ---
 
@@ -270,7 +270,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 |-------------|------|
 | LINE | Webhook + push (reply and reminder worker). |
 | LLM | `LLM_PROVIDER` selects `GeminiLLM` (`google-genai`, default `gemini-2.5-flash`) or `OpenAILLM` (Chat Completions, default `gpt-4.1-mini`). Same `LLMPort` for `interpret_user_turn`, compose, extraction. |
-| Whisper HTTP | STT for LINE voice. |
+| Google Speech-to-Text | STT for LINE voice. |
 | edge-tts | TTS for voice replies. |
 | OpenFDA HTTP | Drug label snippets for grounding and reference cache. |
 | TFDA | Placeholder — `fetch_tfda_snippet` returns `None` until a real client exists. |
@@ -359,7 +359,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 |----------|--------|
 | Clinical diagnosis | Prompts push back; not a substitute for professionals. |
 | Full TFDA API in production HTTP | Stub returns empty; mocks may fake TFDA. |
-| Reference Expo hold-to-talk → backend STT | Not wired; see [`frontend-expo.md`](frontend-expo.md). LINE voice + Whisper HTTP are the supported voice path in the primary product. |
+| Reference Expo hold-to-talk → backend STT | Not wired; see [`frontend-expo.md`](frontend-expo.md). LINE voice + Google Speech-to-Text is the supported voice path in the primary product. |
 | Rich LINE reminder UI | No multi-time-per-day scheduling from free-text in reminder v1. |
 
 ---

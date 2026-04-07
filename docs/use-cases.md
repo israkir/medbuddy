@@ -262,4 +262,4 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 - Clinical diagnosis or replacing clinician/pharmacist judgment.
 - **Full TFDA HTTP** — stub returns empty; mocks may imitate TFDA.
 - **LINE `postback`** handling** — no user-facing action yet.
-- **Reference Expo** hold-to-talk → backend STT — see [`frontend-expo.md`](frontend-expo.md); **LINE audio** + Whisper is supported.
+- **Reference Expo** hold-to-talk → backend STT — see [`frontend-expo.md`](frontend-expo.md); **LINE audio** + Google Speech-to-Text is supported.
