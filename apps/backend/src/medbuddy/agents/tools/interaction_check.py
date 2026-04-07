@@ -48,8 +48,9 @@ class InteractionCheckTool:
         **_: Any,
     ) -> ToolResult:
         safe_text = redact_pii_text(user_text)
+        # Include actual health notes so the LLM can check drug-condition interactions.
         patient_ctx = await patient_context_for_llm(
-            svc, user_key, user_row, medications, locale=locale
+            svc, user_key, user_row, medications, locale=locale, include_health_notes=True
         )
 
         # Personalization cache check

@@ -16,6 +16,7 @@ from medbuddy.models.domain import (
     MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
+    ReminderHorizonPending,
     TurnInterpretation,
     VitalLogRecord,
 )
@@ -278,6 +279,14 @@ class UserDataPort(Protocol):
 
     async def set_medication_add_confirmation_pending(
         self, line_user_id: str, pending: MedicationAddConfirmationPending | None
+    ) -> None: ...
+
+    async def get_reminder_horizon_pending(
+        self, line_user_id: str
+    ) -> ReminderHorizonPending | None: ...
+
+    async def set_reminder_horizon_pending(
+        self, line_user_id: str, pending: ReminderHorizonPending | None
     ) -> None: ...
 
     async def mark_dose_events_taken(

@@ -16,6 +16,7 @@ from medbuddy.models.domain import (
     MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
+    ReminderHorizonPending,
     VitalLogRecord,
     parse_pending_agent_clarification,
 )
@@ -934,6 +935,37 @@ class SupabaseUserData(UserDataPort):
 
     async def set_medication_add_confirmation_pending(
         self, line_user_id: str, pending: MedicationAddConfirmationPending | None
+    ) -> None:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        payload = {"pending_agent_clarification": pending.to_json() if pending else None}
+
+        def u() -> Any:
+            return self._client.table("patients").update(payload).eq("id", uid).execute()
+
+        await _run_q(u)
+
+    async def get_reminder_horizon_pending(
+        self, line_user_id: str
+    ) -> ReminderHorizonPending | None:
+        def q() -> Any:
+            return (
+                self._client.table("patients")
+                .select("pending_agent_clarification")
+                .eq("external_user_id", line_user_id)
+                .limit(1)
+                .execute()
+            )
+
+        rows = (await _run_q(q)).data or []
+        if not rows:
+            return None
+        raw = rows[0].get("pending_agent_clarification")
+        parsed = parse_pending_agent_clarification(raw)
+        return parsed if isinstance(parsed, ReminderHorizonPending) else None
+
+    async def set_reminder_horizon_pending(
+        self, line_user_id: str, pending: ReminderHorizonPending | None
     ) -> None:
         user = await self.get_or_create_user(line_user_id)
         uid = str(user["id"])

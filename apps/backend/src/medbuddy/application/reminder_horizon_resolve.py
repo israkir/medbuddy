@@ -1,0 +1,133 @@
+"""Resolve pending reminder-horizon confirmation (how many days for daily reminders).
+
+After a medication is saved with ``needs_horizon_confirmation=True``, a
+``ReminderHorizonPending`` state is stored.  The next time the user sends a
+message that clearly states a number of days (e.g. "3 days", "一週", "7"),
+this resolver intercepts it, patches the medication metadata, and re-syncs
+reminders — producing the expected N * doses_per_day dose events.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import UTC, datetime
+from typing import Any
+
+from medbuddy.engine.types import AppServices
+from medbuddy.i18n import t
+from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
+
+_DAYS_PATTERNS = [
+    # "3 days", "3 天", "3 日", "3d"
+    re.compile(r"\b(\d+)\s*(?:days?|天|日|d)\b", re.IGNORECASE),
+    # "one week", "1 week", "一週", "一周"
+    re.compile(r"\b(1|one|一)\s*(?:week|週|周)\b", re.IGNORECASE),
+    re.compile(r"\b(2|two|兩|两)\s*(?:weeks?|週|周)\b", re.IGNORECASE),
+    re.compile(r"\b(3|three|三)\s*(?:weeks?|週|周)\b", re.IGNORECASE),
+    re.compile(r"\b(4|four|四)\s*(?:weeks?|週|周)\b", re.IGNORECASE),
+    # bare integer (last resort — only used when it's the entire message)
+    re.compile(r"^\s*(\d+)\s*$"),
+]
+
+_WEEK_MULTIPLIERS: dict[str, int] = {
+    "1": 7,
+    "one": 7,
+    "一": 7,
+    "2": 14,
+    "two": 14,
+    "兩": 14,
+    "两": 14,
+    "3": 21,
+    "three": 21,
+    "三": 21,
+    "4": 28,
+    "four": 28,
+    "四": 28,
+}
+
+
+def _parse_horizon_days(text: str) -> int | None:
+    """Return 1–90 day count from user text, or None if not clearly stated."""
+    s = text.strip()
+    # week-based patterns (index 1–4)
+    for pat_idx in range(1, 5):
+        m = _DAYS_PATTERNS[pat_idx].search(s)
+        if m:
+            key = m.group(1).lower()
+            return _WEEK_MULTIPLIERS.get(key)
+    # explicit days
+    m = _DAYS_PATTERNS[0].search(s)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 90:
+            return n
+    # bare number (whole message is just digits)
+    m = _DAYS_PATTERNS[-1].match(s)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 90:
+            return n
+    return None
+
+
+async def try_resolve_pending_reminder_horizon(
+    svc: AppServices,
+    *,
+    user_key: str,
+    user_text: str,
+    locale: str,
+) -> str | None:
+    """If there is a pending reminder-horizon question and the user supplied a day count, apply it.
+
+    Returns the confirmation reply, or ``None`` when the message is not a
+    recognisable horizon answer (letting the normal agent flow handle it).
+    """
+    pending = await svc.users.get_reminder_horizon_pending(user_key)
+    if pending is None:
+        return None
+
+    now = datetime.now(UTC)
+    exp = (
+        pending.expires_at if pending.expires_at.tzinfo else pending.expires_at.replace(tzinfo=UTC)
+    )
+    if now > exp:
+        await svc.users.set_reminder_horizon_pending(user_key, None)
+        return None
+
+    days = _parse_horizon_days(user_text)
+    if days is None:
+        # Not a clear day-count answer — keep pending, let the normal flow answer
+        # any other question the user asked.
+        return None
+
+    # Clear the pending state before mutating data so a retry is idempotent.
+    await svc.users.set_reminder_horizon_pending(user_key, None)
+
+    # Merge updated reminder prefs into the medication's raw_metadata.
+    medications = await svc.users.list_medications(user_key)
+    target = next((m for m in medications if m.id == pending.medication_id), None)
+    if target is None:
+        # Medication was removed in the meantime — just confirm gracefully.
+        return t("reminder.horizon_confirmed_generic", locale=locale, days=days)
+
+    existing_meta: dict[str, Any] = dict(target.raw_metadata or {})
+    existing_rem: dict[str, Any] = dict(existing_meta.get("reminder") or {})
+    existing_rem.update(
+        {
+            "needs_horizon_confirmation": False,
+            "materialize_daily": True,
+            "horizon_days": days,
+        }
+    )
+    existing_meta["reminder"] = existing_rem
+    await svc.users.patch_medication(
+        user_key, pending.medication_id, {"raw_metadata": existing_meta}
+    )
+    await sync_and_enqueue_reminders(svc, user_key)
+
+    return t(
+        "reminder.horizon_confirmed",
+        locale=locale,
+        name=pending.medication_name,
+        days=days,
+    )

@@ -57,6 +57,18 @@ Return one intent, your reasoning, and two adherence fields used mechanically by
 ## off_topic
 
 Use **off_topic** only when the topic is clearly unrelated to medications, health, or care. If there is any care or medication angle, prefer **general_question** or the best matching intent above, not **off_topic**.
+
+## Context-bound follow-ups (pending agent questions)
+
+The recent conversation may show the assistant asked a specific question that is waiting for an answer:
+
+- **Pending medication save confirmation** — the assistant asked "shall I save this medication?" with a yes/no prompt. If the user's current message is a direct yes/no (or equivalent), classify as **general_question** so the pending-state resolver can intercept it. If the user is asking something else entirely, classify normally — the pending state is preserved and a reminder will be appended automatically.
+
+- **Pending reminder duration** — the assistant asked "how many days do you want daily reminders for?" If the user's message is a number or clear time span (e.g. "7 days", "2 weeks", "三天"), classify as **general_question** so the horizon resolver can intercept it.
+
+- **Dose disambiguation** — the assistant showed a numbered list of doses and asked which one to mark. If the user replies with a number or "all", the dose-clarification resolver intercepts — classify normally and the resolver handles it.
+
+In all cases: short replies ("3", "yes", "one week", "好") in the context of a pending question must **not** be **off_topic** — use **general_question** as the safe fallback.
 """
 
 

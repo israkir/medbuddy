@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Backend locale JSON stability**: Corrected invalid smart-quoted keys/strings in
+  `apps/backend/src/medbuddy/locales/en.json` that could break JSON parsing and fail
+  backend tests at startup/load time.
+- **Medication add-confirm test alignment**: Updated backend test expectations so
+  missing instructions alone no longer force add confirmation when dose/schedule
+  are explicit, matching current confirmation policy.
 - **Google STT (zh-TW)**: Traditional Chinese Taiwan is not supported as `zh-TW` with model `long` on location `global`. STT now sends `cmn-Hant-TW` with model `chirp` and uses a regional endpoint (default `asia-southeast1` when `GOOGLE_SPEECH_LOCATION` is `global`).
 - **Medication dose/schedule copy in user locale**: List replies, reminders, confirm-dose options, add/update fallbacks, and incomplete-draft prompts now map stored English placeholders (e.g. `unspecified`) to the profile locale label (e.g. 未註明 for `zh-TW`). When the list still has missing dose or schedule, a short hint invites the user to send them for an update.
 - **Google STT transcription**: Normalize language tags sent to Speech-to-Text v2 (short `en`/`zh` → `en-US`/`zh-TW`, underscore → hyphen) so locale-derived codes match API expectations.

@@ -18,6 +18,7 @@ from medbuddy.models.domain import (
     MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
+    ReminderHorizonPending,
 )
 from medbuddy.privacy.redact import redact_pii_text
 from medbuddy.application.patient_llm_context import patient_context_for_llm
@@ -62,8 +63,29 @@ async def persist_medication_add_from_draft(
     saved = await svc.users.add_medication(user_key, draft)
     meds_updated = await svc.users.list_medications(user_key)
     await sync_and_enqueue_reminders(svc, user_key)
+
+    # If daily reminders need a duration answer from the user, set a pending state so
+    # the next message that clearly states "N days" is automatically resolved.
+    if draft.needs_horizon_confirmation:
+        expires = datetime.now(UTC) + timedelta(seconds=svc.settings.dose_clarification_ttl_seconds)
+        await svc.users.set_reminder_horizon_pending(
+            user_key,
+            ReminderHorizonPending(
+                medication_id=saved.id,
+                medication_name=saved.name,
+                expires_at=expires,
+            ),
+        )
+
+    # Include actual health notes so the LLM can flag drug-condition contraindications.
     patient_ctx = await patient_context_for_llm(
-        svc, user_key, user_row, meds_updated, locale=locale, sync_dose_events_first=False
+        svc,
+        user_key,
+        user_row,
+        meds_updated,
+        locale=locale,
+        sync_dose_events_first=False,
+        include_health_notes=True,
     )
     drug_grounding = await _drug_grounding_text(svc, saved.name)
 

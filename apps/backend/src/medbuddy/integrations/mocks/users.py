@@ -13,6 +13,7 @@ from medbuddy.models.domain import (
     MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
+    ReminderHorizonPending,
     VitalLogRecord,
     parse_pending_agent_clarification,
 )
@@ -406,6 +407,22 @@ class MockUserData(UserDataPort):
 
     async def set_medication_add_confirmation_pending(
         self, line_user_id: str, pending: MedicationAddConfirmationPending | None
+    ) -> None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        self._dose_clarification[line_user_id] = pending.to_json() if pending else None
+
+    async def get_reminder_horizon_pending(
+        self, line_user_id: str
+    ) -> ReminderHorizonPending | None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        raw = self._dose_clarification.get(line_user_id)
+        parsed = parse_pending_agent_clarification(raw) if raw else None
+        return parsed if isinstance(parsed, ReminderHorizonPending) else None
+
+    async def set_reminder_horizon_pending(
+        self, line_user_id: str, pending: ReminderHorizonPending | None
     ) -> None:
         await asyncio.sleep(0)
         await self.get_or_create_user(line_user_id)
