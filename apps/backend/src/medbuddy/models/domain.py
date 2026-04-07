@@ -25,20 +25,22 @@ __all__ = [
     "MedicationRecord",
     "MessageKind",
     "TurnInterpretation",
+    "VitalLogRecord",
 ]
 
 
 class Intent(str, Enum):
     ADD_MEDICATION = "add_medication"
+    UPDATE_MEDICATION = "update_medication"
     LIST_MEDICATIONS = "list_medications"
     REMOVE_MEDICATION = "remove_medication"
     CONFIRM_DOSE = "confirm_dose"
+    REPORT_MISSED_DOSE = "report_missed_dose"
     EXPLAIN_MEDICATION = "explain_medication"
     INTERACTION_CHECK = "interaction_check"
     LOG_VITAL = "log_vital"
     REQUEST_SUMMARY = "request_summary"
     UPDATE_PROFILE = "update_profile"
-    UPDATE_LOCALE = "update_locale"
     OFF_TOPIC = "off_topic"
     GENERAL_QUESTION = "general_question"
 
@@ -92,6 +94,18 @@ class MedicationRecord:
     schedule: str
     instructions: str | None = None
     raw_metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class VitalLogRecord:
+    """One saved vital-sign row for a patient."""
+
+    id: str
+    kind: str
+    display_summary: str
+    payload: dict[str, Any]
+    notes: str | None
+    recorded_at: datetime
 
 
 @dataclass(frozen=True)

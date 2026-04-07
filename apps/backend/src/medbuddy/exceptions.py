@@ -93,6 +93,16 @@ class MedicationExtractionError(MedicationError):
         )
 
 
+class VitalExtractionError(MedBuddyError):
+    """Could not extract a usable vital sign reading from the user's message."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Could not extract vital sign details from the message",
+            code="vital_extraction_failed",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Drug data layer
 # ---------------------------------------------------------------------------

@@ -13,6 +13,55 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class VitalLogExtraction(BaseModel):
+    """Structured vital sign(s) from one user message."""
+
+    kind: str = Field(
+        description=(
+            "One of: blood_pressure, blood_glucose, weight, heart_rate, "
+            "temperature, spo2, other — match the user's main measurement"
+        )
+    )
+    systolic: int | None = Field(
+        default=None, description="Systolic BP in mmHg when kind is blood_pressure"
+    )
+    diastolic: int | None = Field(
+        default=None, description="Diastolic BP in mmHg when kind is blood_pressure"
+    )
+    blood_glucose_mg_dl: float | None = Field(
+        default=None,
+        description="Blood glucose in mg/dL when kind is blood_glucose",
+    )
+    weight_kg: float | None = Field(
+        default=None, description="Body weight in kilograms when kind is weight"
+    )
+    heart_rate_bpm: int | None = Field(
+        default=None,
+        description="Pulse / heart rate in beats per minute when kind is heart_rate",
+    )
+    temperature_celsius: float | None = Field(
+        default=None,
+        description="Body temperature in degrees Celsius when kind is temperature (convert from °F if needed)",
+    )
+    spo2_percent: int | None = Field(
+        default=None,
+        description="SpO2 percentage 50–100 when kind is spo2",
+    )
+    other_label: str | None = Field(
+        default=None,
+        description="Short label when kind is other (e.g. 'pain level')",
+    )
+    other_value: str | None = Field(
+        default=None,
+        description="Value or description when kind is other",
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional short context the user gave (e.g. after breakfast)",
+    )
+
+
 class MedicationExtraction(BaseModel):
     """Structured medication extracted from a user message."""
 
@@ -70,14 +119,43 @@ class RemovalResolution(BaseModel):
     )
 
 
+class MedicationUpdateResolution(BaseModel):
+    """Which medication to update and which fields to patch."""
+
+    medication_id: str | None = Field(
+        default=None,
+        description="UUID of the medication to update, or null if unclear",
+    )
+    name: str | None = Field(
+        default=None,
+        description="New medication name if user asked to rename; otherwise null",
+    )
+    dosage: str | None = Field(
+        default=None,
+        description="New dosage text only if explicitly requested; otherwise null",
+    )
+    schedule: str | None = Field(
+        default=None,
+        description="New schedule/timing text only if explicitly requested; otherwise null",
+    )
+    instructions: str | None = Field(
+        default=None,
+        description="New instructions/notes text when explicitly provided; otherwise null",
+    )
+    clear_instructions: bool = Field(
+        default=False,
+        description="True only when user explicitly asks to clear/remove instructions/notes",
+    )
+
+
 class IntentClassification(BaseModel):
     """Structured routing decision for one user message (intent + adherence slots)."""
 
     intent: str = Field(
         description=(
             "Exactly one of: add_medication, list_medications, remove_medication, confirm_dose, "
-            "explain_medication, interaction_check, log_vital, request_summary, "
-            "update_profile, update_locale, off_topic, general_question. "
+            "report_missed_dose, update_medication, explain_medication, interaction_check, "
+            "log_vital, request_summary, update_profile, off_topic, general_question. "
             "Follow the system routing rules: each value maps to one assistant tool or fallback. "
             "add_medication = save/track drug or dose reminders; explain_medication = ask what/why "
             "about a drug without adding to list; interaction_check = combine substances; "
@@ -144,6 +222,21 @@ class ProfilePatchExtraction(BaseModel):
         description=(
             "Allergies or important persistent health notes if the user is updating their "
             "profile; null for one-off symptoms or dose-related comments"
+        ),
+    )
+    timezone: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "IANA timezone string if clearly requested (e.g. Asia/Taipei, America/Los_Angeles); "
+            "null if not changing timezone"
+        ),
+    )
+    locale: Literal["en", "zh-TW"] | None = Field(
+        default=None,
+        description=(
+            "Reply language preference: en for English, zh-TW for Traditional Chinese; "
+            "null if not changing language"
         ),
     )
 

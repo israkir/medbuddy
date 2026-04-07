@@ -1,4 +1,4 @@
-"""Medication CRUD tools: add, list, remove."""
+"""Medication CRUD tools: add, update, list, remove."""
 
 from __future__ import annotations
 
@@ -153,3 +153,66 @@ class RemoveMedicationTool:
             len(target.name or ""),
         )
         return ToolResult(reply=t("medication.removed", locale=locale, name=target.name))
+
+
+class UpdateMedicationTool:
+    name = "update_medication"
+    description = "Update one medication fields (name/dose/schedule/instructions)."
+
+    async def run(
+        self,
+        *,
+        svc: AppServices,
+        user_key: str,
+        user_text: str,
+        medications: list[MedicationRecord],
+        locale: str,
+        **_: Any,
+    ) -> ToolResult:
+        if not medications:
+            return ToolResult(reply=t("medication.update_not_found", locale=locale))
+        resolved = await svc.llm.resolve_medication_update(
+            redact_pii_text(user_text), medications, locale=locale
+        )
+        if resolved is None or not resolved.medication_id:
+            return ToolResult(reply=t("medication.update_not_found", locale=locale))
+        target = next((m for m in medications if m.id == resolved.medication_id), None)
+        if target is None:
+            return ToolResult(reply=t("medication.update_not_found", locale=locale))
+
+        fields: dict[str, Any] = {}
+        for key in ("name", "dosage", "schedule", "instructions"):
+            value = getattr(resolved, key)
+            if isinstance(value, str):
+                v = value.strip()
+                if v:
+                    fields[key] = v
+        if resolved.clear_instructions:
+            fields["instructions"] = None
+        if not fields:
+            return ToolResult(
+                reply=t("medication.update_incomplete", locale=locale, name=target.name)
+            )
+
+        updated = await svc.users.patch_medication(user_key, target.id, fields)
+        if updated is None:
+            return ToolResult(reply=t("medication.update_not_found", locale=locale))
+
+        await sync_and_enqueue_reminders(svc, user_key)
+        log.info(
+            "update_medication: user_key=%s med_id=%s fields=%s",
+            user_key,
+            updated.id,
+            ",".join(sorted(fields.keys())),
+        )
+        return ToolResult(
+            reply=t(
+                "medication.updated",
+                locale=locale,
+                name=updated.name,
+                dosage=updated.dosage,
+                schedule=updated.schedule,
+                instructions=(updated.instructions or "-"),
+            ),
+            structured=updated,
+        )

@@ -135,7 +135,7 @@ apps/backend/src/medbuddy/
 │
 ├── application/
 │   ├── assistant_turn.py       # run_assistant_text_turn() — main entry point
-│   ├── locale_intents.py       # try_locale_change_reply() — update_locale + extract_locale_intent
+│   ├── locale_intents.py       # Legacy helper (locale now handled via update_profile)
 │   └── profile_intents.py      # try_profile_intent_reply() — update_profile + extract_profile_patch (LLM)
 │
 ├── agents/
@@ -337,7 +337,7 @@ Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`,
 
 ### 5.3 Turn interpretation and dispatch
 
-Structured **`IntentClassification`** (shared prompt in `llm/intent_classification_prompt.py`) is parsed once per user line; adapters produce **`TurnInterpretation`** (`intent`, `reasoning`, **`record_pending_dose_as_taken`**, **`dose_adherence_note`**). **`MedicationAgent`** applies locale change first, then hooks, fixed off-topic copy, profile update, tool dispatch, or **`compose_reply`** fallback.
+Structured **`IntentClassification`** (shared prompt in `llm/intent_classification_prompt.py`) is parsed once per user line; adapters produce **`TurnInterpretation`** (`intent`, `reasoning`, **`record_pending_dose_as_taken`**, **`dose_adherence_note`**). **`MedicationAgent`** applies hooks, fixed off-topic copy, profile update (including locale/timezone), tool dispatch, or **`compose_reply`** fallback.
 
 ```
 user_text
@@ -347,10 +347,9 @@ user_text
     ▼ LLMPort.interpret_user_turn(redacted_text, recent_context=…)
 TurnInterpretation (intent + adherence slots)
     │
-    ├── update_locale     → try_locale_change_reply() → extract_locale_intent (LLM) → patch locale
-    ├── (else) try_intent_hooks → optional short-circuit
+    ├── try_intent_hooks  → optional short-circuit
     ├── off_topic         → fixed i18n string (no compose)
-    ├── update_profile    → try_profile_intent_reply() → extract_profile_patch (LLM) → patch profile
+    ├── update_profile    → try_profile_intent_reply() → extract_profile_patch (LLM) → patch profile (includes locale/timezone)
     ├── list_medications  → ListMedicationsTool
     ├── add_medication    → AddMedicationTool
     ├── remove_medication → RemoveMedicationTool
@@ -650,7 +649,7 @@ class LLMPort(Protocol):
     async def resolve_medication_removal_id(
         self, user_text: str, medications: list[MedicationRecord], *, locale: str
     ) -> str | None: ...
-    # … extract_profile_patch, extract_locale_intent, check_interactions_structured,
+    # … extract_profile_patch, check_interactions_structured,
     # compose_medication_added_reply, generate_health_summary, etc.
 ```
 

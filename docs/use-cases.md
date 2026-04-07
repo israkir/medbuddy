@@ -78,16 +78,15 @@ All **chat** turns share this flow (LINE text/voice transcript and **`POST /v1/a
 1. **Redact** PII before turn interpretation (`redact_pii_text`).
 2. **Load** user row + medication list **and** recent conversation turns **in parallel**; **`interpret_user_turn`** via **`LLM`** with optional **recent redacted dialogue** (`recent_context`) so short follow-ups align with the prior assistant turn (or `MockLLM` in tests).
 3. **Append** the **user** turn to conversation store (raw text).
-4. **Locale change (first short-circuit):** [`try_locale_change_reply`](../apps/backend/src/medbuddy/application/locale_intents.py) — see **§3.8** `update_locale`. If it returns a string, **append assistant turn and return** (no hooks/tools below).
-5. **Intent hooks** — optional pilot short-circuit (**§5**).
-6. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.9**). *`interpret_user_turn` + recent context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
-7. **`update_profile`** — **`extract_profile_patch`** (structured LLM) + `patch_user_profile` (**§3.7**).
-8. **Tool dispatch** — `list` / `add` / `remove` / **`confirm_dose`** (only when interpretation includes adherence slots; **§3.10**) / `explain` / `interaction_check` / `request_summary` (**§3**).
-9. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`log_vital`**, **`general_question`**), **or** when intent is **`confirm_dose`** but **neither** **`record_pending_dose_as_taken`** nor **`dose_adherence_note`** is set (**§3.10**).
-10. **Append** the **assistant** turn and return reply text.
+4. **Intent hooks** — optional pilot short-circuit (**§5**).
+5. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.8**). *`interpret_user_turn` + recent context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
+6. **`update_profile`** — **`extract_profile_patch`** (structured LLM) + `patch_user_profile` (**§3.7**) including locale/timezone changes.
+7. **Tool dispatch** — `list` / `add` / `update` / `remove` / **`confirm_dose`** (only when interpretation includes adherence slots; **§3.9**) / `explain` / `interaction_check` / `log_vital` / `request_summary` (**§3**).
+8. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`general_question`**), **or** when intent is **`confirm_dose`** but **neither** **`record_pending_dose_as_taken`** nor **`dose_adherence_note`** is set (**§3.9**).
+9. **Append** the **assistant** turn and return reply text.
 
 **Routing** uses the configured **`Intent`** enum for the primary tool/fallback branch ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
-`add_medication`, `list_medications`, `remove_medication`, `explain_medication`, `interaction_check`, `confirm_dose`, `log_vital`, `request_summary`, `update_profile`, `update_locale`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.10**).
+`add_medication`, `update_medication`, `list_medications`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.9**).
 
 ---
 
@@ -165,25 +164,14 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 | | |
 |--|--|
-| **Scenario** | User updates profile fields **in chat** (name, age, emergency contact, health notes, gender). |
-| **Examples** | Same one-line replies as after LINE welcome; “叫我老王”; “我對青霉素过敏”. |
-| **Outcome** | **`LLMPort.extract_profile_patch`** (structured output) → **`patch_user_profile`**. Empty parse → **`profile.update_unclear`**. |
+| **Scenario** | User updates profile fields **in chat** (name, age, emergency contact, health notes, gender, locale, timezone). |
+| **Examples** | Same one-line replies as after LINE welcome; “叫我老王”; “我對青霉素过敏”; “switch to English”; “my timezone is America/New_York”. |
+| **Outcome** | **`LLMPort.extract_profile_patch`** (structured output) → **`patch_user_profile`**. Empty parse → **`profile.update_unclear`**. Locale updates are acknowledged in the target language. |
 | **Contrast** | Standalone **onboarding** uses **`POST /onboarding`** with typed JSON — not this intent. |
 
 ---
 
-### 3.8 `update_locale`
-
-| | |
-|--|--|
-| **Scenario** | User asks to switch **UI/reply language** (`en` or `zh-TW`). |
-| **Examples** | “switch to English” · 「請用中文」 · “I prefer English replies from now on”. |
-| **Outcome** | **`interpret_user_turn`** yields **`update_locale`** → **`extract_locale_intent`** (structured LLM) → **`patch_user_profile`** with **`locale`**. Already on target → **`locale.unchanged`**; invalid → **`locale.unclear`**. |
-| **Note** | **`extract_locale_intent`** is instructed to treat “explain this in English” (content only) as **not** a UI locale switch. Normalization helpers live in [`user_locale.py`](../apps/backend/src/medbuddy/user_locale.py). |
-
----
-
-### 3.9 `off_topic`
+### 3.8 `off_topic`
 
 | | |
 |--|--|
@@ -194,7 +182,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.10 `confirm_dose`
+### 3.9 `confirm_dose`
 
 | | |
 |--|--|
@@ -205,13 +193,34 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 
 ---
 
-### 3.11 `log_vital` · `general_question`
+### 3.10 `report_missed_dose`
 
 | | |
 |--|--|
-| **Scenario** | Vital sign in text, small talk, or general medication-adjacent chat **without** a dedicated tool (`request_summary` is handled by **`GenerateHealthSummaryTool`** — **§3.6**). |
+| **Scenario** | User explicitly says they missed / skipped / forgot a scheduled dose and wants that captured. |
+| **Examples** | 「我早上那次忘記吃了」 · “I skipped that dose” · “I forgot my morning pill” |
+| **Outcome** | Marks the latest pending dose window as **missed** (`missed_at`) and acknowledges. Missed rows are excluded from future reminder/nudge delivery. |
+
+---
+
+### 3.11 `update_medication`
+
+| | |
+|--|--|
+| **Scenario** | User wants to edit an existing medication entry (rename medication, change dosage/schedule, update or clear instructions) without deleting and recreating it. |
+| **Examples** | 「把阿斯匹靈改成 81mg」 · “update my metformin to twice daily” · “clear the notes on my blood pressure pill” |
+| **Outcome** | Resolve target row + patch fields via structured LLM extraction (`resolve_medication_update`) → `update_medication` persistence path → i18n confirmation. If target or patch is unclear, tool asks for clarification / returns a safe user-facing error. |
+| **Dose events / reminders** | After a successful update, the reminder lifecycle sync runs: **future** `dose_events` (`scheduled_at > now`) for the user are deleted and regenerated from each medication's stored reminder metadata (`raw_metadata.reminder`), then new jobs are enqueued. Past/current events remain for adherence history. Updating free-text `schedule` changes displayed text in reminder payloads, but reminder timing follows `raw_metadata.reminder` fields (not `schedule` text alone). |
+
+---
+
+### 3.12 `log_vital` · `general_question`
+
+| | |
+|--|--|
+| **Scenario** | Vital sign in text, small talk, or general medication-adjacent chat. `log_vital` has a dedicated extraction + save tool, while `general_question` goes through conversational fallback (`request_summary` is handled by **`GenerateHealthSummaryTool`** — **§3.6**). |
 | **Examples** | 「藥物過量了怎麼辦」 · “What if I doubled my dose?” · 「血壓 130/85」 · 「早安」 |
-| **Outcome** | **`compose_reply`** with persona + **de-identified** patient context + history and the user’s **locale**; **no** automatic drug API prefetch for these intents (unlike explain / interaction / post-add ack). |
+| **Outcome** | For **`log_vital`**: extract and persist vital data via `LogVitalTool` (acknowledge or ask for missing details). For **`general_question`**: **`compose_reply`** with persona + **de-identified** patient context + history and the user’s **locale**. |
 | **Prefetch** | Only **`explain_medication`**, **`interaction_check`**, and (after successful save) **`add_medication`** load drug grounding inside the main turn. |
 
 ---
@@ -230,19 +239,19 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Scenario:** Pilot intercepts a classified intent before fixed refusals, profile, tools, or fallback.
 
-**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **locale** short-circuit first → **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.10**) → **`compose_reply`** fallback.
+**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.9**) → **`compose_reply`** fallback.
 
 ---
 
 ## 6. LINE dose reminder pushes (prototype)
 
-**Trigger:** Successful **`add_medication`** or **`remove_medication`** via medication intents (any channel using the same handler).
+**Trigger:** Successful **`add_medication`**, **`update_medication`**, or **`remove_medication`** via medication intents (any channel using the same handler).
 
 **User-visible outcome:** **LINE push** near **`scheduled_at`** (not in-app local notifications). Optional **follow-up nudges** after the primary push when **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is configured — see [`reminders.md`](reminders.md) and [`features.md` §8](features.md#8-line-dose-reminders-prototype).
 
 **Behavior:** **`dose_events`** rebuild from extraction prefs + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. Free-text **`schedule`** echoed but **v1** does not expand to multiple times per day.
 
-**Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.10**), **`taken_at`** can be set without LINE postback.
+**Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.9**), **`taken_at`** can be set without LINE postback.
 
 **Full reference:** [`reminders.md`](reminders.md).
 

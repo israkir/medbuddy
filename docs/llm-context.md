@@ -38,6 +38,30 @@ Full profile text for **user-facing** strings (e.g. listing meds with profile li
 
 Prompts are assembled with localized headers and instructions from `apps/backend/src/medbuddy/locales/*.json` (e.g. `prompts.system_persona`, `gemini.patient_background`, `gemini.reference`, `gemini.reply_instruction`, task-specific `gemini.medication_companion_*`).
 
+### Deterministic tool copy vs agent-generated copy
+
+Some locale keys (for example `medication.confirm_dose_*`) are intentionally used as **deterministic system responses** for transactional tool outcomes and error states, not as "conversation quality" prose.
+
+`ConfirmDoseTool` currently returns fixed `t("...")` strings directly from code after writing adherence state. This design is intentional:
+
+- **Determinism for critical actions:** marking a dose as taken (or reporting no matching dose) uses stable wording and avoids model drift.
+- **Compliance/safety tone control:** medication-adherence confirmations keep predictable, reviewed phrasing.
+- **Localization parity:** the same key set in `en` and `zh-TW` keeps behavior and wording aligned across locales.
+- **Test stability:** integration tests can assert exact tool outcomes.
+- **Latency/cost:** no additional LLM call is needed for simple transactional acknowledgments.
+
+You can make this path fully agent-driven by replacing deterministic tool replies with `compose_reply`, but trade-offs are expected:
+
+- less predictable phrasing for safety-critical confirmations,
+- harder regression testing (exact-string assertions become brittle),
+- higher token/call cost and added latency,
+- more prompt-engineering effort to keep edge-case UX consistent.
+
+Current architecture is intentionally **hybrid**:
+
+- keep deterministic i18n keys for CRUD/adherence state transitions,
+- use LLM-generated copy for explanatory, contextual, and empathetic replies.
+
 ---
 
 ## Per `LLMPort` method (what goes to the model)
@@ -103,13 +127,7 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| User message | **Raw** `user_text` (not passed through `redact_pii_text` in `try_profile_intent_reply`). Intentional so the model can extract names and contacts the user asked to store; increases exposure of PII in the provider API relative to redacted flows. |
-
-### `extract_locale_intent`
-
-| Input | Redaction / notes |
-|--------|-------------------|
-| User message | **Raw** `user_text` in `try_locale_change_reply`. Short prompt for locale resolution. |
+| User message | **Raw** `user_text` (not passed through `redact_pii_text` in `try_profile_intent_reply`). Intentional so the model can extract user-requested profile updates (for example preferred name, contact, locale, timezone); increases exposure of PII in the provider API relative to redacted flows. |
 
 ### `generate_health_summary`
 

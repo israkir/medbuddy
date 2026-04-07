@@ -7,6 +7,8 @@
     "added_first_reminder_plus_daily": "【已排程】系統已安排約 {minutes} 分鐘後的第一次提醒，以及之後每日固定時間的提醒。請簡短帶過兩者。",
     "added_daily_horizon_days": "【已排程】每日提醒已依使用者要求設定約 {days} 天。可一句話確認。",
     "resolve_remove_intro": "使用者想停掉或從清單移除哪一筆藥？僅回傳 JSON。",
+    "resolve_update_intro": "使用者要更新哪一筆既有用藥，以及要改哪些欄位？只依照使用者明確指示。若藥物不明確，medication_id 回傳 null。僅回傳 JSON。",
+    "extract_vital_intro": "從使用者訊息擷取「一項」生理數值或測量。kind 請擇一：blood_pressure、blood_glucose、weight、heart_rate、temperature、spo2、other。\n規則：\n- blood_pressure：收縮壓／舒張壓為整數（mmHg）。可解析「120/80」「120 貼 80」。\n- blood_glucose：blood_glucose_mg_dl 為數字（mg/dL）。\n- weight：weight_kg 為公斤；若為磅請換算（1 lb ≈ 0.453592 kg）。\n- heart_rate：heart_rate_bpm 為整數。\n- temperature：temperature_celsius 為攝氏；若為華氏請換算（C = (F−32)×5/9）。\n- spo2：spo2_percent 為 50–100 的整數。\n- other：其他無法歸類時填 other_label 與 other_value。\n可含 notes 簡短情境（如飯前）。僅回傳 JSON，欄位：kind、systolic、diastolic、blood_glucose_mg_dl、weight_kg、heart_rate_bpm、temperature_celsius、spo2_percent、other_label、other_value、notes。",
     "no_drug_data": "（無額外藥物資料）",
     "patient_background": "病人背景（個人檔與用藥清單）：",
     "reference": "參考資料：",
@@ -58,6 +60,9 @@
     "list_intro": "你目前的用藥清單：",
     "list_empty": "目前還沒有用藥記錄；您方便時告訴我藥名，我們一起建立。",
     "removed": "已從清單移除：{name}。",
+    "updated": "已更新 {name}。劑量：{dosage}。服用時間：{schedule}。備註：{instructions}",
+    "update_not_found": "我目前無法判斷要更新哪一個藥，請加上藥名。",
+    "update_incomplete": "我有找到 {name}，但還需要你告訴我要改哪個欄位（藥名、劑量、時間或備註）。",
     "remove_not_found": "清單上找不到這個藥名，請再說一次，或先問「我的藥清單」。",
     "confirm_dose_none": "目前沒有可以勾選的近期用藥時段；若您指的是某個時間或藥名，再說一點細節好嗎？",
     "confirm_dose_ambiguous": "我看到有不只一筆可能符合的用藥，想請您確認是哪一筆：\n{options}\n您可以回覆藥名與時間；若上述都已服用，也可以回覆「全部」。",
@@ -65,7 +70,21 @@
     "confirm_dose_clarify_invalid": "請用選項上的數字回覆（例如 1 或 2）；若以上全都適用也可回覆「全部」。",
     "confirm_dose_recorded": "好的，已幫你記下 {count} 筆「已服藥」。謝謝你告訴我。",
     "confirm_dose_recorded_with_note": "好的，已幫你記下 {count} 筆「已服藥」，並附上備註：{note}",
-    "confirm_dose_note_appended": "好的，已把你說的內容加在最近一筆已服藥紀錄上：{note}"
+    "confirm_dose_note_appended": "好的，已把你說的內容加在最近一筆已服藥紀錄上：{note}",
+    "missed_dose_recorded": "謝謝你告訴我，已幫你記下 {count} 筆「漏服／未服用」。",
+    "missed_dose_none": "目前找不到可標記為漏服的近期待服時段。"
+  },
+  "vital": {
+    "logged": "好的，已幫你記下：{summary}。",
+    "log_incomplete": "我沒有聽清楚數值，能否再說一次？例如：「血壓 120 80」「血糖 95」或「體重 70 公斤」。",
+    "summary_blood_pressure": "血壓 {systolic}/{diastolic} mmHg",
+    "summary_blood_glucose": "血糖 {value} mg/dL",
+    "summary_weight": "體重 {value} 公斤",
+    "summary_heart_rate": "心率 {value} bpm",
+    "summary_temperature": "體溫 {value} °C",
+    "summary_spo2": "血氧 {value}%",
+    "summary_other": "{label}：{value}",
+    "other_unknown_label": "紀錄"
   },
   "reminder": {
     "line_push": "用藥提醒（{time_local}）：該吃 {name}（{dosage}）。你存的吃法：{schedule}。若有不確定請問藥師或醫師。",
@@ -108,6 +127,9 @@
     "ack_contact": "緊急聯絡「{contact}」",
     "ack_notes": "健康備註「{notes}」",
     "ack_gender": "生理性別／性別「{label}」",
+    "ack_locale": "回覆語言「{label}」",
+    "ack_timezone": "時區「{timezone}」",
+    "ack_timezone_cleared": "時區已清除",
     "updated": "好，我已經幫您記下：{summary}。若還想改，隨時跟我說。",
     "update_unclear": "好，我想幫您記下來——請用一句話說明要存什麼：怎麼稱呼您、年齡（選填）、性別、家人聯絡方式，或過敏／重要身體狀況。例如「我叫陳阿姨，今年72歲」。"
   },
