@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedicationExtractionError, MedicationNotFoundError
 from medbuddy.i18n import t
-from medbuddy.models.domain import MedicationRecord
+from medbuddy.llm.medication_draft_build import medication_draft_needs_add_confirmation
+from medbuddy.models.domain import (
+    MedicationAddConfirmationPending,
+    MedicationDraft,
+    MedicationRecord,
+)
 from medbuddy.privacy.redact import redact_pii_text
 from medbuddy.prompts.persona import (
     build_patient_context_for_llm,
@@ -39,6 +45,50 @@ async def _drug_grounding_text(svc: AppServices, drug_name: str) -> str | None:
     except Exception:
         log.debug("medication_crud: OpenFDA lookup failed query_len=%d", len(q))
     return "\n\n".join(parts) if parts else None
+
+
+async def persist_medication_add_from_draft(
+    svc: AppServices,
+    *,
+    user_key: str,
+    user_text: str,
+    draft: MedicationDraft,
+    locale: str,
+) -> ToolResult:
+    """Save draft, sync reminders, and compose the post-add reply (shared confirm + add tool)."""
+    safe_text = redact_pii_text(user_text)
+    user_row = await svc.users.get_or_create_user(user_key)
+    saved = await svc.users.add_medication(user_key, draft)
+    meds_updated = await svc.users.list_medications(user_key)
+    patient_ctx = build_patient_context_for_llm(user_row, meds_updated, locale=locale)
+    drug_grounding = await _drug_grounding_text(svc, saved.name)
+
+    try:
+        reply = await svc.llm.compose_medication_added_reply(
+            patient_context=patient_ctx,
+            drug_grounding=drug_grounding,
+            saved=saved,
+            user_message=safe_text,
+            locale=locale,
+        )
+    except Exception:
+        log.exception("add_medication: compose_medication_added_reply failed; using fallback")
+        reply = t(
+            "medication.added",
+            locale=locale,
+            name=saved.name,
+            dosage=saved.dosage,
+            schedule=saved.schedule,
+        )
+
+    await sync_and_enqueue_reminders(svc, user_key)
+    log.info(
+        "add_medication: user_key=%s med_id=%s name_len=%d (from_draft)",
+        user_key,
+        saved.id,
+        len(saved.name or ""),
+    )
+    return ToolResult(reply=reply, structured=saved)
 
 
 class ListMedicationsTool:
@@ -81,37 +131,38 @@ class AddMedicationTool:
         if draft is None or not draft.name.strip():
             raise MedicationExtractionError()
 
-        saved = await svc.users.add_medication(user_key, draft)
-        meds_updated = await svc.users.list_medications(user_key)
-        patient_ctx = build_patient_context_for_llm(user_row, meds_updated, locale=locale)
-        drug_grounding = await _drug_grounding_text(svc, saved.name)
-
-        try:
-            reply = await svc.llm.compose_medication_added_reply(
-                patient_context=patient_ctx,
-                drug_grounding=drug_grounding,
-                saved=saved,
-                user_message=safe_text,
-                locale=locale,
+        un = t("medication.unspecified", locale=locale)
+        if medication_draft_needs_add_confirmation(
+            draft, unspecified_label=un, user_text=user_text
+        ):
+            expires = datetime.now(UTC) + timedelta(
+                seconds=svc.settings.dose_clarification_ttl_seconds
             )
-        except Exception:
-            log.exception("add_medication: compose_medication_added_reply failed; using fallback")
+            await svc.users.set_medication_add_confirmation_pending(
+                user_key,
+                MedicationAddConfirmationPending(draft=draft, expires_at=expires),
+            )
+            instr = (draft.instructions or "").strip()
+            instr_disp = (
+                instr if instr else t("medication.add_confirm_no_instructions", locale=locale)
+            )
             reply = t(
-                "medication.added",
+                "medication.add_confirm_prompt",
                 locale=locale,
-                name=saved.name,
-                dosage=saved.dosage,
-                schedule=saved.schedule,
+                name=draft.name,
+                dosage=draft.dosage,
+                schedule=draft.schedule,
+                instructions=instr_disp,
             )
+            return ToolResult(reply=reply)
 
-        await sync_and_enqueue_reminders(svc, user_key)
-        log.info(
-            "add_medication: user_key=%s med_id=%s name_len=%d",
-            user_key,
-            saved.id,
-            len(saved.name or ""),
+        return await persist_medication_add_from_draft(
+            svc,
+            user_key=user_key,
+            user_text=user_text,
+            draft=draft,
+            locale=locale,
         )
-        return ToolResult(reply=reply, structured=saved)
 
 
 class RemoveMedicationTool:

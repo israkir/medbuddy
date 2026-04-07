@@ -45,6 +45,7 @@ Return one intent, your reasoning, and two adherence fields used mechanically by
 - Do **not** choose **confirm_dose** from symptoms alone. If they report headache/pain/feeling unwell **without** clearly having taken the dose or logging a note for a dose already taken, use **general_question** and set **record_pending_dose_as_taken** false and **dose_adherence_note** null.
 - **Short follow-ups** that answer the assistant’s prior question about dosing, reminders, or scheduling (e.g. “一次”, “三天”, “7”, “once”, “yes”, “ok”, “每天”) must **not** be **off_topic** — use **general_question** or the clinical intent that fits the prior turn; set adherence fields only when that prior turn was about **taking** a specific dose.
 - If the user request is ambiguous, under-specified, or could refer to multiple medicines/times/records, prefer **general_question** so the assistant asks a clarification question before any irreversible action.
+- For **add_medication**, if dose/schedule/instructions are not clearly present in the latest user message, still classify as **add_medication** when the user intent is to add/track — but do not assume missing details are user-confirmed facts. The assistant should confirm/clarify before final save when details are uncertain.
 
 ## off_topic
 

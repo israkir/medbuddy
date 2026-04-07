@@ -13,6 +13,7 @@ from medbuddy.models.domain import (
     DrugGrounding,
     HealthSummary,
     InteractionResult,
+    MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
     TurnInterpretation,
@@ -261,6 +262,14 @@ class UserDataPort(Protocol):
 
     async def set_dose_clarification_pending(
         self, line_user_id: str, pending: DoseClarificationPending | None
+    ) -> None: ...
+
+    async def get_medication_add_confirmation_pending(
+        self, line_user_id: str
+    ) -> MedicationAddConfirmationPending | None: ...
+
+    async def set_medication_add_confirmation_pending(
+        self, line_user_id: str, pending: MedicationAddConfirmationPending | None
     ) -> None: ...
 
     async def mark_dose_events_taken(
