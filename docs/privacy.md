@@ -2,9 +2,11 @@
 
 This document describes how MedBuddy limits **personally identifiable information (PII)** and sensitive profile data sent to **third-party large language model (LLM)** APIs (e.g. Gemini). It is aimed at developers and operators; it is **not** a legal privacy notice for end users.
 
+For a **call-by-call** list of inputs (including exceptions), see **[llm-context.md](./llm-context.md)**.
+
 ## Goals
 
-- Avoid sending **stored** profile fields (name, raw health notes, emergency contact text, exact age) to LLMs in prompts.
+- Keep **stored** profile fields that are highly sensitive (`health_notes`, `emergency_contact` text, exact `age_years`) out of the standard **patient context** block, except where a feature intentionally needs user wording (see **[llm-context.md](./llm-context.md)**). The user’s **preferred form of address** (when saved) is included in that block so the assistant can greet them naturally.
 - **Mask** common direct identifiers in **user messages and chat history** before those strings are passed to an LLM (emails, typical Taiwan mobile patterns, long digit runs).
 - Profile updates from chat use **structured LLM extraction** (`extract_profile_patch`) when intent is **`update_profile`**; operators should review provider terms for storing PII.
 - Keep **user-facing** replies (e.g. medication list) able to show the user **their own** stored text where the product intentionally echoes it back.
@@ -15,22 +17,25 @@ This document describes how MedBuddy limits **personally identifiable informatio
 |------|----------------|-------|
 | **User message** (current turn) | Yes, **after redaction** | See `redact_pii_text` in `apps/backend/src/medbuddy/privacy/redact.py`. Redaction is pattern-based, not full PHI scrubbing. |
 | **Recent conversation turns** | Yes, **after redaction** | `redact_conversation_turns_for_llm` in the same module. |
-| **Patient “context” block** | Yes, **de-identified** | Built with `build_patient_context_for_llm` in `apps/backend/src/medbuddy/prompts/persona.py`: coarse signals (e.g. “preferred name on file” without the name), **age band** (not exact age), medication list lines (drug names, dose, schedule). |
+| **Patient “context” block** | Yes, **mostly de-identified** | Built with `build_patient_context_for_llm` in `apps/backend/src/medbuddy/prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule). |
 | **Drug reference / label snippets** | Yes | From registries (e.g. OpenFDA), not end-user PII. |
-| **Intent classification** | Yes, on **redacted** user text | `run_assistant_text_turn` in `apps/backend/src/medbuddy/application/assistant_turn.py`. |
+| **Intent classification** | Yes, on **redacted** user text | `MedicationAgent` → `LLMPort.classify_intent` (see `apps/backend/src/medbuddy/application/assistant_turn.py` for the shared entrypoint). |
 | **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
-| **Profile fields from chat** | Yes, for extraction | `application/profile_intents.py` → `LLMPort.extract_profile_patch` (structured output); then **`patch_user_profile`**. |
+| **Profile fields from chat** | Yes, for extraction (**often raw user message**) | `application/profile_intents.py` → `LLMPort.extract_profile_patch` (structured output); then **`patch_user_profile`**. |
+| **Health summary** | Yes | Structured prompt includes **unredacted** recent conversation turns in adapters today—see **[llm-context.md](./llm-context.md)**. |
 
 ## What is not sent to an LLM (by design)
 
-- **Raw** `preferred_name`, `health_notes`, `emergency_contact`, or **exact** `age_years` in the patient context block.
+- **Raw** `health_notes`, `emergency_contact`, or **exact** `age_years` inside the standard **`build_patient_context_for_llm`** block (those appear only as coarse signals or omitted).
+
+**Exceptions:** Profile/locale/dose-note extractors and health-summary prompts may include **raw or unredacted** user or conversation text where the feature requires it—see **[llm-context.md](./llm-context.md)**.
 
 ## User-facing vs model-facing context
 
 - **`build_patient_context_for_llm`**: use for **all** prompts and cache fingerprints that should stay de-identified (`assistant_turn`, `compose_medication_added_reply` patient block, etc.).
 - **`build_patient_context_for_chat_display`**: use when the **same thread** should show the user their **full** stored profile snippet (e.g. listing medications together with profile lines). This string is **not** intended for external LLM APIs.
 
-Conversation rows in the database are still stored from the **original** user message (for continuity with the product); only the **copy** passed into the LLM adapter is redacted.
+Conversation rows in the database are still stored from the **original** user message (for continuity with the product). Most assistant/tool paths pass **redacted** text into the LLM; **profile update**, **locale**, **dose confirmation note**, and **health summary** paths may use **raw** or **unredacted** strings as documented in **[llm-context.md](./llm-context.md)**.
 
 ## Redaction behavior (summary)
 
@@ -44,12 +49,13 @@ Implemented in `privacy/redact.py`:
 
 ## Prompt instructions
 
-Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_persona`, `gemini.reply_instruction`) instruct the model **not** to invent or echo specific names, phone numbers, or raw health/contact details when only “signals” are present, and to treat **`[…]`** as masked content.
+Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_persona`, `gemini.reply_instruction`) instruct the model how to use **only** the preferred address form provided in the patient background (when present), **not** to invent other names or echo phone numbers or raw health/contact details, and to treat **`[…]`** as masked content.
 
 ## Code map
 
 | Area | Location |
 |------|-----------|
+| Per-call LLM inputs and privacy exceptions | [docs/llm-context.md](./llm-context.md) |
 | Redaction | `apps/backend/src/medbuddy/privacy/redact.py` |
 | Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `agents/medication_agent.py`, `profile_intents.py`, `locale_intents.py` |
 | De-identified vs display context | `apps/backend/src/medbuddy/prompts/persona.py` |

@@ -52,8 +52,24 @@ def test_resolve_medication_id_single_match() -> None:
 def test_resolve_medication_id_ambiguous_returns_none() -> None:
     meds = [
         MedicationRecord(id="a", name="aspirin", dosage="1", schedule="QD", instructions=None),
-        MedicationRecord(
-            id="b", name="aspirin xr", dosage="2", schedule="QD", instructions=None
-        ),
+        MedicationRecord(id="b", name="aspirin xr", dosage="2", schedule="QD", instructions=None),
     ]
     assert resolve_medication_id_for_personalization(meds, "aspirin and aspirin xr") is None
+
+
+def test_resolve_medication_id_parenthetical_name_matches_short_query() -> None:
+    meds = [
+        MedicationRecord(
+            id="m1", name="阿斯匹靈 (81mg)", dosage="81mg", schedule="QD", instructions=None
+        ),
+    ]
+    assert resolve_medication_id_for_personalization(meds, "解釋阿斯匹靈怎麼吃") == "m1"
+
+
+def test_resolve_medication_id_multipart_latin_name_matches_base_drug() -> None:
+    meds = [
+        MedicationRecord(
+            id="m1", name="Metformin HCl", dosage="500mg", schedule="BID", instructions=None
+        ),
+    ]
+    assert resolve_medication_id_for_personalization(meds, "explain metformin") == "m1"
