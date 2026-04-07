@@ -43,6 +43,7 @@ from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.medication_add_confirm_resolve import (
     try_resolve_pending_medication_add_confirmation,
 )
+from medbuddy.application.reminder_horizon_resolve import try_resolve_pending_reminder_horizon
 from medbuddy.application.profile_intents import try_profile_intent_reply
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedBuddyError
@@ -179,6 +180,16 @@ class MedicationAgent:
             )
             return clarify_reply
 
+        horizon_reply = await try_resolve_pending_reminder_horizon(
+            svc, user_key=user_key, user_text=user_text, locale=locale
+        )
+        if horizon_reply is not None:
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=horizon_reply, at=datetime.now(UTC)),
+            )
+            return horizon_reply
+
         # 1. Emergency — fixed safety response, no LLM, no delay
         if intent == Intent.EMERGENCY:
             reply = t("agent.emergency", locale=locale)
@@ -250,6 +261,13 @@ class MedicationAgent:
                     safe_text=safe_text,
                     locale=locale,
                 )
+
+        # If the reply came from the regular flow (not a pending-state resolver), check
+        # whether there are still active pending states the user has not yet answered.
+        # Append a brief, friendly reminder so the context is never silently lost.
+        reply = await _maybe_append_pending_reminder(
+            svc, user_key=user_key, reply=reply, locale=locale
+        )
 
         await svc.conversations.append_turn(
             user_key,
@@ -326,3 +344,38 @@ async def _compose_fallback_reply(
         user_message=safe_text,
         locale=locale,
     )
+
+
+async def _maybe_append_pending_reminder(
+    svc: AppServices,
+    *,
+    user_key: str,
+    reply: str,
+    locale: str,
+) -> str:
+    """Append a one-line reminder when the user has an unanswered pending agent question.
+
+    This ensures context is never silently lost if the user asks a follow-up question
+    while we are still waiting for a yes/no or a day-count answer.
+    """
+    # Check medication add confirmation first (higher priority)
+    med_confirm = await svc.users.get_medication_add_confirmation_pending(user_key)
+    if med_confirm is not None:
+        reminder = t(
+            "medication.add_confirm_pending_reminder",
+            locale=locale,
+            name=med_confirm.draft.name,
+        )
+        return f"{reply}\n\n{reminder}"
+
+    # Check reminder horizon pending
+    horizon = await svc.users.get_reminder_horizon_pending(user_key)
+    if horizon is not None:
+        reminder = t(
+            "reminder.horizon_still_needed",
+            locale=locale,
+            name=horizon.medication_name,
+        )
+        return f"{reply}\n\n{reminder}"
+
+    return reply

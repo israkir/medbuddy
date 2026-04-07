@@ -23,6 +23,7 @@ async def patient_context_for_llm(
     *,
     locale: str,
     sync_dose_events_first: bool = True,
+    include_health_notes: bool = False,
 ) -> str:
     tz_name = effective_user_timezone(
         str(user_row.get("timezone")) if user_row.get("timezone") else None
@@ -39,5 +40,9 @@ async def patient_context_for_llm(
     )
     block = format_upcoming_doses_for_llm(upcoming, tz_name=tz_name, now_utc=now, locale=locale)
     return build_patient_context_for_llm(
-        user_row, medications, locale=locale, upcoming_doses_context=block
+        user_row,
+        medications,
+        locale=locale,
+        upcoming_doses_context=block,
+        include_health_notes=include_health_notes,
     )

@@ -93,8 +93,17 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
     return f"{header}\n" + "\n".join(parts)
 
 
-def format_patient_profile_signals_for_llm(user_row: dict[str, Any], *, locale: str) -> str:
-    """Coarse cues for the model without names, free-text health data, or contact strings."""
+def format_patient_profile_signals_for_llm(
+    user_row: dict[str, Any],
+    *,
+    locale: str,
+    include_health_notes: bool = False,
+) -> str:
+    """Coarse cues for the model without names or contact strings.
+
+    When ``include_health_notes=True`` the actual health notes text is included
+    so the model can cross-check drug contraindications or allergy conflicts.
+    """
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
@@ -120,7 +129,12 @@ def format_patient_profile_signals_for_llm(user_row: dict[str, Any], *, locale: 
             )
         )
     if isinstance(notes, str) and notes.strip():
-        parts.append(t("prompts.llm_signal_has_health_notes", locale=locale))
+        if include_health_notes:
+            parts.append(
+                t("prompts.llm_signal_health_notes_full", locale=locale, notes=notes.strip())
+            )
+        else:
+            parts.append(t("prompts.llm_signal_has_health_notes", locale=locale))
     if isinstance(contact, str) and contact.strip():
         parts.append(t("prompts.llm_signal_has_emergency_contact", locale=locale))
     if not parts:
@@ -176,9 +190,17 @@ def build_patient_context_for_llm(
     *,
     locale: str,
     upcoming_doses_context: str | None = None,
+    include_health_notes: bool = False,
 ) -> str:
-    """De-identified profile cues plus medications — safe for external model APIs."""
-    signals = format_patient_profile_signals_for_llm(user_row, locale=locale)
+    """De-identified profile cues plus medications — safe for external model APIs.
+
+    Pass ``include_health_notes=True`` for safety-critical calls (add_medication,
+    interaction_check, explain_medication) so the model can detect contraindications
+    or allergy conflicts from the patient's stored health notes.
+    """
+    signals = format_patient_profile_signals_for_llm(
+        user_row, locale=locale, include_health_notes=include_health_notes
+    )
     gaps = format_profile_gaps(user_row, locale=locale)
     med_part = format_patient_medication_context(meds, locale=locale)
     blocks: list[str] = []

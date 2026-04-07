@@ -68,7 +68,10 @@ async def try_resolve_pending_medication_add_confirmation(
 
     choice = _parse_add_medication_confirm(user_text)
     if choice == "not_handled":
-        await svc.users.set_medication_add_confirmation_pending(user_key, None)
+        # Do NOT clear the pending state — the user may be asking a follow-up question
+        # (e.g. "what does this drug do?") while we are still waiting for their yes/no.
+        # The normal agent flow will answer the question; the pending state remains active
+        # so the next yes/no reply is still caught here.
         return None
 
     await svc.users.set_medication_add_confirmation_pending(user_key, None)

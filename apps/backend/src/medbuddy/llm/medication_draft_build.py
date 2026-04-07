@@ -89,13 +89,20 @@ def dose_or_schedule_display(value: str | None, *, unspecified_label: str) -> st
 def medication_draft_needs_add_confirmation(
     draft: MedicationDraft, *, unspecified_label: str, user_text: str
 ) -> bool:
-    """True when dose, schedule, or important instructions are missing — confirm before saving."""
+    """True when dose or schedule is missing/unclear — ask the user before saving.
+
+    Instructions are intentionally NOT required: they are optional, and requiring
+    them for every add creates needless friction for elderly users who omit them.
+    Confirmation fires when:
+      - dose or schedule field is a placeholder/unspecified, OR
+      - the raw user message lacks clear numeric dose or schedule signals (guardrail
+        against silently accepting LLM-inferred values the user never stated).
+    """
     dose_bad = _is_placeholder_dose_or_schedule(draft.dosage, unspecified_label=unspecified_label)
     sched_bad = _is_placeholder_dose_or_schedule(
         draft.schedule, unspecified_label=unspecified_label
     )
-    instr_bad = not (draft.instructions or "").strip()
-    if dose_bad or sched_bad or instr_bad:
+    if dose_bad or sched_bad:
         return True
     # Guardrail: if user didn't provide clear dose/schedule signals, do not auto-save inferred values.
     src = (user_text or "").strip()

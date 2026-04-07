@@ -42,7 +42,7 @@ def test_needs_add_confirmation_when_dose_or_schedule_unspecified() -> None:
     )
 
     no_notes = MedicationDraft(name="X", dosage="10mg", schedule="QD", instructions=None)
-    assert medication_draft_needs_add_confirmation(
+    assert not medication_draft_needs_add_confirmation(
         no_notes, unspecified_label=un, user_text="aspirin 10mg daily"
     )
 

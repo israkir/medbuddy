@@ -16,6 +16,7 @@ __all__ = [
     "ConversationTurn",
     "DoseClarificationPending",
     "MedicationAddConfirmationPending",
+    "ReminderHorizonPending",
     "DoseEventReminderPayload",
     "DoseEventPendingCandidate",
     "DrugGrounding",
@@ -197,6 +198,47 @@ class DoseClarificationPending:
         )
 
 
+REMINDER_HORIZON_PENDING_KIND = "reminder_horizon_pending"
+
+
+@dataclass(frozen=True)
+class ReminderHorizonPending:
+    """Awaiting the user's answer to 'how many days for daily reminders?' after a medication save."""
+
+    medication_id: str
+    medication_name: str
+    expires_at: datetime
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "kind": REMINDER_HORIZON_PENDING_KIND,
+            "medication_id": self.medication_id,
+            "medication_name": self.medication_name,
+            "expires_at": self.expires_at.replace(tzinfo=UTC).isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, data: Any) -> "ReminderHorizonPending | None":
+        if not isinstance(data, dict):
+            return None
+        if data.get("kind") != REMINDER_HORIZON_PENDING_KIND:
+            return None
+        mid = data.get("medication_id")
+        if not isinstance(mid, str) or not mid.strip():
+            return None
+        mname = str(data.get("medication_name") or "").strip()
+        exp_raw = data.get("expires_at")
+        if not isinstance(exp_raw, str):
+            return None
+        try:
+            exp = datetime.fromisoformat(exp_raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=UTC)
+        return cls(medication_id=mid.strip(), medication_name=mname, expires_at=exp)
+
+
 MEDICATION_ADD_CONFIRM_KIND = "medication_add_confirm"
 
 
@@ -325,13 +367,15 @@ class MedicationAddConfirmationPending:
 
 def parse_pending_agent_clarification(
     raw: Any,
-) -> DoseClarificationPending | MedicationAddConfirmationPending | None:
-    """Decode ``patients.pending_agent_clarification`` JSON (dose choice or med-add confirm)."""
+) -> "DoseClarificationPending | MedicationAddConfirmationPending | ReminderHorizonPending | None":
+    """Decode ``patients.pending_agent_clarification`` JSON (dose choice, med-add confirm, or reminder horizon)."""
     if not isinstance(raw, dict):
         return None
     kind = raw.get("kind")
     if kind == MEDICATION_ADD_CONFIRM_KIND:
         return MedicationAddConfirmationPending.from_json(raw)
+    if kind == REMINDER_HORIZON_PENDING_KIND:
+        return ReminderHorizonPending.from_json(raw)
     return DoseClarificationPending.from_json(raw)
 
 
