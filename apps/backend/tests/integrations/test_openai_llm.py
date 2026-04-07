@@ -14,7 +14,7 @@ from medbuddy.models.domain import Intent
 async def test_openai_interpret_user_turn_uses_structured_parse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from medbuddy.integrations import openai_llm as mod
+    from medbuddy.integrations.llm import openai_llm as mod
 
     classification = IntentClassification(
         intent="list_medications",

@@ -1,13 +1,10 @@
-"""Gemini adapter — requires optional dependency google-genai.
+"""OpenAI Chat Completions adapter (e.g. gpt-4.1-mini).
 
-Improvements over the original:
-- ``generate_structured()`` uses Gemini's ``response_schema`` parameter
-  with a Pydantic model, eliminating manual JSON-fence stripping.
-- ``check_interactions_structured()`` returns a typed ``InteractionResult``
-  with severity-graded ``InteractionPair`` objects.
-- ``generate_health_summary()`` produces a doctor-ready ``HealthSummary``
-  as a Pydantic-validated structured output.
-- All sync helpers are wrapped in ``asyncio.to_thread`` (unchanged).
+Implements :class:`medbuddy.protocols.ports.LLMPort` with the same behaviour as
+:class:`medbuddy.integrations.llm.gemini_llm.GeminiLLM`, using structured outputs via
+``client.chat.completions.parse`` for Pydantic schemas.
+
+Requires optional dependency: ``pip install 'medbuddy-api[llm]'`` (``openai`` package).
 """
 
 from __future__ import annotations
@@ -16,6 +13,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
@@ -55,11 +53,30 @@ from medbuddy.user_timezone import normalize_timezone_patch
 
 log = logging.getLogger(__name__)
 
+try:
+    from openai import OpenAI as _OpenAIClient
+except ImportError:
+    _OpenAIClient = None
+
 T = TypeVar("T")
+
+_LANGUAGE_LOCK: dict[str, str] = {
+    "en": (
+        "LANGUAGE REQUIREMENT: You MUST reply in English only. "
+        "Do not switch to any other language regardless of the language used in conversation history or user input."
+    ),
+    "zh-TW": (
+        "語言規定：你的回覆必須使用繁體中文（台灣），"
+        "無論對話歷史或使用者訊息使用何種語言，都不得切換語言。"
+    ),
+}
+
+
+def _language_lock(locale: str) -> str:
+    return _LANGUAGE_LOCK.get(locale, _LANGUAGE_LOCK["zh-TW"])
 
 
 def _strip_json_fence(raw: str) -> str:
-    """Fallback JSON fence stripper for models that ignore response_mime_type."""
     text = raw.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
@@ -67,66 +84,129 @@ def _strip_json_fence(raw: str) -> str:
     return text.strip()
 
 
-class GeminiLLM(LLMPort):
+class OpenAILLM(LLMPort):
     def __init__(
         self,
         *,
         api_key: str,
         locale: str = "zh-TW",
-        intent_model: str = "gemini-2.5-flash",
+        model: str = "gpt-4.1-mini",
     ) -> None:
-        try:
-            from google import genai
-            from google.genai import types as genai_types
-        except ImportError as e:
+        if _OpenAIClient is None:
             raise ImportError(
                 "Install medbuddy-api with the `llm` extra: pip install 'medbuddy-api[llm]'"
-            ) from e
-        self._client: Any = genai.Client(api_key=api_key)
-        self._genai_types = genai_types
-        self._intent_model = intent_model
-        self._chat_model = intent_model
+            )
+        self._client: Any = _OpenAIClient(api_key=api_key)
+        self._model = model
         self._locale = locale
 
     @property
     def drug_cache_provenance_id(self) -> str:
-        return self._intent_model
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+        return self._model
 
     def _generate_sync(self, model: str, prompt: str) -> str:
-        resp = self._client.models.generate_content(model=model, contents=prompt)
-        return (resp.text or "").strip()
+        t0 = time.perf_counter()
+        try:
+            resp = self._client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
+        except Exception:
+            log.error(
+                "OpenAI chat completion failed: model=%s prompt_chars=%d",
+                model,
+                len(prompt),
+                exc_info=True,
+            )
+            raise
+        out = (resp.choices[0].message.content or "").strip()
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        usage = getattr(resp, "usage", None)
+        pt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+        ct = getattr(usage, "completion_tokens", None) if usage is not None else None
+        log.info(
+            "OpenAI chat completion ok: model=%s prompt_chars=%d response_chars=%d "
+            "duration_ms=%.1f prompt_tokens=%r completion_tokens=%r",
+            model,
+            len(prompt),
+            len(out),
+            elapsed_ms,
+            pt,
+            ct,
+        )
+        return out
 
     def _generate_structured_sync(self, model: str, prompt: str, schema: type[T]) -> T:
-        """Generate content and parse into a Pydantic schema via response_schema."""
-        config = self._genai_types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=schema,
-        )
-        resp = self._client.models.generate_content(model=model, contents=prompt, config=config)
-
-        # Prefer the SDK's parsed object (available when response_schema is honoured)
-        if hasattr(resp, "parsed") and resp.parsed is not None:
-            return resp.parsed  # type: ignore[return-value]
-
-        # Fallback: parse the text ourselves
-        raw = (resp.text or "").strip()
+        t0 = time.perf_counter()
+        schema_name = schema.__name__
+        try:
+            resp = self._client.chat.completions.parse(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format=schema,
+                temperature=0.1,
+            )
+        except Exception:
+            log.error(
+                "OpenAI structured completion failed: model=%s schema=%s prompt_chars=%d",
+                model,
+                schema_name,
+                len(prompt),
+                exc_info=True,
+            )
+            raise
+        msg = resp.choices[0].message
+        refusal = getattr(msg, "refusal", None)
+        if refusal:
+            log.warning(
+                "OpenAI structured completion refusal: model=%s schema=%s prompt_chars=%d",
+                model,
+                schema_name,
+                len(prompt),
+            )
+            raise LLMParseError(f"Model refusal for {schema.__name__}: {str(refusal)[:200]}")
+        if msg.parsed is not None:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            usage = getattr(resp, "usage", None)
+            pt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+            ct = getattr(usage, "completion_tokens", None) if usage is not None else None
+            log.info(
+                "OpenAI structured completion ok: model=%s schema=%s prompt_chars=%d "
+                "duration_ms=%.1f prompt_tokens=%r completion_tokens=%r",
+                model,
+                schema_name,
+                len(prompt),
+                elapsed_ms,
+                pt,
+                ct,
+            )
+            return msg.parsed
+        raw = (msg.content or "").strip()
         if not raw:
             raise LLMParseError(f"Empty response for schema {schema.__name__}")
         try:
             data = json.loads(_strip_json_fence(raw))
-            return schema.model_validate(data)
+            parsed = schema.model_validate(data)
         except (json.JSONDecodeError, Exception) as exc:
             raise LLMParseError(
                 f"Could not parse {schema.__name__} from model output: {raw[:200]}"
             ) from exc
-
-    # ------------------------------------------------------------------
-    # LLMPort — intent classification
-    # ------------------------------------------------------------------
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        usage = getattr(resp, "usage", None)
+        pt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+        ct = getattr(usage, "completion_tokens", None) if usage is not None else None
+        log.info(
+            "OpenAI structured completion ok: model=%s schema=%s prompt_chars=%d "
+            "duration_ms=%.1f prompt_tokens=%r completion_tokens=%r (parsed_from_text)",
+            model,
+            schema_name,
+            len(prompt),
+            elapsed_ms,
+            pt,
+            ct,
+        )
+        return parsed
 
     def _interpret_turn_sync(
         self, user_text: str, *, recent_context: str | None = None
@@ -136,7 +216,7 @@ class GeminiLLM(LLMPort):
         )
         try:
             parsed: IntentClassification = self._generate_structured_sync(
-                self._intent_model, prompt, IntentClassification
+                self._model, prompt, IntentClassification
             )
         except LLMParseError:
             log.warning("interpret_user_turn: structured parse failed; safe fallback")
@@ -152,14 +232,15 @@ class GeminiLLM(LLMPort):
 
     def _extract_locale_intent_sync(self, user_text: str) -> str | None:
         prompt = (
-            "Decide if the user is asking to change the assistant reply language "
-            "to English (en) or Traditional Chinese Taiwan (zh-TW). "
-            "If not, set target_locale to null.\n\n"
+            "Decide if the user is asking to change the assistant's reply language "
+            "to English (en) or Traditional Chinese for Taiwan (zh-TW). "
+            "If they are not asking to switch reply language, set target_locale to null. "
+            "Do not treat requests to explain medical text in another language as a UI switch.\n\n"
             f"User: {user_text}"
         )
         try:
             parsed: LocaleIntentExtraction = self._generate_structured_sync(
-                self._intent_model, prompt, LocaleIntentExtraction
+                self._model, prompt, LocaleIntentExtraction
             )
         except LLMParseError:
             log.warning("extract_locale_intent: structured parse failed")
@@ -183,7 +264,7 @@ class GeminiLLM(LLMPort):
         )
         try:
             extracted: ProfilePatchExtraction = self._generate_structured_sync(
-                self._chat_model, prompt, ProfilePatchExtraction
+                self._model, prompt, ProfilePatchExtraction
             )
         except LLMParseError:
             log.warning("extract_profile_patch: structured parse failed")
@@ -231,10 +312,6 @@ class GeminiLLM(LLMPort):
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
         return await asyncio.to_thread(self._extract_profile_patch_sync, user_text, locale=locale)
 
-    # ------------------------------------------------------------------
-    # LLMPort — reply composition
-    # ------------------------------------------------------------------
-
     def _compose_sync(
         self,
         *,
@@ -248,15 +325,18 @@ class GeminiLLM(LLMPort):
         hist_lines = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
         loc = locale or self._locale
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        lang_lock = _language_lock(loc)
         prompt = (
+            f"{lang_lock}\n\n"
             f"{system_persona}\n\n"
             f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
             f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
             f"{t('gemini.recent_conversation', locale=loc)}\n{hist_lines}\n\n"
             f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
-            f"{t('gemini.reply_instruction', locale=loc)}"
+            f"{t('gemini.reply_instruction', locale=loc)}\n\n"
+            f"{lang_lock}"
         )
-        return self._generate_sync(self._chat_model, prompt)
+        return self._generate_sync(self._model, prompt)
 
     async def compose_reply(
         self,
@@ -278,21 +358,13 @@ class GeminiLLM(LLMPort):
             locale=locale,
         )
 
-    # ------------------------------------------------------------------
-    # LLMPort — drug text simplification
-    # ------------------------------------------------------------------
-
     def _simplify_sync(self, raw_label: str, *, locale: str) -> str:
         loc = locale or self._locale
         prompt = f"{t('gemini.simplify_intro', locale=loc)}{raw_label}"
-        return self._generate_sync(self._chat_model, prompt)
+        return self._generate_sync(self._model, prompt)
 
     async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str:
         return await asyncio.to_thread(self._simplify_sync, raw_label, locale=locale)
-
-    # ------------------------------------------------------------------
-    # LLMPort — medication extraction (structured output)
-    # ------------------------------------------------------------------
 
     def _extract_medication_sync(self, user_text: str, locale: str) -> MedicationDraft | None:
         loc = locale
@@ -306,7 +378,7 @@ class GeminiLLM(LLMPort):
         )
         try:
             extracted: MedicationExtraction = self._generate_structured_sync(
-                self._chat_model, prompt, MedicationExtraction
+                self._model, prompt, MedicationExtraction
             )
         except LLMParseError:
             log.warning("extract_medication: structured parse failed, skipping")
@@ -320,10 +392,6 @@ class GeminiLLM(LLMPort):
     ) -> MedicationDraft | None:
         loc = locale or self._locale
         return await asyncio.to_thread(self._extract_medication_sync, user_text, loc)
-
-    # ------------------------------------------------------------------
-    # LLMPort — medication removal resolution (structured output)
-    # ------------------------------------------------------------------
 
     def _resolve_remove_sync(
         self,
@@ -341,7 +409,7 @@ class GeminiLLM(LLMPort):
         )
         try:
             resolved: RemovalResolution = self._generate_structured_sync(
-                self._chat_model, prompt, RemovalResolution
+                self._model, prompt, RemovalResolution
             )
         except LLMParseError:
             log.warning("resolve_remove: structured parse failed")
@@ -378,9 +446,7 @@ class GeminiLLM(LLMPort):
             f"User: {user_text}"
         )
         try:
-            return self._generate_structured_sync(
-                self._chat_model, prompt, MedicationUpdateResolution
-            )
+            return self._generate_structured_sync(self._model, prompt, MedicationUpdateResolution)
         except LLMParseError:
             log.warning("resolve_update: structured parse failed")
             return None
@@ -399,7 +465,7 @@ class GeminiLLM(LLMPort):
         loc = locale
         prompt = f"{t('gemini.extract_vital_intro', locale=loc)}\nUser: {user_text}"
         try:
-            return self._generate_structured_sync(self._chat_model, prompt, VitalLogExtraction)
+            return self._generate_structured_sync(self._model, prompt, VitalLogExtraction)
         except LLMParseError:
             log.warning("extract_vital: structured parse failed")
             return None
@@ -407,10 +473,6 @@ class GeminiLLM(LLMPort):
     async def extract_vital_log(self, user_text: str, *, locale: str) -> VitalLogExtraction | None:
         loc = locale or self._locale
         return await asyncio.to_thread(self._extract_vital_sync, user_text, loc)
-
-    # ------------------------------------------------------------------
-    # LLMPort — medication-added reply
-    # ------------------------------------------------------------------
 
     def _compose_medication_added_sync(
         self,
@@ -422,6 +484,7 @@ class GeminiLLM(LLMPort):
         locale: str,
     ) -> str:
         loc = locale or self._locale
+        lang_lock = _language_lock(loc)
         persona = get_system_persona(locale=loc)
         task = t("gemini.medication_added_companion", locale=loc)
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
@@ -441,13 +504,15 @@ class GeminiLLM(LLMPort):
             )
         appendix = reminder_compose_appendix(saved, loc)
         prompt = (
+            f"{lang_lock}\n\n"
             f"{persona}\n\n{task}\n\n"
             f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
             f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
             f"{facts}{extra}{appendix}\n\n"
-            f"{t('gemini.user_label', locale=loc)}{user_message}"
+            f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
+            f"{lang_lock}"
         )
-        return self._generate_sync(self._chat_model, prompt)
+        return self._generate_sync(self._model, prompt)
 
     async def compose_medication_added_reply(
         self,
@@ -468,10 +533,6 @@ class GeminiLLM(LLMPort):
             locale=loc,
         )
 
-    # ------------------------------------------------------------------
-    # NEW — structured drug interaction check
-    # ------------------------------------------------------------------
-
     def _check_interactions_sync(
         self,
         *,
@@ -482,10 +543,12 @@ class GeminiLLM(LLMPort):
         locale: str,
     ) -> InteractionCheckResult:
         loc = locale or self._locale
+        lang_lock = _language_lock(loc)
         med_list = "\n".join(f"- {m.name} {m.dosage} ({m.schedule})" for m in medications)
         grounding = drug_grounding or t("gemini.no_drug_data", locale=loc)
         persona = get_system_persona(locale=loc)
         prompt = (
+            f"{lang_lock}\n\n"
             f"{persona}\n\n"
             f"{t('gemini.medication_companion_interactions', locale=loc)}\n\n"
             f"{t('gemini.interaction_structured_output_note', locale=loc)}\n\n"
@@ -498,7 +561,7 @@ class GeminiLLM(LLMPort):
             "Use the patient's actual medication list. "
             "Always include a disclaimer that the patient should consult their doctor."
         )
-        return self._generate_structured_sync(self._chat_model, prompt, InteractionCheckResult)
+        return self._generate_structured_sync(self._model, prompt, InteractionCheckResult)
 
     async def check_interactions_structured(
         self,
@@ -520,10 +583,6 @@ class GeminiLLM(LLMPort):
         )
         return InteractionResult(query=user_message, result=result)
 
-    # ------------------------------------------------------------------
-    # NEW — doctor-ready health summary
-    # ------------------------------------------------------------------
-
     def _generate_health_summary_sync(
         self,
         *,
@@ -533,7 +592,9 @@ class GeminiLLM(LLMPort):
         patient_context: str,
         locale: str,
     ) -> HealthSummaryResult:
+        _ = user_row
         loc = locale or self._locale
+        lang_lock = _language_lock(loc)
         persona = get_system_persona(locale=loc)
 
         med_lines = (
@@ -551,6 +612,7 @@ class GeminiLLM(LLMPort):
         )
 
         prompt = (
+            f"{lang_lock}\n\n"
             f"{persona}\n\n"
             "You are generating a doctor-ready health summary for a patient.\n\n"
             f"Patient profile signals:\n{patient_context}\n\n"
@@ -562,10 +624,10 @@ class GeminiLLM(LLMPort):
             "3. Extracts any symptoms, side effects, or adherence issues mentioned recently\n"
             "4. Flags the top 3-5 concerns the doctor should know\n"
             "5. Suggests questions the patient might want to ask\n"
-            "6. Is written in the patient's language preference\n"
+            f"6. Is written ENTIRELY in the required language — {lang_lock}\n"
             "Do NOT include any PII (real names, phone numbers, ID numbers)."
         )
-        return self._generate_structured_sync(self._chat_model, prompt, HealthSummaryResult)
+        return self._generate_structured_sync(self._model, prompt, HealthSummaryResult)
 
     async def generate_health_summary(
         self,
@@ -590,14 +652,14 @@ class GeminiLLM(LLMPort):
                 name=m.name,
                 dosage=m.dosage,
                 schedule=m.schedule,
-                purpose="",  # populated by LLM in result.summary_for_doctor
+                purpose="",
                 notes=m.instructions,
             )
             for m in medications
         ]
         return HealthSummary(
             generated_at=datetime.now(UTC),
-            user_key="",  # set by caller
+            user_key="",
             locale=loc,
             medications=med_items,
             result=result,

@@ -175,6 +175,7 @@ class SupabaseUserData(UserDataPort):
             if "duplicate" in msg or "unique" in msg or "23505" in msg:
                 row = await self._select_user_row(line_user_id)
                 if row:
+                    log.info("DB users.get_or_create: duplicate insert race recovered")
                     return _user_row_to_dict(row)
             log.warning("Supabase user insert failed: %s", e)
             raise
@@ -185,7 +186,9 @@ class SupabaseUserData(UserDataPort):
             if not row:
                 msg = "Supabase insert returned no row"
                 raise RuntimeError(msg)
+            log.info("DB users.get_or_create: created user via fallback select")
             return _user_row_to_dict(row)
+        log.info("DB users.get_or_create: inserted new user")
         return _user_row_to_dict(rows[0])
 
     async def save_onboarding_profile(
@@ -218,6 +221,7 @@ class SupabaseUserData(UserDataPort):
             return self._client.table("patients").update(payload).eq("id", uid).execute()
 
         await _run_q(upd)
+        log.info("DB users.save_onboarding_profile: patient_id=%s updated", uid)
         row = await self._select_user_row(line_user_id)
         if not row:
             msg = "Supabase user row missing after onboarding update"
@@ -275,6 +279,11 @@ class SupabaseUserData(UserDataPort):
             return self._client.table("patients").update(payload).eq("id", uid).execute()
 
         await _run_q(upd)
+        log.info(
+            "DB users.patch_profile: patient_id=%s updated_fields=%s",
+            uid,
+            ",".join(sorted(payload.keys())),
+        )
         row = await self._select_user_row(line_user_id)
         if not row:
             msg = "Supabase user row missing after profile patch"
@@ -319,6 +328,7 @@ class SupabaseUserData(UserDataPort):
         if not rows:
             msg = "Supabase medication insert returned no row"
             raise RuntimeError(msg)
+        log.info("DB medications.add: patient_id=%s inserted=1", uid)
         return _med_row_to_record(rows[0])
 
     async def delete_medication(self, line_user_id: str, medication_id: str) -> bool:
@@ -336,6 +346,7 @@ class SupabaseUserData(UserDataPort):
 
         resp = await _run_q(q)
         rows = resp.data or []
+        log.info("DB medications.delete: patient_id=%s deleted=%d", uid, len(rows))
         return len(rows) > 0
 
     async def patch_medication(
@@ -376,6 +387,7 @@ class SupabaseUserData(UserDataPort):
 
         resp = await _run_q(upd)
         rows = resp.data or []
+        log.info("DB medications.patch: patient_id=%s updated=%d", uid, len(rows))
         if not rows:
             return None
         return _med_row_to_record(rows[0])
@@ -408,6 +420,7 @@ class SupabaseUserData(UserDataPort):
         if not rows:
             msg = "Supabase vital_logs insert returned no row"
             raise RuntimeError(msg)
+        log.info("DB vital_logs.add: patient_id=%s inserted=1 kind=%s", uid, kind.strip())
         return _vital_row_to_record(rows[0])
 
     async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
@@ -428,6 +441,7 @@ class SupabaseUserData(UserDataPort):
             )
 
         await _run_q(delete_future)
+        log.info("DB dose_events.sync: patient_id=%s deleted_future=1batch", uid)
 
         if not meds:
             return []
@@ -458,6 +472,12 @@ class SupabaseUserData(UserDataPort):
 
         resp = await _run_q(insert)
         inserted = resp.data or []
+        log.info(
+            "DB dose_events.sync: patient_id=%s inserted=%d meds=%d",
+            uid,
+            len(inserted),
+            len(meds),
+        )
         out: list[tuple[str, datetime]] = []
         for r in inserted:
             out.append((str(r["id"]), _parse_ts(r["scheduled_at"])))
@@ -637,6 +657,7 @@ class SupabaseUserData(UserDataPort):
 
         resp = await _run_q(q)
         rows = resp.data or []
+        log.info("DB dose_events.mark_reminder_sent: dose_event_id=%s updated=%d", dose_event_id, len(rows))
         return len(rows) > 0
 
     async def try_increment_reminder_nudge(
@@ -661,6 +682,12 @@ class SupabaseUserData(UserDataPort):
 
         resp = await _run_q(q)
         rows = resp.data or []
+        log.info(
+            "DB dose_events.increment_nudge: dose_event_id=%s expected=%d updated=%d",
+            dose_event_id,
+            expected_nudge_count,
+            len(rows),
+        )
         return len(rows) > 0
 
     async def mark_pending_doses_taken(self, line_user_id: str, *, notes: str | None = None) -> int:
@@ -710,6 +737,7 @@ class SupabaseUserData(UserDataPort):
 
         uresp = await _run_q(q_update)
         updated = uresp.data or []
+        log.info("DB dose_events.mark_pending_taken: patient_id=%s updated=%d", uid, len(updated))
         return len(updated)
 
     async def list_pending_dose_candidates(
@@ -893,6 +921,12 @@ class SupabaseUserData(UserDataPort):
             uresp = await _run_q(q)
             rows = uresp.data or []
             total += len(rows)
+        log.info(
+            "DB dose_events.mark_taken_by_ids: patient_id=%s requested=%d updated=%d",
+            uid,
+            len(dose_event_ids),
+            total,
+        )
         return total
 
     async def mark_pending_doses_missed(
@@ -944,6 +978,7 @@ class SupabaseUserData(UserDataPort):
 
         uresp = await _run_q(q_update)
         updated = uresp.data or []
+        log.info("DB dose_events.mark_pending_missed: patient_id=%s updated=%d", uid, len(updated))
         return len(updated)
 
     async def append_note_to_dose_events(
@@ -999,6 +1034,12 @@ class SupabaseUserData(UserDataPort):
 
             uresp = await _run_q(q_upd)
             total += len(uresp.data or [])
+        log.info(
+            "DB dose_events.append_note_by_ids: patient_id=%s requested=%d updated=%d",
+            uid,
+            len(dose_event_ids),
+            total,
+        )
         return total
 
     async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:
@@ -1068,6 +1109,11 @@ class SupabaseUserData(UserDataPort):
 
         uresp = await _run_q(q_update)
         updated = uresp.data or []
+        log.info(
+            "DB dose_events.append_note_recent_taken: patient_id=%s updated=%d",
+            uid,
+            len(updated),
+        )
         return len(updated)
 
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]:
@@ -1136,3 +1182,4 @@ class SupabaseConversationStore(ConversationStorePort):
             return self._client.table("conversation_turns").insert(payload).execute()
 
         await _run_q(q)
+        log.info("DB conversation_turns.append: patient_id=%s role=%s", uid, turn.role)

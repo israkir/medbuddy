@@ -29,6 +29,7 @@ from medbuddy.agents.tools.interaction_check import InteractionCheckTool
 from medbuddy.agents.tools.confirm_dose import ConfirmDoseTool
 from medbuddy.agents.tools.log_vital import LogVitalTool
 from medbuddy.agents.tools.report_missed_dose import ReportMissedDoseTool
+from medbuddy.agents.tools.side_effects import ReportSideEffectsTool
 from medbuddy.agents.tools.medication_crud import (
     AddMedicationTool,
     ListMedicationsTool,
@@ -67,6 +68,7 @@ _summary_tool = GenerateHealthSummaryTool()
 _confirm_dose_tool = ConfirmDoseTool()
 _report_missed_dose_tool = ReportMissedDoseTool()
 _log_vital_tool = LogVitalTool()
+_side_effects_tool = ReportSideEffectsTool()
 
 _TOOL_MAP: dict[Intent, Any] = {
     Intent.LIST_MEDICATIONS: _list_tool,
@@ -76,6 +78,7 @@ _TOOL_MAP: dict[Intent, Any] = {
     Intent.CONFIRM_DOSE: _confirm_dose_tool,
     Intent.REPORT_MISSED_DOSE: _report_missed_dose_tool,
     Intent.EXPLAIN_MEDICATION: _explain_tool,
+    Intent.REPORT_SIDE_EFFECTS: _side_effects_tool,
     Intent.INTERACTION_CHECK: _interaction_tool,
     Intent.LOG_VITAL: _log_vital_tool,
     Intent.REQUEST_SUMMARY: _summary_tool,
@@ -156,14 +159,23 @@ class MedicationAgent:
             )
             return clarify_reply
 
-        # 1. Extension hooks (highest priority, can short-circuit)
+        # 1. Emergency — fixed safety response, no LLM, no delay
+        if intent == Intent.EMERGENCY:
+            reply = t("agent.emergency", locale=locale)
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=reply, at=datetime.now(UTC)),
+            )
+            return reply
+
+        # 2. Extension hooks (highest priority for non-emergency, can short-circuit)
         reply = await try_intent_hooks(intent, svc, user_text)
 
-        # 2. Off-topic: refuse without calling compose_reply (no LLM for the reply body)
+        # 3. Off-topic: refuse without calling compose_reply (no LLM for the reply body)
         if reply is None and intent == Intent.OFF_TOPIC:
             reply = t("agent.off_topic", locale=locale)
 
-        # 3. Profile update intent (structured LLM extraction)
+        # 4. Profile update intent (structured LLM extraction)
         if reply is None and intent == Intent.UPDATE_PROFILE:
             reply = await try_profile_intent_reply(
                 svc,
@@ -174,7 +186,7 @@ class MedicationAgent:
                 llm=svc.llm,
             )
 
-        # 4. Dispatch to registered tool
+        # 5. Dispatch to registered tool
         if reply is None:
             tool = _TOOL_MAP.get(intent)
             if tool is not None:
@@ -206,7 +218,7 @@ class MedicationAgent:
                     result = await _run_tool_safe(tool, **tool_kwargs)
                     reply = result.reply
             else:
-                # 5. Free-form LLM fallback for unhandled intents
+                # 6. Free-form LLM fallback for unhandled intents
                 reply = await _compose_fallback_reply(
                     svc,
                     intent=intent,

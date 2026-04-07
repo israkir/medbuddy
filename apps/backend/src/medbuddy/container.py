@@ -22,11 +22,11 @@ from medbuddy.integrations.mocks import (
 from medbuddy.integrations.caching_drugs import CachingDrugData
 from medbuddy.integrations.drugs_http import HttpDrugData
 from medbuddy.integrations.edge_tts_service import EdgeTtsService
-from medbuddy.integrations.gemini_llm import GeminiLLM
-from medbuddy.integrations.openai_llm import OpenAILLM
+from medbuddy.integrations.llm.gemini_llm import GeminiLLM
+from medbuddy.integrations.llm.openai_llm import OpenAILLM
 from medbuddy.integrations.line_client import LineHttpClient
 from medbuddy.integrations.local_public_storage import LocalPublicObjectStorage
-from medbuddy.integrations.stt_google import GoogleSpeechToText
+from medbuddy.integrations.stt.stt_google import GoogleSpeechToText
 
 log = logging.getLogger(__name__)
 
@@ -118,8 +118,8 @@ def build_app_services(
 
     if settings.supabase_url and settings.supabase_publishable_key:
         try:
-            from medbuddy.integrations.supabase_drug_caches import SupabaseDrugCaches
-            from medbuddy.integrations.supabase_stores import (
+            from medbuddy.integrations.persistence.supabase_drug_caches import SupabaseDrugCaches
+            from medbuddy.integrations.persistence.supabase_stores import (
                 SupabaseConversationStore,
                 SupabaseUserData,
                 create_supabase_client,

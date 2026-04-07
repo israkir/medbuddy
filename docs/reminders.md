@@ -4,12 +4,12 @@ This document describes **proactive LINE push** reminders for scheduled medicati
 
 ## What it does
 
-- After a user **adds** or **removes** a medication via the assistant (**`AddMedicationTool`** / **`RemoveMedicationTool`** through **`MedicationAgent`** — LINE or **`POST /v1/app/messages`**), the backend **rebuilds** upcoming rows in **`dose_events`** and, when **`REDIS_URL`** is set, **enqueues** [arq](https://arq-docs.helpmanual.io/) jobs so each row triggers a **LINE Messaging API push** near **`scheduled_at`** (UTC).
+- After a user **adds**, **updates**, or **removes** a medication via the assistant tools, the backend **rebuilds** upcoming rows in **`dose_events`** and, when **`REDIS_URL`** is set, **enqueues** [arq](https://arq-docs.helpmanual.io/) jobs so each row triggers a **LINE Messaging API push** near **`scheduled_at`** (UTC).
 - The push text is localized under **`reminder.line_push`** in `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`).
 
 ## What it does *not* do (v1)
 
-- **No NLP** on free-text `medications.schedule`: the prototype uses **one daily local time** per patient (`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`) in **`patients.timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**) calendar days per medication.
+- `medications.schedule` itself is not parsed into clock times. Reminder timing comes from structured reminder metadata plus defaults: one or more local `HH:MM` times (when extracted) or `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` (`09:00` by default), interpreted in **`patients.timezone`** for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**) calendar days per medication.
 - **Standalone HTTP app** local notifications are **not** implemented here; only **LINE push** when the user key is a LINE `userId` stored as `patients.external_user_id`. (A reference **Expo** client is documented in [`frontend-expo.md`](frontend-expo.md) — it does not change reminder delivery.)
 - **Rich messages** (Flex) and **postback** “mark taken” are out of scope for this slice.
 
@@ -24,7 +24,7 @@ flowchart LR
     end
     subgraph data [Supabase]
         M[medications]
-        U[users]
+        P[patients]
         D[dose_events]
     end
     subgraph queue [Redis]
@@ -44,10 +44,10 @@ flowchart LR
     DV --> D
     DV --> LINE
     M --> D
-    U --> D
+    P --> D
 ```
 
-1. **`UserDataPort.sync_upcoming_dose_events`** deletes future **`dose_events`** for the patient and inserts new rows (one instant per medication per day in the horizon, skipping instants already in the past).
+1. **`UserDataPort.sync_upcoming_dose_events`** deletes future **`dose_events`** for the patient and inserts new rows (one or more instants per medication per day depending on reminder metadata, skipping instants already in the past).
 2. **`enqueue_reminder_jobs`** schedules **`send_reminder_for_dose`** with **`_defer_until = scheduled_at`** when arq is installed and **`REDIS_URL`** is non-empty.
 3. The **worker** loads **`AppServices`** (same wiring as the API), runs **`get_dose_event_for_reminder`**, sends **`push_message_batch`**, then **`try_mark_reminder_sent`** so retries and orphans do not double-notify.
 
@@ -116,8 +116,8 @@ If Redis or the **arq** process restarts, some due rows may never get a job. A l
 | Enqueue / immediate jobs | `apps/backend/src/medbuddy/reminders/enqueue.py` |
 | Push + mark sent | `apps/backend/src/medbuddy/reminders/deliver.py` |
 | Worker entry | `apps/backend/src/medbuddy/reminders/worker.py` |
-| Hook after add/remove med | `apps/backend/src/medbuddy/reminders/lifecycle.py` (called from medication CRUD tools after successful add/remove) |
-| Supabase persistence | `apps/backend/src/medbuddy/integrations/supabase_stores.py` |
+| Hook after medication changes | `apps/backend/src/medbuddy/reminders/lifecycle.py` (called from medication CRUD tools after successful add/update/remove) |
+| Supabase persistence | `apps/backend/src/medbuddy/integrations/persistence/supabase_stores.py` |
 | User IANA zone helpers | `apps/backend/src/medbuddy/user_timezone.py` |
 | LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `protocols/ports.py` |
 | Reconcile route | `apps/backend/src/medbuddy/http/shared_routes.py` |

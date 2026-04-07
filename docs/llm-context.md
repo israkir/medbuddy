@@ -66,7 +66,7 @@ Current architecture is intentionally **hybrid**:
 
 ## Per `LLMPort` method (what goes to the model)
 
-Implementation reference: `apps/backend/src/medbuddy/protocols/ports.py` (`LLMPort`). Concrete adapters: `integrations/gemini_llm.py`, `integrations/openai_llm.py` (same contract).
+Implementation reference: `apps/backend/src/medbuddy/protocols/ports.py` (`LLMPort`). Concrete adapters: `integrations/llm/gemini_llm.py`, `integrations/llm/openai_llm.py` (same contract).
 
 ### `interpret_user_turn`
 
@@ -165,7 +165,7 @@ Personalized replies for explain/interaction intents are keyed by a fingerprint 
 | Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
 | Patient context builders | `apps/backend/src/medbuddy/prompts/persona.py` |
 | Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py` |
-| LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/gemini_llm.py`, `openai_llm.py` |
+| LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` |
 | Privacy overview | [docs/privacy.md](./privacy.md) |
 
 ---

@@ -10,6 +10,7 @@ from medbuddy.llm.schemas import (
     InteractionCheckResult,
     MedicationSummaryItem,
 )
+from medbuddy.i18n import t
 
 __all__ = [
     "ConversationTurn",
@@ -38,10 +39,12 @@ class Intent(str, Enum):
     CONFIRM_DOSE = "confirm_dose"
     REPORT_MISSED_DOSE = "report_missed_dose"
     EXPLAIN_MEDICATION = "explain_medication"
+    REPORT_SIDE_EFFECTS = "report_side_effects"
     INTERACTION_CHECK = "interaction_check"
     LOG_VITAL = "log_vital"
     REQUEST_SUMMARY = "request_summary"
     UPDATE_PROFILE = "update_profile"
+    EMERGENCY = "emergency"
     OFF_TOPIC = "off_topic"
     GENERAL_QUESTION = "general_question"
 
@@ -374,14 +377,16 @@ class HealthSummary:
 
     def as_text(self) -> str:
         """Plain-text representation for LINE/mobile chat display."""
+        loc = self.locale or "zh-TW"
         lines = [self.result.summary_for_doctor]
         if self.result.key_concerns:
             concerns = "\n".join(f"• {c}" for c in self.result.key_concerns)
-            lines.append(f"\n重點關注:\n{concerns}")
+            lines.append(f"\n{t('health_summary.key_concerns', locale=loc)}\n{concerns}")
         if self.result.reported_symptoms:
-            symptoms = "、".join(self.result.reported_symptoms)
-            lines.append(f"\n近期症狀: {symptoms}")
+            sep = t("health_summary.symptom_sep", locale=loc)
+            symptoms = sep.join(self.result.reported_symptoms)
+            lines.append(f"\n{t('health_summary.reported_symptoms', locale=loc)} {symptoms}")
         if self.result.recommended_questions:
             qs = "\n".join(f"• {q}" for q in self.result.recommended_questions)
-            lines.append(f"\n建議詢問醫師:\n{qs}")
+            lines.append(f"\n{t('health_summary.recommended_questions', locale=loc)}\n{qs}")
         return "\n".join(lines)
