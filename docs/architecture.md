@@ -5,6 +5,8 @@ This document describes the system architecture, data model, API contract, integ
 > **Audience:** Backend and mobile engineers, platform engineers, and security reviewers.
 >
 > **Disclaimer:** MedBuddy is a software prototype and is not a substitute for professional medical advice.
+>
+> **Documentation index:** [`docs/index.md`](index.md) — reading paths and quick lookup for all docs.
 
 ---
 

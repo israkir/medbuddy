@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 
 def configure_logging(level_name: str) -> None:
-    """Apply ``level_name`` to ``medbuddy.*`` and uvicorn error stream."""
+    """Apply consistent stdout logging for app and server loggers."""
     level = getattr(logging, level_name.upper(), None)
     if not isinstance(level, int):
         level = logging.INFO
-    for name in ("medbuddy", "uvicorn.error"):
+    # Ensure logs reach container stdout even if no handlers were configured upstream.
+    logging.basicConfig(
+        level=level,
+        stream=sys.stdout,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        force=True,
+    )
+    for name in ("medbuddy", "uvicorn", "uvicorn.error", "uvicorn.access", "arq"):
         logging.getLogger(name).setLevel(level)

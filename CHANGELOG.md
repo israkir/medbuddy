@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Settings parsing**: Fixed startup parsing for comma-separated `MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`.
 - **LLM/output consistency**: Improved locale locking and corrected conflicting English prompt scaffolding.
 - **Drug cache resolution**: Improved medication-name matching so personalization cache rows retain `medication_id` and grounding provenance more reliably.
+- **LINE audio STT resilience**: Webhook audio handling now catches STT HTTP failures and sends a localized fallback reply instead of returning HTTP 500.
 
 ### Removed
 

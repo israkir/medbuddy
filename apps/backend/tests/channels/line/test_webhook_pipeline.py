@@ -6,11 +6,17 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import httpx
 from httpx import ASGITransport, AsyncClient
 
 from medbuddy.channels.line.orchestrator import handle_line_event
 from medbuddy.main import app
 from medbuddy.engine.types import AppServices
+
+
+class _FailingStt:
+    async def transcribe_m4a(self, audio: bytes) -> str:
+        raise httpx.HTTPError("stt unavailable")
 
 
 def _line_webhook_event(**fields: Any) -> dict[str, Any]:
@@ -116,3 +122,34 @@ async def test_follow_sends_welcome_text(mock_settings):
     assert svc.line.replies[-1]["type"] == "batch"  # type: ignore[attr-defined]
     msgs = svc.line.replies[-1]["messages"]  # type: ignore[index]
     assert msgs[0]["type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_audio_stt_http_error_replies_with_generic_error(mock_settings):
+    mock_settings.mock_external_services = True
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    svc.stt = _FailingStt()  # type: ignore[assignment]
+    svc.line.seed_voice_message("m-audio", b"fake-m4a")  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "message",
+            "replyToken": "rtoken",
+            "source": {"userId": "Uabc", "type": "user"},
+            "message": {"id": "m-audio", "type": "audio"},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    line = svc.line
+    assert hasattr(line, "replies")
+    assert len(line.replies) == 1
+    reply = line.replies[0]["messages"][0]  # type: ignore[index]
+    assert reply["type"] == "text"
+    assert reply["text"]
