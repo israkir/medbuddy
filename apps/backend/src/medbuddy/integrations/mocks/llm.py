@@ -1,5 +1,4 @@
 import asyncio
-import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,11 +17,16 @@ from medbuddy.models.domain import (
     MedicationRecord,
 )
 from medbuddy.protocols.ports import LLMPort, ProfilePatch
-from medbuddy.user_locale import parse_locale_request_from_text
 
 
 class MockLLM(LLMPort):
-    """Templated replies for CI. Intent classification uses narrow defaults unless ``intent=`` is fixed — production uses OpenAI / Gemini."""
+    """Test double: no keyword intent routing.
+
+    Set ``intent=`` (and optional extraction overrides) to mirror what production LLMs return
+    via structured output. Defaults: ``classify_intent`` → ``general_question``;
+    ``extract_medication_draft`` / ``extract_locale_intent`` / ``resolve_medication_removal_id``
+    return ``None`` unless overridden.
+    """
 
     def __init__(
         self,
@@ -32,12 +36,18 @@ class MockLLM(LLMPort):
         reply_template: str | None = None,
         profile_patch: ProfilePatch | None = None,
         dose_note: str | None = None,
+        medication_draft: MedicationDraft | None = None,
+        removal_medication_id: str | None = None,
+        locale_intent: str | None = None,
     ) -> None:
         self._intent = intent
         self._locale = locale
         self.reply_template = reply_template or t("mocks.llm.reply_template", locale=locale)
         self._profile_patch = profile_patch
         self._dose_note = dose_note
+        self._medication_draft = medication_draft
+        self._removal_medication_id = removal_medication_id
+        self._locale_intent = locale_intent
         self.last_classify_input: str | None = None
 
     async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
@@ -46,45 +56,6 @@ class MockLLM(LLMPort):
         _ = recent_context
         if self._intent is not None:
             return self._intent
-        ut = user_text.strip()
-        lowered = ut.lower()
-        if re.search(r"(?i)天氣|weather|forecast|講個笑話|tell me a joke", ut):
-            return Intent.OFF_TOPIC
-        if any(
-            x in lowered
-            for x in (
-                "switch to english",
-                "use english",
-                "prefer english",
-                "english replies",
-                "i prefer english",
-                "請用中文",
-                "traditional chinese",
-                "改用繁體",
-            )
-        ):
-            return Intent.UPDATE_LOCALE
-        if (
-            "解釋" in user_text
-            or "explain " in lowered
-            or "what's " in lowered
-            or "what is " in lowered
-        ):
-            return Intent.EXPLAIN_MEDICATION
-        if any(k in user_text for k in ("清單", "哪些藥", "list med", "my medications")):
-            return Intent.LIST_MEDICATIONS
-        if "新增" in ut or "加入" in ut or lowered.startswith("add "):
-            return Intent.ADD_MEDICATION
-        if any(k in user_text for k in ("停藥", "remove ", "stop taking")):
-            return Intent.REMOVE_MEDICATION
-        if "交互" in user_text or "interaction" in lowered:
-            return Intent.INTERACTION_CHECK
-        if "摘要" in user_text or "summary" in lowered:
-            return Intent.REQUEST_SUMMARY
-        if re.search(r"(?i)(吃了|已吃|took|taken|i took|i've taken)", ut):
-            return Intent.CONFIRM_DOSE
-        if "血壓" in user_text or "血糖" in user_text:
-            return Intent.LOG_VITAL
         return Intent.GENERAL_QUESTION
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
@@ -103,23 +74,8 @@ class MockLLM(LLMPort):
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         await asyncio.sleep(0)
-        direct = parse_locale_request_from_text(user_text)
-        if direct is not None:
-            return direct
-        ut = user_text.lower()
-        if re.search(
-            r"(?i)prefer\s+english|english\s+replies|i\s+want\s+english|"
-            r"i'?d\s+rather\s+(?:use|have|read)\s+english|only\s+english",
-            ut,
-        ) and not re.search(r"請用英文\s*說明", user_text):
-            return "en"
-        if re.search(
-            r"(?i)prefer\s+chinese|traditional\s+chinese|mandarin|zh[- ]?tw|"
-            r"請用中文|改用中文|only\s+chinese",
-            ut,
-        ):
-            return "zh-TW"
-        return None
+        _ = user_text
+        return self._locale_intent
 
     async def compose_reply(
         self,
@@ -145,44 +101,8 @@ class MockLLM(LLMPort):
         self, user_text: str, *, locale: str
     ) -> MedicationDraft | None:
         await asyncio.sleep(0)
-        un = t("medication.unspecified", locale=locale)
-        minutes_m = re.search(r"(\d+)\s*分鐘", user_text)
-        first_min: int | None = None
-        if minutes_m:
-            first_min = max(1, int(minutes_m.group(1)))
-        for marker in ("新增", "加入"):
-            if marker in user_text:
-                rest = user_text.split(marker, 1)[1].strip()
-                rest = re.split(r"[，。；]", rest)[0].strip()
-                parts = rest.split()
-                if not parts:
-                    return None
-                return MedicationDraft(
-                    name=parts[0],
-                    dosage=parts[1] if len(parts) > 1 else un,
-                    schedule=parts[2] if len(parts) > 2 else un,
-                    first_reminder_in_minutes=first_min,
-                    materialize_daily_reminders=first_min is None,
-                    needs_horizon_confirmation=False,
-                )
-        low = user_text.lower()
-        if low.startswith("add "):
-            rest = user_text[4:].strip()
-            parts = re.split(r"[\s,;]+", rest)
-            parts = [p for p in parts if p]
-            if not parts:
-                return None
-            en_min = re.search(r"in\s+(\d+)\s*(?:min|minutes?)", low)
-            fm = max(1, int(en_min.group(1))) if en_min else first_min
-            return MedicationDraft(
-                name=parts[0],
-                dosage=parts[1] if len(parts) > 1 else un,
-                schedule=parts[2] if len(parts) > 2 else un,
-                first_reminder_in_minutes=fm,
-                materialize_daily_reminders=fm is None,
-                needs_horizon_confirmation=False,
-            )
-        return None
+        _ = (user_text, locale)
+        return self._medication_draft
 
     async def resolve_medication_removal_id(
         self,
@@ -192,12 +112,8 @@ class MockLLM(LLMPort):
         locale: str,
     ) -> str | None:
         await asyncio.sleep(0)
-        _ = locale
-        lt = user_text.lower()
-        for med in medications:
-            if med.name.lower() in lt or lt in med.name.lower():
-                return med.id
-        return None
+        _ = (user_text, medications, locale)
+        return self._removal_medication_id
 
     async def compose_medication_added_reply(
         self,

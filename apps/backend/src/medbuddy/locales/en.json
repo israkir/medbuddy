@@ -26,8 +26,8 @@
     "pending_body": "(Connect info.fda.gov.tw cache layer in MVP.)"
   },
   "agent": {
-    "generic_error": "The system could not complete your request right now. Please try again later or ask a family member for help.",
-    "off_topic": "I’m here to help with your medications, reminders, and related health questions. I can’t help with that topic—try asking about your medicines, doses, or what you’d like to remember to take."
+    "generic_error": "Something went wrong on our side. Please try again in a moment — or ask someone you trust to help if it keeps happening.",
+    "off_topic": "I’m here for your medications, reminders, and everyday health questions about them. I’m not the best fit for that topic — how about your medicines, doses, or what you’d like a reminder for?"
   },
   "mocks": {
     "drugs": {
@@ -54,12 +54,12 @@
   "medication": {
     "unspecified": "Unspecified",
     "added": "Saved: {name}, dose {dosage}, schedule {schedule}. Tell me if you want to change anything.",
-    "add_incomplete": "I can record a medication, but I need the drug name. Please share name, dose, and when you take it.",
+    "add_incomplete": "I’d like to save that for you — I just need the medication name (and dose or timing if you know them). A quick example: “Aspirin 100mg after breakfast.”",
     "list_intro": "Your current medications:",
-    "list_empty": "No medications on file yet. Say \"add\" plus the drug name to start.",
+    "list_empty": "You don’t have any medications saved yet. When you’re ready, tell me a drug name and I’ll help you add it.",
     "removed": "Removed from your list: {name}.",
-    "remove_not_found": "I could not find that medication. Say the name or ask for your list.",
-    "confirm_dose_none": "I don’t have a recent scheduled dose waiting to be marked—if you meant a specific time or medicine, say a bit more.",
+    "remove_not_found": "I couldn’t find that one on your list — try the drug name again, or ask to see your medications.",
+    "confirm_dose_none": "I don’t see a recent dose waiting to be checked off. If you meant a certain time or medicine, tell me a little more and I’ll try again.",
     "confirm_dose_recorded": "Got it—I’ve marked {count} dose(s) as taken. Thanks for letting me know.",
     "confirm_dose_recorded_with_note": "Got it—I’ve marked {count} dose(s) as taken and saved your note: {note}"
   },
@@ -105,7 +105,7 @@
     "ack_notes": "health notes “{notes}”",
     "ack_gender": "sex/gender “{label}”",
     "updated": "Got it—I have saved: {summary}. You can update anytime.",
-    "update_unclear": "Could you share in one short message: what to call you, your age (optional), sex or gender if you like, a family or emergency contact, or allergies / important health notes? For example: “My name is Mei, I’m 72.”"
+    "update_unclear": "Happy to help — in one short message, could you share what you’d like saved? For example how to call you, age if you’re comfortable, a contact for emergencies, or allergies / important health notes. Example: “My name is Mei, I’m 72.”"
   },
   "tests": {
     "intent_hook_reply": "(hook) Doctor summary will be available later."
@@ -126,6 +126,6 @@
     "label_zh_tw": "Traditional Chinese (Taiwan)",
     "updated": "Reply language is now set to {label}.",
     "unchanged": "Replies are already in {label}.",
-    "unclear": "I'm not sure which language you want. Try something like \"switch to English\" or \"use Chinese\"."
+    "unclear": "I’m not quite sure which language you’d like — you can say something like “switch to English” or “請用中文,” and I’ll match it."
   }
 }

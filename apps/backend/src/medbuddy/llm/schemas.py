@@ -65,19 +65,21 @@ class IntentClassification(BaseModel):
 
     intent: str = Field(
         description=(
-            "One of: add_medication, list_medications, remove_medication, confirm_dose, "
+            "Exactly one of: add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
             "update_profile, update_locale, off_topic, general_question. "
-            "Do not use off_topic for brief answers about reminders, dosing, or scheduling "
-            "(e.g. once, 7 days, 一次, 三天) — use general_question or a clinical intent. "
-            "Do not use update_profile for medication side effects, symptoms, or free-form "
-            "notes for a doctor about a drug or dose — use general_question or confirm_dose "
-            "(if they took the medication) instead. "
-            "update_profile is only for how to address the user, age, gender, emergency "
-            "contact, allergies, or persistent health notes stored on the profile."
+            "Follow the system routing rules: each value maps to one assistant tool or fallback. "
+            "add_medication = save/track drug or dose reminders; explain_medication = ask what/why "
+            "about a drug without adding to list; interaction_check = combine substances; "
+            "general_question = only when no more specific intent fits."
         )
     )
-    reasoning: str = Field(description="Brief reasoning for this classification (1 sentence)")
+    reasoning: str = Field(
+        description=(
+            "One sentence: user goal + which tool/path this intent maps to (e.g. add_medication → "
+            "persist medication and reminders)."
+        )
+    )
 
 
 class ProfilePatchExtraction(BaseModel):

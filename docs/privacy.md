@@ -6,7 +6,7 @@ This document describes how MedBuddy limits **personally identifiable informatio
 
 - Avoid sending **stored** profile fields (name, raw health notes, emergency contact text, exact age) to LLMs in prompts.
 - **Mask** common direct identifiers in **user messages and chat history** before those strings are passed to an LLM (emails, typical Taiwan mobile patterns, long digit runs).
-- Parse **profile updates from chat** with **local heuristics** so those fields are not passed to an “extract JSON” model call.
+- Profile updates from chat use **structured LLM extraction** (`extract_profile_patch`) when intent is **`update_profile`**; operators should review provider terms for storing PII.
 - Keep **user-facing** replies (e.g. medication list) able to show the user **their own** stored text where the product intentionally echoes it back.
 
 ## What still goes to an LLM today
@@ -18,13 +18,12 @@ This document describes how MedBuddy limits **personally identifiable informatio
 | **Patient “context” block** | Yes, **de-identified** | Built with `build_patient_context_for_llm` in `apps/backend/src/medbuddy/prompts/persona.py`: coarse signals (e.g. “preferred name on file” without the name), **age band** (not exact age), medication list lines (drug names, dose, schedule). |
 | **Drug reference / label snippets** | Yes | From registries (e.g. OpenFDA), not end-user PII. |
 | **Intent classification** | Yes, on **redacted** user text | `run_assistant_text_turn` in `apps/backend/src/medbuddy/application/assistant_turn.py`. |
-| **Medication add / remove extraction** | Yes, on **redacted** text | `apps/backend/src/medbuddy/application/medication_intents.py`. |
-| **Profile fields from chat** | **No** (for extraction) | Parsed locally: `parse_profile_patch_from_text` in `apps/backend/src/medbuddy/privacy/profile_parse.py`. |
+| **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
+| **Profile fields from chat** | Yes, for extraction | `application/profile_intents.py` → `LLMPort.extract_profile_patch` (structured output); then **`patch_user_profile`**. |
 
 ## What is not sent to an LLM (by design)
 
 - **Raw** `preferred_name`, `health_notes`, `emergency_contact`, or **exact** `age_years` in the patient context block.
-- **Structured profile extraction** via LLM (that path was removed in favor of local parsing).
 
 ## User-facing vs model-facing context
 
@@ -52,10 +51,9 @@ Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_
 | Area | Location |
 |------|-----------|
 | Redaction | `apps/backend/src/medbuddy/privacy/redact.py` |
-| Profile parsing (no LLM) | `apps/backend/src/medbuddy/privacy/profile_parse.py` |
-| Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py`, `medication_intents.py`, `profile_intents.py` |
+| Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `agents/medication_agent.py`, `profile_intents.py`, `locale_intents.py` |
 | De-identified vs display context | `apps/backend/src/medbuddy/prompts/persona.py` |
-| Tests | `apps/backend/tests/test_privacy_redact.py`, `test_profile_parse.py`, `test_persona_llm_safe.py` |
+| Tests | `apps/backend/tests/test_privacy_redact.py`, `test_persona_llm_safe.py` |
 
 ## Operations and compliance
 

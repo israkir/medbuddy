@@ -34,7 +34,7 @@ async def test_confirm_dose_records_pending_and_replies() -> None:
     assert "marked" in r1.reply.lower() or "1" in r1.reply
 
     r2 = await tool.run(svc=svc, user_key=key, user_text="I took my meds", locale="en")
-    assert "don’t have" in r2.reply or "don't have" in r2.reply.lower()
+    assert "don’t see" in r2.reply or "don't see" in r2.reply.lower()
 
 
 @pytest.mark.asyncio

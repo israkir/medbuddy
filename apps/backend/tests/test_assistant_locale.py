@@ -6,6 +6,8 @@ import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.config import Settings
+from medbuddy.integrations.mocks.llm import MockLLM
+from medbuddy.models.domain import Intent
 
 
 @pytest.mark.asyncio
@@ -14,6 +16,7 @@ async def test_assistant_updates_locale_on_request() -> None:
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
+    svc.llm = MockLLM(intent=Intent.UPDATE_LOCALE, locale_intent="en")
     key = "U-locale-switch"
     row = await svc.users.get_or_create_user(key)
     assert row.get("locale") == "zh-TW"
@@ -26,11 +29,12 @@ async def test_assistant_updates_locale_on_request() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_locale_llm_fallback_paraphrase() -> None:
-    """Regex misses paraphrases; classifier + extract_locale_intent supplies target."""
+    """Classifier returns update_locale; extract_locale_intent supplies target locale."""
     settings = Settings(mock_external_services=True)
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
+    svc.llm = MockLLM(intent=Intent.UPDATE_LOCALE, locale_intent="en")
     key = "U-locale-paraphrase"
     await svc.users.get_or_create_user(key)
     reply = await run_assistant_text_turn(
@@ -47,6 +51,7 @@ async def test_assistant_unchanged_when_already_english() -> None:
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
+    svc.llm = MockLLM(intent=Intent.UPDATE_LOCALE, locale_intent="en")
     key = "U-locale-en"
     await svc.users.patch_user_profile(key, {"locale": "en"})
     reply = await run_assistant_text_turn(svc, user_key=key, user_text="use English")
