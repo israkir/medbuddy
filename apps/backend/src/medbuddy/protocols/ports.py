@@ -53,6 +53,12 @@ class LLMPort(Protocol):
         self, user_text: str, *, recent_context: str | None = None
     ) -> Intent: ...
 
+    async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
+        """Structured profile fields from chat (LLM). Empty dict if nothing to update."""
+
+    async def extract_dose_confirmation_note(self, user_text: str, *, locale: str) -> str | None:
+        """Optional note (side effect, context) for the dose(s) being marked taken."""
+
     async def extract_locale_intent(self, user_text: str) -> str | None:
         """If the user wants English or zh-TW replies, return ``en`` or ``zh-TW``; else ``None``."""
 
@@ -173,7 +179,23 @@ class UserDataPort(Protocol):
         self, dose_event_id: str
     ) -> DoseEventReminderPayload | None: ...
 
+    async def get_dose_event_for_nudge(
+        self,
+        dose_event_id: str,
+        *,
+        expected_nudge_count: int,
+        max_nudges: int,
+    ) -> DoseEventReminderPayload | None: ...
+
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool: ...
+
+    async def try_increment_reminder_nudge(
+        self, dose_event_id: str, *, expected_nudge_count: int
+    ) -> bool: ...
+
+    async def mark_pending_doses_taken(
+        self, line_user_id: str, *, notes: str | None = None
+    ) -> int: ...
 
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]: ...
 

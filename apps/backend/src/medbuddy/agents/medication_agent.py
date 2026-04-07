@@ -25,6 +25,7 @@ from medbuddy.agents.base import ToolResult
 from medbuddy.agents.tools.drug_lookup import ExplainMedicationTool
 from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.agents.tools.interaction_check import InteractionCheckTool
+from medbuddy.agents.tools.confirm_dose import ConfirmDoseTool
 from medbuddy.agents.tools.medication_crud import (
     AddMedicationTool,
     ListMedicationsTool,
@@ -55,11 +56,13 @@ _remove_tool = RemoveMedicationTool()
 _explain_tool = ExplainMedicationTool()
 _interaction_tool = InteractionCheckTool()
 _summary_tool = GenerateHealthSummaryTool()
+_confirm_dose_tool = ConfirmDoseTool()
 
 _TOOL_MAP: dict[Intent, Any] = {
     Intent.LIST_MEDICATIONS: _list_tool,
     Intent.ADD_MEDICATION: _add_tool,
     Intent.REMOVE_MEDICATION: _remove_tool,
+    Intent.CONFIRM_DOSE: _confirm_dose_tool,
     Intent.EXPLAIN_MEDICATION: _explain_tool,
     Intent.INTERACTION_CHECK: _interaction_tool,
     Intent.REQUEST_SUMMARY: _summary_tool,
@@ -142,6 +145,7 @@ class MedicationAgent:
                 intent=intent,
                 user_text=user_text,
                 locale=locale,
+                llm=svc.llm,
             )
 
         # 4. Dispatch to registered tool

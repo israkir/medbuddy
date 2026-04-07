@@ -40,10 +40,10 @@ def test_personalization_fingerprint_differs_by_intent() -> None:
 def test_resolve_medication_id_single_match() -> None:
     meds = [
         MedicationRecord(
-            id="m1", name="阿斯匹靈", dosage="100mg", schedule="QD", instructions_zh=None
+            id="m1", name="阿斯匹靈", dosage="100mg", schedule="QD", instructions=None
         ),
         MedicationRecord(
-            id="m2", name="metformin", dosage="500", schedule="BID", instructions_zh=None
+            id="m2", name="metformin", dosage="500", schedule="BID", instructions=None
         ),
     ]
     assert resolve_medication_id_for_personalization(meds, "解釋阿斯匹靈怎麼吃") == "m1"
@@ -51,9 +51,9 @@ def test_resolve_medication_id_single_match() -> None:
 
 def test_resolve_medication_id_ambiguous_returns_none() -> None:
     meds = [
-        MedicationRecord(id="a", name="aspirin", dosage="1", schedule="QD", instructions_zh=None),
+        MedicationRecord(id="a", name="aspirin", dosage="1", schedule="QD", instructions=None),
         MedicationRecord(
-            id="b", name="aspirin xr", dosage="2", schedule="QD", instructions_zh=None
+            id="b", name="aspirin xr", dosage="2", schedule="QD", instructions=None
         ),
     ]
     assert resolve_medication_id_for_personalization(meds, "aspirin and aspirin xr") is None

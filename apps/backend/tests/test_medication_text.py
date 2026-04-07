@@ -11,8 +11,9 @@ from httpx import ASGITransport, AsyncClient
 from medbuddy.container import build_app_services
 from medbuddy.deps import get_services
 from medbuddy.i18n import t
+from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.main import app
-from medbuddy.models.domain import MedicationRecord
+from medbuddy.models.domain import Intent, MedicationRecord
 
 
 def _headers(*, user: str = "u-med-text") -> dict[str, str]:
@@ -116,6 +117,10 @@ async def test_messages_update_profile(mock_settings) -> None:
     uid = "user-profile-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(
+        intent=Intent.UPDATE_PROFILE,
+        profile_patch={"preferred_name": "陳阿姨", "age_years": 72},
+    )
     app.dependency_overrides[get_services] = lambda: svc
     try:
         with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):

@@ -19,7 +19,7 @@ class MedicationExtraction(BaseModel):
     name: str = Field(description="Generic or brand name of the medication")
     dosage: str = Field(description="Dosage amount and unit, e.g. '10mg' or '未指定'")
     schedule: str = Field(description="Frequency/timing, e.g. '每日一次' or '未指定'")
-    instructions_zh: str | None = Field(
+    instructions: str | None = Field(
         default=None,
         description="Additional instructions from the user in their own words, or null",
     )
@@ -69,10 +69,63 @@ class IntentClassification(BaseModel):
             "explain_medication, interaction_check, log_vital, request_summary, "
             "update_profile, update_locale, off_topic, general_question. "
             "Do not use off_topic for brief answers about reminders, dosing, or scheduling "
-            "(e.g. once, 7 days, 一次, 三天) — use general_question or a clinical intent."
+            "(e.g. once, 7 days, 一次, 三天) — use general_question or a clinical intent. "
+            "Do not use update_profile for medication side effects, symptoms, or free-form "
+            "notes for a doctor about a drug or dose — use general_question or confirm_dose "
+            "(if they took the medication) instead. "
+            "update_profile is only for how to address the user, age, gender, emergency "
+            "contact, allergies, or persistent health notes stored on the profile."
         )
     )
     reasoning: str = Field(description="Brief reasoning for this classification (1 sentence)")
+
+
+class ProfilePatchExtraction(BaseModel):
+    """Profile fields extracted from a user message (all optional)."""
+
+    preferred_name: str | None = Field(
+        default=None,
+        max_length=80,
+        description="Preferred name or how to address the user; null if not stated or unclear",
+    )
+    age_years: int | None = Field(
+        default=None,
+        ge=0,
+        le=120,
+        description="Age in years if clearly stated; null otherwise",
+    )
+    gender: str | None = Field(
+        default=None,
+        description=(
+            "One of: female, male, non_binary, other, prefer_not_say — null if not stated"
+        ),
+    )
+    emergency_contact: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Family or emergency contact if clearly given; null otherwise",
+    )
+    health_notes: str | None = Field(
+        default=None,
+        max_length=1000,
+        description=(
+            "Allergies or important persistent health notes if the user is updating their "
+            "profile; null for one-off symptoms or dose-related comments"
+        ),
+    )
+
+
+class DoseConfirmationNoteExtraction(BaseModel):
+    """Note to attach when the user confirms taking a dose."""
+
+    note: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "If the user mentions a side effect, reaction, symptom, or anything to remember "
+            "for this dose (e.g. headache after taking it), capture it briefly; else null"
+        ),
+    )
 
 
 class LocaleIntentExtraction(BaseModel):

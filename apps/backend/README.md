@@ -50,7 +50,7 @@ gemini_llm    supabase_stores  drugs_http
 | **Container** | `container.py` | `build_app_services(settings)` — wires mock vs real adapters |
 | **Integrations** | `integrations/gemini_llm.py`, `integrations/openai_llm.py` | LLM adapters (`LLM_PROVIDER` selects which runs) |
 | | `integrations/line_client.py` | LINE Messaging API SDK |
-| | `integrations/supabase_stores.py` | Supabase Postgres (users, meds, turns, dose events) |
+| | `integrations/supabase_stores.py` | Supabase Postgres (patients, meds, turns, dose events) |
 | | `integrations/drugs_http.py` | OpenFDA HTTP + TFDA stub |
 | | `integrations/caching_drugs.py` | `CachingDrugData` wrapper with TTL |
 | | `integrations/supabase_drug_caches.py` | `SupabaseDrugCaches` (personalization cache) |
@@ -191,7 +191,7 @@ Intent overrides: [`src/medbuddy/extensibility/intent_hooks.py`](src/medbuddy/ex
 
 ## LINE dose reminders (prototype)
 
-When **Supabase** is configured, successful add/remove medication calls `sync_upcoming_dose_events`: future `dose_events` rows are rebuilt (once daily at `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`, in the **`users.timezone`** IANA column — default **`Asia/Taipei`** at insert; standalone **`POST /v1/app/onboarding`** sets **`timezone`**; **`patch_user_profile`** can update it) for `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, max 90). With **`REDIS_URL`** set and `[reminders]` installed, the API enqueues `send_reminder_for_dose` arq jobs.
+When **Supabase** is configured, successful add/remove medication calls `sync_upcoming_dose_events`: future `dose_events` rows are rebuilt (once daily at `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`, in the **`patients.timezone`** IANA column — default **`Asia/Taipei`** at insert; standalone **`POST /v1/app/onboarding`** sets **`timezone`**; **`patch_user_profile`** can update it) for `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, max 90). With **`REDIS_URL`** set and `[reminders]` installed, the API enqueues `send_reminder_for_dose` arq jobs.
 
 The repo-root `Dockerfile` runs [`docker-entrypoint-web.sh`](../../docker-entrypoint-web.sh): **uvicorn** + **`arq medbuddy.reminders.worker.WorkerSettings`** when `REDIS_URL` is non-empty.
 

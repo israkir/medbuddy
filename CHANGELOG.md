@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Profile & dose LLM extraction**: **`LLMPort.extract_profile_patch`** and **`extract_dose_confirmation_note`** (structured outputs on OpenAI and Gemini). Chat profile updates no longer use regex **`parse_profile_patch_from_text`** (removed). **`dose_events.notes`** stores an optional note when the user confirms a dose and reports side effects or context; **`ConfirmDoseTool`** passes **`user_text`** through the note extractor. Shared **`map_intent_label`** lives in **`medbuddy/llm/intent_map.py`**. Locale switches from chat use **`extract_locale_intent`** only when intent is **`update_locale`** (regex fast path removed from **`try_locale_change_reply`**).
+- **Gemini intent classification**: **`classify_intent`** uses structured **`IntentClassification`** (same contract as OpenAI) instead of free-text label parsing.
+- **LINE dose reminders — nudges**: Optional follow-up pushes after the primary reminder, chained via deferred **arq** jobs (**`send_reminder_nudge`**). Intervals are configured with **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** (comma-separated minutes between consecutive pushes). **`dose_events`** gains **`reminder_nudge_count`** and **`last_nudge_at`**; nudges stop after the last interval, when the user marks doses taken, or at end of the local calendar day of the scheduled dose. Locale keys **`reminder.line_push_nudge`** (**`en`**, **`zh-TW`**).
+- **Adherence — chat confirmation**: **`Intent.confirm_dose`** is handled by **`ConfirmDoseTool`**, which sets **`taken_at`** on the user’s most recent past pending dose instant (all medications scheduled at that time). Copy via **`medication.confirm_dose_recorded`** / **`medication.confirm_dose_none`**. Mock LLM maps short phrases (e.g. 吃了 / “I took”) to **`confirm_dose`** for tests.
 - **Assistant**: **`Intent.off_topic`** — classifier labels clearly non-medical chit-chat; **`MedicationAgent`** returns a localized refusal (**`agent.off_topic`**) without **`compose_reply`**.
 - **User locale**: Supabase **`users.locale`** (`en` | `zh-TW`, default **`zh-TW`**); **`medbuddy.user_locale`** helpers; **`POST /v1/app/onboarding`** accepts **`locale`**; **`GET /v1/app/me`** returns **`locale`**. Standalone app onboarding includes a language choice (syncs with **`setAppLanguage`**); **`patch_user_profile`** may update **`locale`**.
 - **User timezone**: Shared helpers in **`medbuddy.user_timezone`** (default **`Asia/Taipei`**); **`POST /v1/app/onboarding`** accepts optional **`timezone`** (validated IANA); **`GET /v1/app/me`** returns **`timezone`**. Supabase **`users.timezone`** column comment documents reminder use (existing default **`Asia/Taipei`**).
@@ -24,7 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Assistant locale**: Replies, tool copy, and LLM prompts use **`users.locale`** (`effective_user_locale`) instead of the global **`MEDBUDDY_LOCALE`** default alone. Users can switch reply language from chat: a **regex fast path** handles common phrases; if that misses and intent classification returns **`update_locale`**, **`extract_locale_intent`** (structured LLM) resolves **`en`** vs **`zh-TW`**, with a clarifying message when still ambiguous. **`MedicationAgent`** persists **`locale`** via **`patch_user_profile`** and acknowledges in the new language. LINE **`follow`** welcome and LINE **dose reminder** pushes use the user’s stored locale. **`GET /v1/app/summary`** uses the same per-user locale for the health-summary tool.
+- **Supabase**: End-user profile table **`public.users`** → **`public.patients`** (room for other user kinds later). Child tables use **`patient_id`** instead of **`user_id`** (`medications`, `conversation_turns`, `dose_events`, `drug_personalization_cache`). Policy **`medbuddy_patients_anon_rw`**; **`SupabaseUserData`** / **`SupabaseDrugCaches`** target the new names.
+- **Schema**: Medications column and domain field **`instructions`** replace **`instructions_zh`** (same meaning: optional user notes from extraction). **`apps/backend/supabase/schema.sql`** is a **greenfield** definition (new projects); upgrading existing databases requires separate migrations.
+- **Assistant locale**: Replies, tool copy, and LLM prompts use **`users.locale`** (`effective_user_locale`) instead of the global **`MEDBUDDY_LOCALE`** default alone. Users can switch reply language from chat when classification returns **`update_locale`** and **`extract_locale_intent`** (structured LLM) resolves **`en`** vs **`zh-TW`**, with a clarifying message when still ambiguous. **`MedicationAgent`** persists **`locale`** via **`patch_user_profile`** and acknowledges in the new language. LINE **`follow`** welcome and LINE **dose reminder** pushes use the user’s stored locale. **`GET /v1/app/summary`** uses the same per-user locale for the health-summary tool.
 - **Profile / reminders**: **`users.timezone`** (IANA, default **`Asia/Taipei`** in Supabase) is set on **`POST /v1/app/onboarding`** (optional **`timezone`**; standalone app sends the device zone) and drives **`dose_events`** scheduling and LINE reminder clock text. **`GET /v1/app/me`** includes **`timezone`**. **`MEDBUDDY_REMINDER_TIMEZONE`** was removed; use per-user **`users.timezone`** (and **`patch_user_profile`** / **`timezone`**) for travel.
 - **Deploy**: **`render.yaml`** blueprint default **`LLM_PROVIDER`** is **`openai`** (set **`OPENAI_API_KEY`** in Render secrets; use **`gemini`** here if the service should use **`GEMINI_API_KEY`** instead).
 - **Deploy**: Repo-root **`Dockerfile`** runs **uvicorn** and the **arq** reminder worker in one container when **`REDIS_URL`** is set ([`docker-entrypoint-web.sh`](docker-entrypoint-web.sh)). **`render.yaml`** defines **`medbuddy-api`** only. Compose **`reminders`** profile: **Redis** + **`medbuddy-api`** only. Removed duplicate **`Dockerfile.reminder-worker`**; optional scale-out uses the **same** image with **`arq medbuddy.reminders.worker.WorkerSettings`** start command and **uvicorn-only** on the API (never run arq in both).
@@ -74,10 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Supabase `drug_reference_cache`**: global table to cache drug usage / label text
   (`source`, `query_key`, `title`, `usage_text`, optional indication/dosing/warning fields,
   `raw_payload`, `fetched_at`, `expires_at`) with RLS for `anon`, matching other MedBuddy tables.
-- **Supabase `drug_personalization_cache`**: per-user cache for **LLM-personalized** explanations
-  (`user_id`, optional `medication_id`, optional `reference_cache_id`, `query_fingerprint`,
+- **Supabase `drug_personalization_cache`**: per-patient cache for **LLM-personalized** explanations
+  (`patient_id`, optional `medication_id`, optional `reference_cache_id`, `query_fingerprint`,
   `intent`, `personalized_text`, `locale`, `llm_meta`, timestamps, `expires_at`) with unique
-  `(user_id, query_fingerprint)` and RLS for `anon`.
+  `(patient_id, query_fingerprint)` and RLS for `anon`.
 - **Drug cache wiring**: With Supabase configured, **`CachingDrugData`** backs
   **`drug_reference_cache`** (read-through for TFDA/OpenFDA snippets; TTL
   **`MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS`**). **`run_assistant_text_turn`** uses
@@ -88,7 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Medication comprehension prototype (Expo)**: Home links to **Medication helper** (`app/companion.tsx`) — chat with **Read aloud**, large type, suggested questions, and optional **`POST /v1/app/messages`** when `EXPO_PUBLIC_USE_MOCK_DATA` is false (headers `X-App-User-Id`, optional bearer). Offline mode uses i18n mock explanations (purpose / timing / interactions).
 - **Assistant prompts**: For `explain_medication` and `interaction_check` intents, `run_assistant_text_turn` appends locale-specific **companion** instructions so replies emphasize purpose, timing rationale, and interaction cautions without replacing clinical advice.
 - **`docs/use-cases.md`**: Documents implemented channels, assistant intents (including drug-cache behavior and **add-medication** grounding), Supabase layers, and Expo companion notes.
-- **Supabase `dose_events`**: `user_id`, `medication_id`, `scheduled_at`, optional `taken_at`, with RLS
+- **Supabase `dose_events`**: `patient_id`, `medication_id`, `scheduled_at`, optional `taken_at`, with RLS
   policy for `anon` (see `apps/backend/supabase/schema.sql`).
 - **Text medication management** in the assistant (`list_medications`, `add_medication`, `remove_medication` intents): parse fields via LLM (Gemini JSON) or mock heuristics, persist with **`UserDataPort.add_medication` / `delete_medication`** (in-memory mock + Supabase). Wired in **`application/medication_intents.py`** for LINE and **`POST /v1/app/messages`**.
 - **Add-medication acknowledgment**: After save, reload patient list, fetch **`DrugDataPort`** snippets for the new drug name, and call **`LLMPort.compose_medication_added_reply`** (Gemini + i18n task strings; mocks use **`mocks.llm.medication_added`**) so the reply restates schedule, adds brief grounded context, and falls back to **`medication.added`** if compose fails. Does **not** use **`drug_personalization_cache`** (that remains for explain/interaction only).
@@ -96,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   log verbosity; LINE webhook and orchestrator emit structured INFO logs (event types, flow steps,
   reply sizes) without logging raw message text. Render blueprint sets `LOG_LEVEL=INFO`.
 - **Assistant turn logs**: each `run_assistant_text_turn` logs `user_key`, `med_count`, and one flat
-  line per saved medication (`id`, name, dosage, schedule, `instructions_zh`).
+  line per saved medication (`id`, name, dosage, schedule, `instructions`).
 - Dependency **`line-bot-sdk==3.22.0`**; LINE channel uses **`WebhookParser`** / **`SignatureValidator`**
   on **`POST /v1/line/webhook`**, and **`LineHttpClient`** uses **`AsyncMessagingApi`** /
   **`AsyncMessagingApiBlob`** for replies and message content download.

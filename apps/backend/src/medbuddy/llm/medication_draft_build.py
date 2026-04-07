@@ -33,7 +33,7 @@ def medication_draft_from_extraction(
         name=name,
         dosage=extracted.dosage.strip() or unspecified,
         schedule=extracted.schedule.strip() or unspecified,
-        instructions_zh=extracted.instructions_zh,
+        instructions=extracted.instructions,
         first_reminder_in_minutes=fm,
         materialize_daily_reminders=extracted.materialize_daily_reminders,
         reminder_horizon_days=hd,

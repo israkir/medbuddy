@@ -67,4 +67,4 @@ Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_
 
 - Named-entity masking or dedicated **de-identification** service before LLM calls.
 - Stricter separation: **no** user free text to cloud LLM for certain intents; template-only or on-device models.
-- Field-level encryption at rest for `users` and conversation tables, plus access auditing.
+- Field-level encryption at rest for `patients` and conversation tables, plus access auditing.

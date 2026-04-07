@@ -61,7 +61,7 @@ class MedicationDraft:
     name: str
     dosage: str
     schedule: str
-    instructions_zh: str | None = None
+    instructions: str | None = None
     # Reminder materialization (see medications.raw_metadata["reminder"] when saved)
     first_reminder_in_minutes: int | None = None
     materialize_daily_reminders: bool = True
@@ -76,7 +76,7 @@ class MedicationRecord:
     name: str
     dosage: str
     schedule: str
-    instructions_zh: str | None = None
+    instructions: str | None = None
     raw_metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -92,6 +92,7 @@ class DoseEventReminderPayload:
     scheduled_at: datetime
     user_timezone: str
     user_locale: str
+    is_nudge: bool = False
 
 
 @dataclass

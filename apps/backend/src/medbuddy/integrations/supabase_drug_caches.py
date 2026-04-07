@@ -138,7 +138,7 @@ class SupabaseDrugCaches(DrugCachesPort):
             return (
                 self._client.table("drug_personalization_cache")
                 .select("personalized_text, expires_at")
-                .eq("user_id", user_uuid)
+                .eq("patient_id", user_uuid)
                 .eq("query_fingerprint", query_fingerprint)
                 .limit(1)
                 .execute()
@@ -177,7 +177,7 @@ class SupabaseDrugCaches(DrugCachesPort):
         if ttl_h > 0:
             expires_at = (now + timedelta(hours=ttl_h)).isoformat()
         row: dict[str, Any] = {
-            "user_id": user_uuid,
+            "patient_id": user_uuid,
             "query_fingerprint": query_fingerprint,
             "intent": intent,
             "personalized_text": personalized_text,
@@ -192,7 +192,7 @@ class SupabaseDrugCaches(DrugCachesPort):
         def q() -> Any:
             return (
                 self._client.table("drug_personalization_cache")
-                .upsert(row, on_conflict="user_id,query_fingerprint")
+                .upsert(row, on_conflict="patient_id,query_fingerprint")
                 .execute()
             )
 

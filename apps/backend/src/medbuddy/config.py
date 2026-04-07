@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -191,6 +191,38 @@ class Settings(BaseSettings):
         description="Calendar days ahead to materialize dose_events per medication",
         validation_alias=AliasChoices("MEDBUDDY_REMINDER_HORIZON_DAYS", "reminder_horizon_days"),
     )
+
+    reminder_nudge_intervals_minutes: list[int] = Field(
+        default_factory=list,
+        description=(
+            "After the primary LINE reminder, optional follow-up nudges: each value is minutes "
+            "to wait after the previous reminder/nudge before sending the next (comma-separated env). "
+            "Empty list disables nudges."
+        ),
+        validation_alias=AliasChoices(
+            "MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES",
+            "reminder_nudge_intervals_minutes",
+        ),
+    )
+
+    @field_validator("reminder_nudge_intervals_minutes", mode="before")
+    @classmethod
+    def _parse_reminder_nudge_intervals(cls, v: Any) -> list[int]:
+        if v is None or v == "":
+            return []
+        if isinstance(v, list):
+            return [max(1, int(x)) for x in v]
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            out: list[int] = []
+            for part in s.split(","):
+                p = part.strip()
+                if p:
+                    out.append(max(1, int(p)))
+            return out
+        return []
 
     @model_validator(mode="after")
     def _apply_integration_switch(self) -> Self:

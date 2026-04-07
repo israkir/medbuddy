@@ -9,7 +9,7 @@ from arq.connections import RedisSettings
 
 from medbuddy.config import get_settings
 from medbuddy.container import build_app_services
-from medbuddy.reminders.deliver import deliver_dose_reminder
+from medbuddy.reminders.deliver import deliver_dose_reminder, deliver_dose_reminder_nudge
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -27,6 +27,13 @@ async def send_reminder_for_dose(ctx: dict[str, Any], dose_event_id: str) -> Non
     await deliver_dose_reminder(svc, dose_event_id)
 
 
+async def send_reminder_nudge(
+    ctx: dict[str, Any], dose_event_id: str, expected_nudge_count: int
+) -> None:
+    svc = ctx["services"]
+    await deliver_dose_reminder_nudge(svc, dose_event_id, expected_nudge_count)
+
+
 def _redis_settings() -> RedisSettings:
     # Prefer process env so the worker does not depend on Settings redis_url at import time.
     url = (os.environ.get("REDIS_URL") or get_settings().redis_url or "").strip()
@@ -40,4 +47,4 @@ class WorkerSettings:
     redis_settings = _redis_settings()
     on_startup = startup
     on_shutdown = shutdown
-    functions = [send_reminder_for_dose]
+    functions = [send_reminder_for_dose, send_reminder_nudge]
