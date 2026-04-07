@@ -58,7 +58,7 @@ Start with **[`docs/index.md`](docs/index.md)** — it lists every major doc, **
 
 | If you want… | Open |
 |--------------|------|
-| System design, API reference, deployment | [`docs/tdd.md`](docs/tdd.md) |
+| System design, API reference, deployment | [`docs/tdd.md`](docs/tdd.md) (brief), [`docs/tdd-extended.md`](docs/tdd-extended.md) (full) |
 | Backend env, package layout, deploy | [`apps/backend/README.md`](apps/backend/README.md) |
 | Expo app (reference / future client) | [`docs/frontend-expo.md`](docs/frontend-expo.md) → [`apps/frontend/README.md`](apps/frontend/README.md) |
 | Production checklist | [`TODO.md`](TODO.md) |
@@ -68,22 +68,28 @@ Start with **[`docs/index.md`](docs/index.md)** — it lists every major doc, **
 
 ### LINE messaging
 
-Today’s patient-facing experience is built around **LINE**: chat with the medication helper, voice notes, and dose reminders delivered on the channel. The image below is a view of that flow.
+Today’s patient-facing experience is built around **LINE**: chat with the medication helper, voice notes, and dose reminders delivered on the channel. Below are a few views of that flow.
 
 <p align="center">
-  <img src="assets/line.jpg" alt="Illustration: MedBuddy medication helper chat in LINE" width="320">
+  <img src="assets/screenshots/line-1.jpg" alt="MedBuddy medication helper chat in LINE (1)" width="260">
+  &nbsp;
+  <img src="assets/screenshots/line-2.jpg" alt="MedBuddy medication helper chat in LINE (2)" width="260">
+  &nbsp;
+  <img src="assets/screenshots/line-3.jpg" alt="MedBuddy medication helper chat in LINE (3)" width="260">
 </p>
+
+<p align="center"><a href="docs/features.md#11-line-messaging-api">More LINE screenshots</a> in the feature catalog (§1.1).</p>
 
 ### Standalone mobile app (concept)
 
 The repo today centers on LINE and the HTTP API; a **dedicated mobile client** is a product direction, not a shipped guarantee. The screens below are **concept-only** mockups to illustrate that idea—not screenshots of a production app.
 
 <p align="center">
-  <img src="assets/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">
+  <img src="assets/screenshots/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">
   &nbsp;
-  <img src="assets/mobile-2.png" alt="Concept: standalone app secondary flow" width="260">
+  <img src="assets/screenshots/mobile-2.png" alt="Concept: standalone app secondary flow" width="260">
   &nbsp;
-  <img src="assets/mobile-3.png" alt="Concept: standalone app detail or settings" width="260">
+  <img src="assets/screenshots/mobile-3.png" alt="Concept: standalone app detail or settings" width="260">
 </p>
 
 ---

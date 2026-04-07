@@ -82,7 +82,7 @@ To add a language: add `locales/<lang>.json`, import it in `i18n/index.ts`, add 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | **expo-speech** | Implemented | "Listen" for medication explanations (zh-TW / en-US follows app language) |
-| **expo-av** | Prototype | Hold-to-talk recording; shows alert after recording — not wired to backend STT (LINE voice is the primary voice path) |
+| **expo-av** | Implemented | Hold-to-talk recording uploads to `POST /v1/app/messages/voice`; successful turns show transcript + reply and then on-device read-aloud via expo-speech |
 | **AsyncStorage** | Implemented | Language preference, visit notes draft, doctor summary draft |
 | **Backend API** | Conditional | Enabled when `EXPO_PUBLIC_USE_MOCK_DATA=false`; uses `companionApi.ts` |
 
