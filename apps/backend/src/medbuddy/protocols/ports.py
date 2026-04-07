@@ -50,7 +50,13 @@ class SpeechToTextPort(Protocol):
 
 @runtime_checkable
 class TextToSpeechPort(Protocol):
-    async def synthesize_to_m4a_url(self, text: str, base_public_url: str) -> tuple[str, int]: ...
+    async def synthesize_to_m4a_url(
+        self,
+        text: str,
+        base_public_url: str,
+        *,
+        language_code: str | None = None,
+    ) -> tuple[str, int]: ...
 
 
 @runtime_checkable
