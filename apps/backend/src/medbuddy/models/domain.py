@@ -22,6 +22,7 @@ __all__ = [
     "MedicationDraft",
     "MedicationRecord",
     "MessageKind",
+    "TurnInterpretation",
 ]
 
 
@@ -38,6 +39,16 @@ class Intent(str, Enum):
     UPDATE_LOCALE = "update_locale"
     OFF_TOPIC = "off_topic"
     GENERAL_QUESTION = "general_question"
+
+
+@dataclass(frozen=True)
+class TurnInterpretation:
+    """Single structured read of a user line: intent plus adherence slots for mechanical dispatch."""
+
+    intent: Intent
+    reasoning: str
+    record_pending_dose_as_taken: bool
+    dose_adherence_note: str | None
 
 
 class MessageKind(str, Enum):

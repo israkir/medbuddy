@@ -11,13 +11,16 @@ from medbuddy.models.domain import Intent
 
 
 @pytest.mark.asyncio
-async def test_openai_classify_intent_uses_structured_parse(
+async def test_openai_interpret_user_turn_uses_structured_parse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from medbuddy.integrations import openai_llm as mod
 
     classification = IntentClassification(
-        intent="list_medications", reasoning="user asked for list"
+        intent="list_medications",
+        reasoning="user asked for list",
+        record_pending_dose_as_taken=False,
+        dose_adherence_note=None,
     )
 
     class FakeMsg:
@@ -36,8 +39,10 @@ async def test_openai_classify_intent_uses_structured_parse(
     monkeypatch.setattr(mod, "_OpenAIClient", lambda **kw: fake_client)
 
     llm = mod.OpenAILLM(api_key="sk-test", locale="en")
-    intent = await llm.classify_intent("what medications do I have")
-    assert intent == Intent.LIST_MEDICATIONS
+    turn = await llm.interpret_user_turn("what medications do I have")
+    assert turn.intent == Intent.LIST_MEDICATIONS
+    assert turn.record_pending_dose_as_taken is False
+    assert turn.dose_adherence_note is None
     fake_client.chat.completions.parse.assert_called_once()
 
 

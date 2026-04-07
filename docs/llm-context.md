@@ -14,7 +14,7 @@ Used on the **current turn** before many LLM calls. Pattern-based masking for em
 
 ### Conversation history redaction (`redact_conversation_turns_for_llm`)
 
-Maps each turn’s `content` through `redact_pii_text`. Used wherever tools pass **history** into `compose_reply` and for **intent classification** recent context.
+Maps each turn’s `content` through `redact_pii_text`. Used wherever tools pass **history** into `compose_reply` and for **`interpret_user_turn`** recent context.
 
 **Exception:** `generate_health_summary` currently embeds **last 20 conversation turns without this redaction step** in the Gemini/OpenAI adapters (see below)—treat as higher sensitivity.
 
@@ -44,13 +44,13 @@ Prompts are assembled with localized headers and instructions from `apps/backend
 
 Implementation reference: `apps/backend/src/medbuddy/protocols/ports.py` (`LLMPort`). Concrete adapters: `integrations/gemini_llm.py`, `integrations/openai_llm.py` (same contract).
 
-### `classify_intent`
+### `interpret_user_turn`
 
 | Input | Redaction / notes |
 |--------|-------------------|
 | Current user message | **Redacted** (`safe_text` in `MedicationAgent`). |
 | `recent_context` | Last few turns formatted as `role: content` after **redaction** (`_recent_context_for_intent` → `redact_conversation_turns_for_llm`). |
-| Prompt body | `format_intent_classification_prompt` (`medbuddy/llm/intent_classification_prompt.py`); structured JSON output → `Intent`. |
+| Prompt + schema | `format_intent_classification_prompt` (`medbuddy/llm/intent_classification_prompt.py`) + pydantic **`IntentClassification`** (`medbuddy/llm/schemas.py`): **`intent`**, **`reasoning`**, **`record_pending_dose_as_taken`**, **`dose_adherence_note`**. Adapters map the parse to **`TurnInterpretation`** (`medbuddy/llm/turn_interpretation.py` → `medbuddy/models/domain.py`). **`MedicationAgent`** uses **`intent`** for routing and passes adherence fields into **`ConfirmDoseTool`** when applicable. |
 
 ### `compose_reply`
 
@@ -110,12 +110,6 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 | Input | Redaction / notes |
 |--------|-------------------|
 | User message | **Raw** `user_text` in `try_locale_change_reply`. Short prompt for locale resolution. |
-
-### `extract_dose_confirmation_note`
-
-| Input | Redaction / notes |
-|--------|-------------------|
-| User message | **Raw** `user_text` in `ConfirmDoseTool` (side-effect / context note extraction). |
 
 ### `generate_health_summary`
 

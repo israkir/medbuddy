@@ -1,14 +1,15 @@
-"""MedicationAgent — intent-to-tool orchestrator.
+"""MedicationAgent — structured turn interpretation → tool orchestrator.
 
-Replaces the monolithic ``run_assistant_text_turn`` dispatch block with a
-clean tool-dispatch table.  Each ``Intent`` maps to exactly one ``AgentTool``;
-unhandled intents fall back to a free-form LLM ``compose_reply``.
+Each ``Intent`` maps to at most one ``AgentTool``; adherence-sensitive tools also
+consume slots from :class:`~medbuddy.models.domain.TurnInterpretation` (e.g.
+whether to record ``taken_at`` on a pending dose). Unhandled intents fall back
+to ``compose_reply``.
 
 Flow
 ----
 1. Load user context (profile + medications) and recent conversation turns in parallel.
-2. Classify intent via ``svc.llm.classify_intent(..., recent_context=...)``.
-3. Locale change, hooks, then ``off_topic`` (fixed refusal), profile regex, tools, or
+2. ``svc.llm.interpret_user_turn(..., recent_context=...)`` — intent + structured slots.
+3. Locale change, hooks, then ``off_topic`` (fixed refusal), profile update, tools, or
    ``compose_reply`` fallback.
 4. Persist both turns to conversation store.
 5. Optionally cache LLM-composed replies for EXPLAIN / INTERACTION intents.
@@ -37,7 +38,7 @@ from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedBuddyError
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
 from medbuddy.i18n import t
-from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
+from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord, TurnInterpretation
 from medbuddy.privacy.redact import (
     redact_conversation_turns_for_llm,
     redact_pii_text,
@@ -69,6 +70,11 @@ _TOOL_MAP: dict[Intent, Any] = {
 }
 
 
+def _confirm_dose_should_run(interpretation: TurnInterpretation) -> bool:
+    """Run adherence tool only when the model set an actionable adherence slot."""
+    return interpretation.record_pending_dose_as_taken or bool(interpretation.dose_adherence_note)
+
+
 class MedicationAgent:
     """Stateless agent — create once, call ``run()`` per conversation turn."""
 
@@ -98,11 +104,14 @@ class MedicationAgent:
             svc.conversations.get_recent_turns(user_key, svc.settings.conversation_history_turns),
         )
         recent_ctx = _recent_context_for_intent(history)
-        intent = await svc.llm.classify_intent(safe_text, recent_context=recent_ctx)
+        interpretation = await svc.llm.interpret_user_turn(safe_text, recent_context=recent_ctx)
+        intent = interpretation.intent
         log.info(
-            "medication_agent: user_key=%s intent=%s med_count=%d user_chars=%d",
+            "medication_agent: user_key=%s intent=%s record_dose=%s has_note=%s med_count=%d user_chars=%d",
             user_key,
             intent.name,
+            interpretation.record_pending_dose_as_taken,
+            interpretation.dose_adherence_note is not None,
             len(medications),
             len(user_text),
         )
@@ -152,17 +161,33 @@ class MedicationAgent:
         if reply is None:
             tool = _TOOL_MAP.get(intent)
             if tool is not None:
-                result = await _run_tool_safe(
-                    tool,
-                    svc=svc,
-                    user_key=user_key,
-                    user_text=user_text,
-                    user_row=user_row,
-                    medications=medications,
-                    history=history,
-                    locale=locale,
-                )
-                reply = result.reply
+                if tool is _confirm_dose_tool and not _confirm_dose_should_run(interpretation):
+                    reply = await _compose_fallback_reply(
+                        svc,
+                        intent=Intent.GENERAL_QUESTION,
+                        user_row=user_row,
+                        medications=medications,
+                        history=history,
+                        safe_text=safe_text,
+                        locale=locale,
+                    )
+                else:
+                    tool_kwargs: dict[str, Any] = dict(
+                        svc=svc,
+                        user_key=user_key,
+                        user_text=user_text,
+                        user_row=user_row,
+                        medications=medications,
+                        history=history,
+                        locale=locale,
+                    )
+                    if tool is _confirm_dose_tool:
+                        tool_kwargs["record_pending_dose_as_taken"] = (
+                            interpretation.record_pending_dose_as_taken
+                        )
+                        tool_kwargs["dose_adherence_note"] = interpretation.dose_adherence_note
+                    result = await _run_tool_safe(tool, **tool_kwargs)
+                    reply = result.reply
             else:
                 # 5. Free-form LLM fallback for unhandled intents
                 reply = await _compose_fallback_reply(

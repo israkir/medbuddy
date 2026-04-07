@@ -71,7 +71,7 @@ class RemovalResolution(BaseModel):
 
 
 class IntentClassification(BaseModel):
-    """Classified intent for a user message."""
+    """Structured routing decision for one user message (intent + adherence slots)."""
 
     intent: str = Field(
         description=(
@@ -89,6 +89,27 @@ class IntentClassification(BaseModel):
             "One sentence: user goal + which tool/path this intent maps to (e.g. add_medication → "
             "persist medication and reminders)."
         )
+    )
+    record_pending_dose_as_taken: bool = Field(
+        default=False,
+        description=(
+            "True only if the user clearly states they took/completed the scheduled medication dose "
+            "now (e.g. swallowed the pill, injected, 吃了, took it, done). The server will use this "
+            "to set adherence on the pending dose — do not set True for gratitude, general symptoms, "
+            "or yes/no about pain unless the assistant’s last message explicitly asked whether they "
+            "had taken that dose. False for all other intents unless the same message also clearly "
+            "records taking a dose."
+        ),
+    )
+    dose_adherence_note: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "If record_pending_dose_as_taken is True, optional note for the dose row (side effect, "
+            "context for clinician). If False but the user is following up to log something on their "
+            "most recent taken dose (e.g. symptom after taking), put that text here; else null. "
+            "Null for general symptoms or chit-chat not meant as a dose log entry."
+        ),
     )
 
 
@@ -123,20 +144,6 @@ class ProfilePatchExtraction(BaseModel):
         description=(
             "Allergies or important persistent health notes if the user is updating their "
             "profile; null for one-off symptoms or dose-related comments"
-        ),
-    )
-
-
-class DoseConfirmationNoteExtraction(BaseModel):
-    """Note to attach to a dose (same message or a follow-up after they confirmed)."""
-
-    note: str | None = Field(
-        default=None,
-        max_length=500,
-        description=(
-            "If the user mentions a side effect, reaction, symptom, or anything to remember "
-            "for this dose (e.g. headache after taking it), including in a follow-up message; "
-            "else null"
         ),
     )
 

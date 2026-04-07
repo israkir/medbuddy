@@ -28,7 +28,7 @@ See the per-app READMEs for day-to-day development details.
 │      application/assistant_turn()            │
 │              ↓                               │
 │         agents/MedicationAgent               │
-│    (intent → tool dispatch)                  │
+│    (interpret turn → tools)                  │
 │              ↓                               │
 │   protocols/ports (hexagonal boundary)       │
 │      ↓           ↓          ↓                │
@@ -119,6 +119,7 @@ Full API reference: [`docs/architecture.md#api-reference`](docs/architecture.md#
 | Resource | What you'll find |
 |----------|------------------|
 | [`docs/architecture.md`](docs/architecture.md) | **Technical design document** — architecture, data model, API reference, integrations, security |
+| [`docs/PRD.md`](docs/PRD.md) | **Product requirements** — vision, goals, personas, functional/non-functional requirements, roadmap hints |
 | [`docs/features.md`](docs/features.md) | Product features at a glance (LINE, HTTP API, assistant, caching, reminders) |
 | [`docs/use-cases.md`](docs/use-cases.md) | Narrated flows, example utterances, channels, intents |
 | [`docs/frontend-expo.md`](docs/frontend-expo.md) | **Reference / future:** Expo app only (not mixed with primary LINE + backend docs) |

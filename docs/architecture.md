@@ -177,8 +177,9 @@ apps/backend/src/medbuddy/
 │   └── persona.py              # get_system_persona(), build_patient_context_for_llm()
 │
 ├── llm/
-│   ├── schemas.py              # Pydantic models for structured LLM outputs
-│   └── intent_classification_prompt.py  # Shared classify_intent instructions (OpenAI + Gemini)
+│   ├── schemas.py              # Pydantic models for structured LLM outputs (IntentClassification, …)
+│   ├── intent_classification_prompt.py  # Shared interpret_user_turn prompt body (OpenAI + Gemini)
+│   └── turn_interpretation.py   # IntentClassification → TurnInterpretation
 │
 ├── reminders/
 │   ├── worker.py               # arq WorkerSettings
@@ -219,7 +220,7 @@ channels/line/orchestrator.py
 application/assistant_turn.py
     │ run_assistant_text_turn(user_key=line_user_id, user_text)
     │   delegates to agents/medication_agent.py — MedicationAgent.run()
-    │   (load profile + meds + history → classify_intent on redacted text + recent context
+    │   (load profile + meds + history → interpret_user_turn on redacted text + recent context
     │    → persist user turn → locale / hooks / off_topic / profile / tool dispatch
     │    or compose_reply fallback → persist assistant turn)
     ▼
@@ -303,7 +304,7 @@ reminders/deliver.py
 
 ## 5. Agent layer
 
-`MedicationAgent` (`agents/medication_agent.py`) implements the agent-dispatch pattern. Given a classified intent and execution context, it selects and runs the appropriate `AgentTool`.
+`MedicationAgent` (`agents/medication_agent.py`) implements the agent-dispatch pattern. Given a **`TurnInterpretation`** from **`interpret_user_turn`** and execution context, it selects and runs the appropriate `AgentTool`, passing adherence slots into **`ConfirmDoseTool`** when applicable.
 
 ### 5.1 Tool registry
 
@@ -315,7 +316,7 @@ reminders/deliver.py
 | `ExplainMedicationTool` | `explain_medication` | Personalization cache check → `DrugDataPort` reference fetch → `compose_reply()` → cache save |
 | `InteractionCheckTool` | `interaction_check` | Same as explain with interaction-focused system prompt |
 | `GenerateHealthSummaryTool` | `request_summary` | Aggregate patient context + history → structured LLM output |
-| `ConfirmDoseTool` | `confirm_dose` | Mark `taken_at` on eligible `dose_events` → i18n confirmation |
+| `ConfirmDoseTool` | `confirm_dose` | Apply `record_pending_dose_as_taken` / `dose_adherence_note` from interpretation → i18n confirmation |
 
 ### 5.2 Tool interface
 
@@ -334,17 +335,17 @@ class ToolResult:
 
 Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`, `history`, `locale`, etc. (see each tool’s `run()` signature).
 
-### 5.3 Intent classification flow
+### 5.3 Turn interpretation and dispatch
 
-Structured **`IntentClassification`** (shared prompt in `llm/intent_classification_prompt.py`) drives routing. After **`classify_intent`**, **`MedicationAgent`** applies locale change first, then hooks, fixed off-topic copy, profile update, tool dispatch, or **`compose_reply`** fallback.
+Structured **`IntentClassification`** (shared prompt in `llm/intent_classification_prompt.py`) is parsed once per user line; adapters produce **`TurnInterpretation`** (`intent`, `reasoning`, **`record_pending_dose_as_taken`**, **`dose_adherence_note`**). **`MedicationAgent`** applies locale change first, then hooks, fixed off-topic copy, profile update, tool dispatch, or **`compose_reply`** fallback.
 
 ```
 user_text
     │
     ▼ redact_pii_text(); load user + medications + recent turns
     │
-    ▼ LLMPort.classify_intent(redacted_text, recent_context=…)
-Intent enum value
+    ▼ LLMPort.interpret_user_turn(redacted_text, recent_context=…)
+TurnInterpretation (intent + adherence slots)
     │
     ├── update_locale     → try_locale_change_reply() → extract_locale_intent (LLM) → patch locale
     ├── (else) try_intent_hooks → optional short-circuit
@@ -353,7 +354,7 @@ Intent enum value
     ├── list_medications  → ListMedicationsTool
     ├── add_medication    → AddMedicationTool
     ├── remove_medication → RemoveMedicationTool
-    ├── confirm_dose      → ConfirmDoseTool
+    ├── confirm_dose      → if adherence slots set → ConfirmDoseTool(slots); else compose_reply fallback
     ├── explain_medication → ExplainMedicationTool
     ├── interaction_check → InteractionCheckTool
     ├── request_summary   → GenerateHealthSummaryTool
@@ -628,21 +629,29 @@ Both implement the same **`LLMPort`** contract. **Install:** `pip install 'medbu
 
 ### 8.2 LLMPort interface
 
+Authoritative signatures live in **`apps/backend/src/medbuddy/protocols/ports.py`**. Conceptually:
+
 ```python
 class LLMPort(Protocol):
-    async def classify_intent(self, user_text: str, locale: str) -> Intent: ...
+    async def interpret_user_turn(
+        self, user_text: str, *, recent_context: str | None = None
+    ) -> TurnInterpretation: ...
     async def compose_reply(
-        self, system_persona: str, patient_context: str,
-        history: list[ConversationTurn], user_message: str,
-        grounding: str | None = None,
-        extra_system: str | None = None,
+        self,
+        *,
+        system_persona: str,
+        patient_context: str,
+        drug_grounding: str | None,
+        history: list[ConversationTurn],
+        user_message: str,
+        locale: str,
     ) -> str: ...
-    async def extract_medication_draft(self, user_text: str, locale: str) -> MedicationDraft: ...
+    async def extract_medication_draft(self, user_text: str, *, locale: str) -> MedicationDraft | None: ...
     async def resolve_medication_removal_id(
-        self, user_text: str, medications: list[MedicationRecord], locale: str
+        self, user_text: str, medications: list[MedicationRecord], *, locale: str
     ) -> str | None: ...
-    async def compose_medication_added_reply(self, ...) -> str: ...
-    async def simplify_drug_text_to_patient_zh(self, raw_label: str) -> str: ...
+    # … extract_profile_patch, extract_locale_intent, check_interactions_structured,
+    # compose_medication_added_reply, generate_health_summary, etc.
 ```
 
 ### 8.3 Prompt construction
@@ -671,14 +680,14 @@ For extraction tasks, the active LLM adapter calls structured output where suppo
 
 | Schema | Used for |
 |--------|---------|
-| `IntentClassification` | `classify_intent` — returns `Intent` enum value |
+| `IntentClassification` | `interpret_user_turn` — mapped to `TurnInterpretation` (intent + adherence slots) |
 | `MedicationExtraction` | `extract_medication_draft` — name, dosage, schedule, reminder prefs |
 | `RemovalResolution` | `resolve_medication_removal_id` — which med ID to delete |
 | `HealthSummaryResult` | `GenerateHealthSummaryTool` — structured doctor summary |
 
 ### 8.5 Mock LLM
 
-`integrations/mocks/llm.py` implements `LLMPort` for CI and local runs **without** inferring intents from keywords. By default, **`classify_intent`** returns **`general_question`**; tests pass explicit **`intent=`** and optional **`medication_draft`**, **`locale_intent`**, **`removal_medication_id`**, etc., to mirror structured outputs from real adapters. **`compose_reply`** returns templated i18n strings.
+`integrations/mocks/llm.py` implements `LLMPort` for CI and local runs **without** inferring intents from keywords. By default, **`interpret_user_turn`** yields **`general_question`** with adherence fields off; tests pass explicit **`intent=`**, optional **`record_pending_dose_as_taken`**, **`dose_adherence_note`**, **`medication_draft`**, **`locale_intent`**, **`removal_medication_id`**, etc., to mirror structured outputs from real adapters. **`compose_reply`** returns templated i18n strings.
 
 This enables running the full stack and all tests without external LLM API keys.
 
@@ -730,7 +739,7 @@ This means the cache invalidates naturally when the patient's medication list ch
 
 | Data | Treatment |
 |------|-----------|
-| User message (current turn) | `redact_pii_text()` applied before `classify_intent`, `compose_reply`, and extraction calls |
+| User message (current turn) | `redact_pii_text()` applied before `interpret_user_turn`, `compose_reply`, and extraction calls |
 | Conversation history | `redact_conversation_turns_for_llm()` applied — same patterns |
 | Profile fields | Sent as coarse signals only (`build_patient_context_for_llm`): no raw name, exact age, health notes, or emergency contact |
 | Profile extraction from chat | **`LLMPort.extract_profile_patch`** (structured output) on the user message; persisted fields then go to storage via **`patch_user_profile`** |
@@ -795,7 +804,7 @@ This prevents accidental mock mode in production.
 
 The `uvicorn.error` logger is configured at the same `LOG_LEVEL`. Access logs (`uvicorn.access`) can be enabled separately.
 
-No distributed tracing or metrics (Prometheus/OTLP) are implemented in the current codebase. Recommended additions for production: request ID propagation, error rate metrics on intent classification and LLM calls.
+No distributed tracing or metrics (Prometheus/OTLP) are implemented in the current codebase. Recommended additions for production: request ID propagation, error rate metrics on turn interpretation and LLM calls.
 
 ---
 
