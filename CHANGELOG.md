@@ -54,8 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **PRD layout:** [`docs/prd.md`](docs/prd.md) is the **primary** condensed PRD; the full specification is [`docs/prd-extended.md`](docs/prd-extended.md). Removed `docs/prd-condensed.md` (merged into `prd.md`).
+- **TDD layout:** [`docs/tdd.md`](docs/tdd.md) is the **primary** condensed TDD (~2 pages); the full design is [`docs/tdd-extended.md`](docs/tdd-extended.md) (former monolithic `tdd.md`).
+- **README screenshots:** LINE and mobile concept images live under [`assets/screenshots/`](assets/screenshots/); root README shows multiple LINE samples and links to the feature catalog.
 - Removed stale TTS and `internal-media` references from `apps/backend/README.md`,
-  `docs/tdd.md`, `docs/prd.md`, `docs/features.md`, `docs/frontend-expo.md`,
+  `docs/tdd.md`, `docs/tdd-extended.md`, `docs/prd.md`, `docs/features.md`, `docs/frontend-expo.md`,
   `docs/reminders.md`, `docs/use-cases.md`, and root `README.md`; Dockerfile install
   extras now match `pyproject.toml` (`[llm,supabase,reminders]`).
 

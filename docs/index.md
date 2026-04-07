@@ -8,8 +8,10 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 
 | Document | Audience | What you'll find |
 |----------|----------|-----------------|
-| [`tdd.md`](tdd.md) | Engineers, security reviewers | System design, component map, data model, API reference, LLM integration, caching, privacy, deployment, configuration (15 sections) |
-| [`prd.md`](prd.md) | Product managers, engineers | Vision, goals, user personas, prototype scope, functional/non-functional requirements |
+| [`tdd.md`](tdd.md) | Engineers, security reviewers | **Primary TDD** (~2–3 pages): architecture concepts and diagrams; extended doc for API/schema |
+| [`tdd-extended.md`](tdd-extended.md) | Engineers, operators | **Full TDD** (18 sections): request flows, full API reference, schema, config, extension points |
+| [`prd.md`](prd.md) | Product managers, executives | **Primary PRD** (~2–3 pages): vision, goals, scope, how we measure success |
+| [`prd-extended.md`](prd-extended.md) | Product, legal, engineering leads | **Full PRD**: numbered sections, complete requirement tables, risks, assumptions, roadmap |
 | [`features.md`](features.md) | Product managers, engineers | Feature catalog — LINE channel, HTTP API, agent intents, reminders, caching; spec-style with capabilities, implementation, and limitations |
 | [`use-cases.md`](use-cases.md) | Engineers, product managers | Narrated scenarios — entry points, every implemented intent, example utterances, step-by-step assistant pipeline |
 | [`reminders.md`](reminders.md) | Engineers, operators | LINE dose reminders — data model, arq/Redis job queue, Compose setup, Render deploy, reconcile cron |
@@ -23,27 +25,28 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 
 ### New backend engineer
 1. [`../README.md`](../README.md) — project overview and quick start
-2. [`tdd.md`](tdd.md) — system design and component map
+2. [`tdd.md`](tdd.md) — architecture overview (diagrams); then [`tdd-extended.md`](tdd-extended.md) for full API, schema, and ops detail
 3. [`../apps/backend/README.md`](../apps/backend/README.md) — package layout, env vars, mock vs real
 4. [`features.md`](features.md) — what the product does
 5. [`use-cases.md`](use-cases.md) — how flows actually run
 
 ### Product manager
 1. [`../README.md`](../README.md) — project overview
-2. [`prd.md`](prd.md) — vision, goals, personas, prototype scope
-3. [`features.md`](features.md) — capability catalog
-4. [`use-cases.md`](use-cases.md) — user journeys with example utterances
+2. [`prd.md`](prd.md) — vision, goals, personas, scope (start here)
+3. [`prd-extended.md`](prd-extended.md) — full requirement IDs, tables, legal-adjacent detail
+4. [`features.md`](features.md) — capability catalog
+5. [`use-cases.md`](use-cases.md) — user journeys with example utterances
 
 ### Security / compliance reviewer
 1. [`privacy.md`](privacy.md) — PII boundaries, redaction, compliance notes
 2. [`llm-context.md`](llm-context.md) — per-call LLM input map with exceptions
-3. [`tdd.md`](tdd.md) §10 (Privacy and security) and §13 (Configuration)
+3. [`tdd-extended.md`](tdd-extended.md) §10 (Privacy and security) and §15 (Configuration)
 
 ### Operator deploying MedBuddy
 1. [`../apps/backend/README.md`](../apps/backend/README.md) — env vars, deploy, mock vs real
 2. [`reminders.md`](reminders.md) — Redis/arq setup for dose reminders
 3. [`../TODO.md`](../TODO.md) — production readiness checklist
-4. [`tdd.md`](tdd.md) §12 (Deployment topology) and §13 (Configuration)
+4. [`tdd-extended.md`](tdd-extended.md) §14 (Deployment topology) and §15 (Configuration)
 
 ### Mobile engineer (Expo app)
 1. [`frontend-expo.md`](frontend-expo.md) — product positioning, screens, API integration, limitations
@@ -60,9 +63,9 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | How is a LINE voice message handled? | [`use-cases.md`](use-cases.md) §1.1 |
 | How are dose events scheduled? | [`reminders.md`](reminders.md) |
 | What env vars do I need? | [`../apps/backend/README.md`](../apps/backend/README.md) — Key environment variables |
-| What is the Supabase schema? | [`tdd.md`](tdd.md) §6 Data model |
+| What is the Supabase schema? | [`tdd-extended.md`](tdd-extended.md) §6 Data model |
 | Is the Expo app the primary product? | No — see [`frontend-expo.md`](frontend-expo.md) |
 | What does PII redaction cover? | [`privacy.md`](privacy.md) — Redaction behavior |
 | What's left before production? | [`../TODO.md`](../TODO.md) |
-| How do I add a new LLM adapter? | [`tdd.md`](tdd.md) §14 Extension points |
-| How do I add a new intent / tool? | [`tdd.md`](tdd.md) §14, [`../apps/backend/README.md`](../apps/backend/README.md) |
+| How do I add a new LLM adapter? | [`tdd-extended.md`](tdd-extended.md) §16 Extension points |
+| How do I add a new intent / tool? | [`tdd-extended.md`](tdd-extended.md) §16, [`../apps/backend/README.md`](../apps/backend/README.md) |

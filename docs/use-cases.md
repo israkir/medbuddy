@@ -20,6 +20,7 @@
 | **LINE-only (no full assistant turn)** | **`follow`** → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
 | **HTTP without chat pipeline** | **`GET /v1/app/health`**, **`GET /v1/app/info`**, **`GET /v1/app/me`**, **`POST /v1/app/onboarding`**, **`GET /v1/app/summary`** — auth + user store / LLM as documented below. |
 | **Infrastructure** | **`GET /health`**, **`POST /internal/reminders/reconcile`** (cron). |
+| **LINE TTS asset** | **`GET /v1/line/media/audio/{id}`** — ephemeral m4a blob when voice replies are enabled (see `features.md` §1.1). |
 
 ---
 
@@ -31,7 +32,7 @@
 |-----------------|----------------------|---------|
 | **`follow`** | Fixed **welcome** (i18n `line.follow_welcome`). | `get_or_create_user` → **`run_assistant_text_turn` is not called.** |
 | **`message` · text** | Assistant reply (text). | Webhook verified → `run_assistant_text_turn(user_key=line_user_id, user_text=…)` → `reply_text` to LINE. |
-| **`message` · audio** | Assistant reply: **text** (same as typed messages after STT). | Download audio → **STT** (`transcribe_m4a`) → same `run_assistant_text_turn` on transcript → text reply. |
+| **`message` · audio** | Assistant reply: **text** by default; optional **text + audio** when LINE voice replies are enabled. | Download audio → **STT** (`transcribe_m4a`) → same `run_assistant_text_turn` on transcript. Reply mode depends on `MEDBUDDY_LINE_VOICE_REPLIES` (`off` / `audio_inbound` / `always`). |
 | **`postback`** | *(None)* | Parsed `action` is logged; **no user reply** (placeholder for future rich UI). |
 | **`message` · other types** (sticker, image, …) | *(None)* | Logged as unsupported; **no** `run_assistant_text_turn`. |
 
@@ -39,18 +40,18 @@
 
 > Welcome to MedBuddy! I'll help you remember your medications and answer any medication-related questions (this does not replace doctor's or pharmacist's instructions). Please also let me know what you'd like to hear in one sentence: your preferred name, age (optional), family contact information, or any allergies/important health conditions—just type it out and send it to me; I can add it later.
 
-**Welcome copy (简体中文, example):**
+**Welcome copy (繁體中文（台灣）, example):**
 
-> 欢迎使用 MedBuddy！我会帮您记住用药安排，并回答与用药相关的问题（不能替代医生或药师的医嘱）。请用一句话告诉我您希望我了解的内容，例如：您希望我怎么称呼您、年龄（选填）、家属联系方式，或过敏史 / 重要健康状况——直接打字发给我即可，我稍后可以帮您录入。
+> 歡迎使用 MedBuddy！我會陪您記好用藥，也會回答用藥相關問題（不取代醫師或藥師指示）。請用一句話告訴我您希望我先知道的事，例如怎麼稱呼您、年齡（選填）、家人聯絡方式，或過敏／重要健康狀況；直接打字傳給我就可以，之後也能再補。
 
-**One-line user replies after welcome (简体中文 examples)** — typically classified as **`update_profile`** on the next text message:
+**One-line user replies after welcome (繁體中文 examples)** — typically classified as **`update_profile`** on the next text message:
 
-- 叫我老王就行，今年 62 岁。
-- 请叫我李阿姨；有事联系我儿子张伟，手机 138-xxxx-xxxx。
-- 我对青霉素过敏，吃头孢要小心。
-- 我有糖尿病和高血压，平时吃二甲双胍和缬沙坦。
-- 叫我小陈，30 岁；家属电话：我爱人 139-xxxx-xxxx；我对海鲜过敏，有哮喘。
-- 叫我张叔；儿子电话 138-xxxx-xxxx；无过敏。
+- 叫我老王就好，今年 62 歲。
+- 請叫我李阿姨；有事聯絡我兒子張偉，手機 138-xxxx-xxxx。
+- 我對青黴素過敏，吃頭孢要小心。
+- 我有糖尿病和高血壓，平常吃二甲雙胍和纈沙坦。
+- 叫我小陳，30 歲；家屬電話：我愛人 139-xxxx-xxxx；我對海鮮過敏，有氣喘。
+- 叫我張叔；兒子電話 138-xxxx-xxxx；無過敏。
 
 ---
 
@@ -76,18 +77,26 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 
 All **chat** turns share this flow (LINE text/voice transcript, **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** after STT).
 
-1. **Redact** PII before turn interpretation (`redact_pii_text`).
-2. **Load** user row + medication list **and** recent conversation turns **in parallel**; **`interpret_user_turn`** via **`LLM`** with optional **recent redacted dialogue** (`recent_context`) so short follow-ups align with the prior assistant turn (or `MockLLM` in tests).
-3. **Append** the **user** turn to conversation store (raw text).
-4. **Intent hooks** — optional pilot short-circuit (**§5**).
-5. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.9**). *`interpret_user_turn` + recent context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
-6. **`update_profile`** — **`extract_profile_patch`** (structured LLM) + `patch_user_profile` (**§3.8**) including locale/timezone changes.
-7. **Tool dispatch** — `list` / **`upcoming_doses`** / `add` / `update` / `remove` / **`confirm_dose`** (only when interpretation includes adherence slots; **§3.10**) / `explain` / `interaction_check` / `log_vital` / `request_summary` (**§3**).
-8. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`general_question`**), **or** when intent is **`confirm_dose`** but **neither** **`record_pending_dose_as_taken`** nor **`dose_adherence_note`** is set (**§3.10**).
-9. **Append** the **assistant** turn and return reply text.
+1. **Redact** PII for LLM inputs (`redact_pii_text` on the current line).
+2. **Load** user row + medication list **and** recent conversation turns **in parallel**; call **`interpret_user_turn`** with **recent redacted dialogue** so short follow-ups stay on-topic (or `MockLLM` in tests).
+3. Resolve **effective locale** from `user_row`.
+4. **Append** the **user** turn to the conversation store (**raw** user text).
+5. **Early exits (pending / language)** — in order:
+   - **`try_locale_change_reply`** when the user asked to switch reply language (returns assistant message; no full intent pipeline).
+   - **`try_resolve_pending_medication_add_confirmation`** when an incomplete **add** is waiting for yes/no/corrected details.
+   - **`try_resolve_pending_dose_clarification`** when **which dose** is ambiguous.
+   - **`try_resolve_pending_reminder_horizon`** when **how many days** of daily reminders is still unanswered.
+6. **`emergency`** — if classified intent is **`emergency`**, return fixed **`agent.emergency`** (**§3.14**).
+7. **Intent hooks** — optional pilot short-circuit (**§5**).
+8. **`off_topic`** — fixed **`agent.off_topic`** (**§3.9**).
+9. **`update_profile`** — **`extract_profile_patch`** + `patch_user_profile` (**§3.8**).
+10. **Tool dispatch** — mapped intents: `list_medications`, `upcoming_doses`, `add_medication`, `update_medication`, `remove_medication`, `confirm_dose` (only if adherence **slots** are set — **§3.10**), `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`.
+11. **Fallback** — `compose_reply` for **`general_question`** and any intent **without** a tool mapping, **or** when **`confirm_dose`** has **no** adherence slots (**§3.10**).
+12. **`_maybe_append_pending_reminder`** — if **add-confirm** or **reminder-horizon** is still pending, append a one-line nudge after the main reply.
+13. **Append** the **assistant** turn and return reply text.
 
-**Routing** uses the configured **`Intent`** enum for the primary tool/fallback branch ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
-`add_medication`, `update_medication`, `list_medications`, `upcoming_doses`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `emergency`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.10**).
+**Routing** uses the **`Intent`** enum ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
+`add_medication`, `update_medication`, `list_medications`, `upcoming_doses`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `emergency`, `off_topic`, `general_question`. Adherence effects depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.10**).
 
 ---
 
@@ -124,9 +133,10 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 |--|--|
 | **Scenario** | User adds a drug with dose/schedule in natural language. |
 | **Examples** | 「新增阿斯匹靈 100mg 每天飯後」 · `add aspirin 100mg after meals` |
-| **Outcome** | Extract (**LLM** structured output or mock) → **`add_medication`**. Then **`DrugDataPort`** for the **new** drug only → **`compose_medication_added_reply`** (or i18n **`medication.added`** fallback). Extraction may include **reminder preferences** (stored on the med row) that influence how **`dose_events`** are built. |
-| **Incomplete** | No drug name → **`medication.add_incomplete`** (no full compose). |
-| **Side effect** | When Supabase + reminders are configured: **dose_events** sync / LINE push path — [`reminders.md`](reminders.md). |
+| **Outcome (save now)** | When the draft is **complete** and passes **`medication_draft_needs_add_confirmation`** guardrails: **`UserDataPort.add_medication`** → **`sync_and_enqueue_reminders`** → **`compose_medication_added_reply`** (or i18n **`medication.added`** fallback). Post-add, if **`needs_horizon_confirmation`**, a **`ReminderHorizonPending`** row may be set so the next message can supply “N days” without re-invoking add intent. |
+| **Outcome (confirm first)** | When dose/schedule is missing, unclear, or the utterance lacks evidence the user stated both dose and schedule: **`MedicationAddConfirmationPending`** is stored; user sees **`medication.add_confirm_prompt`**. Reply **yes** / **no** (or locale equivalents) is handled by **`try_resolve_pending_medication_add_confirmation`** before the next full turn. A **non** yes/no message **does not** clear pending—the normal agent answers (e.g. a drug question) and pending stays until resolved (**`medication.add_confirm_pending_reminder`** may append on later turns). |
+| **Incomplete** | No drug name → **`MedicationExtractionError`** → **`medication.add_incomplete`**. |
+| **Side effect** | When Supabase + reminders are configured: **dose_events** sync / LINE push — [`reminders.md`](reminders.md). |
 
 ---
 
@@ -201,8 +211,8 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 |--|--|
 | **Scenario** | User turn is about **adherence logging**: they clearly **took** the scheduled dose and/or want a **note** on the dose record (including a follow-up after they already took it). **`interpret_user_turn`** must set **`record_pending_dose_as_taken`** and/or **`dose_adherence_note`**; intent is usually **`confirm_dose`**, but **slots** drive side effects—not the label alone. |
 | **Examples** | 「吃了」 · “I took it” · “took my morning pills” · follow-up: “please note dizziness for my doctor” (note only, after pending cleared). |
-| **Outcome** | If at least one adherence slot is set: **`ConfirmDoseTool`** applies them ( **`taken_at`** when **`record_pending_dose_as_taken`**, optional **`dose_events.notes`**). Replies from **`medication.confirm_dose_*`**. If **`confirm_dose`** intent but **no** slots: **`compose_reply`** (e.g. symptom-only line mis-labeled). |
-| **Contrast** | Ongoing symptoms **without** an explicit took-dose / dose-log meaning stay **`general_question`** with adherence fields false/null — **no** automatic **`taken_at`**. Different from asking *how* to dose or what to do if you forgot. |
+| **Outcome** | If at least one adherence slot is set: **`ConfirmDoseTool`** applies them ( **`taken_at`** when **`record_pending_dose_as_taken`**, optional **`dose_events.notes`**). When several **`dose_events`** could match, the tool may set **dose clarification pending** and ask the user to pick a numbered option or **all**. Replies from **`medication.confirm_dose_*`**. If **`confirm_dose`** intent but **no** slots: **`compose_reply`** (e.g. symptom-only line mis-labeled). |
+| **Contrast** | Ongoing symptoms **without** an explicit took-dose / dose-log meaning stay **`general_question`** with adherence fields false/null — **no** automatic **`taken_at`**. Different from asking *how* to dose or what to do if you forgot. Side-effect **reports** use **`report_side_effects`** (**§3.15**). |
 
 ---
 
@@ -234,7 +244,27 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 | **Scenario** | Vital sign in text, small talk, or general medication-adjacent chat. `log_vital` has a dedicated extraction + save tool, while `general_question` goes through conversational fallback (`request_summary` is handled by **`GenerateHealthSummaryTool`** — **§3.7**). |
 | **Examples** | 「藥物過量了怎麼辦」 · “What if I doubled my dose?” · 「血壓 130/85」 · 「早安」 |
 | **Outcome** | For **`log_vital`**: extract and persist vital data via `LogVitalTool` (acknowledge or ask for missing details). For **`general_question`**: **`compose_reply`** with persona + **de-identified** patient context + history and the user’s **locale**. |
-| **Prefetch** | Only **`explain_medication`**, **`interaction_check`**, and (after successful save) **`add_medication`** load drug grounding inside the main turn. |
+| **Prefetch** | The **main-turn** snippet prefetch (before tools) targets **`explain_medication`**, **`interaction_check`**, and post-save **`add_medication`** only. **`report_side_effects`** loads grounding **inside** its tool. |
+
+---
+
+### 3.14 `emergency`
+
+| | |
+|--|--|
+| **Scenario** | User language suggests chest pain, severe bleeding, inability to breathe, or other **immediate** emergency situations (classifier-dependent). |
+| **Examples** | “I can’t breathe” · 「胸口很痛」 · “severe allergic reaction swelling throat” |
+| **Outcome** | Fixed localized **`agent.emergency`** message (call local emergency numbers, seek care). **No** LLM-generated reply body and **no** medication tools on this branch. |
+
+---
+
+### 3.15 `report_side_effects`
+
+| | |
+|--|--|
+| **Scenario** | User says they are **currently experiencing** a symptom they think is from a medication. |
+| **Examples** | 「吃完這個藥一直暈」 · “This pill gives me a rash” · “I feel nauseous after my dose” |
+| **Outcome** | **`ReportSideEffectsTool`**: grounded reply (OpenFDA/TFDA where available), empathy + expected vs concerning framing, **red-flag** escalation lines, disclaimer to see clinician/pharmacist. Not the same as **`explain_medication`** (hypothetical) or **`confirm_dose`** (took the dose). |
 
 ---
 
@@ -252,7 +282,7 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Scenario:** Pilot intercepts a classified intent before fixed refusals, profile, tools, or fallback.
 
-**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.10**) → **`compose_reply`** fallback.
+**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`** after pending resolvers and **`emergency`**: **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.10**) → **`compose_reply`** fallback.
 
 ---
 
@@ -262,7 +292,7 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **User-visible outcome:** **LINE push** near **`scheduled_at`** (not in-app local notifications). Optional **follow-up nudges** after the primary push when **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is configured — see [`reminders.md`](reminders.md) and [`features.md` §8](features.md#8-line-dose-reminders-prototype).
 
-**Behavior:** **`dose_events`** rebuild from extraction prefs + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. Free-text **`schedule`** echoed but **v1** does not expand to multiple times per day.
+**Behavior:** **`dose_events`** rebuild from structured **`raw_metadata.reminder`** (e.g. **`daily_local_hhmm_list`** for multiple instants per day) + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. The string **`schedule`** field is for **display** in pushes; clock times come from stored reminder prefs populated from add-time extraction, not from parsing **`schedule`** alone.
 
 **Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.10**), **`taken_at`** can be set without LINE postback.
 
@@ -275,4 +305,4 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 - Clinical diagnosis or replacing clinician/pharmacist judgment.
 - **Full TFDA HTTP** — stub returns empty; mocks may imitate TFDA.
 - **LINE `postback`** handling** — no user-facing action yet.
-- **Reference Expo** hold-to-talk → **`POST /v1/app/messages/voice`** — see [`frontend-expo.md`](frontend-expo.md). **LINE** voice notes use the same STT → assistant pipeline, but replies are **text-only** on LINE (Expo adds on-device read-aloud after the HTTP voice turn).
+- **Reference Expo** hold-to-talk → **`POST /v1/app/messages/voice`** — see [`frontend-expo.md`](frontend-expo.md). **LINE** voice notes use the same STT → assistant pipeline; replies are **text** by default and can be **text + audio** when `MEDBUDDY_LINE_VOICE_REPLIES` is enabled. Expo read-aloud remains on-device (expo-speech) after HTTP voice turns.

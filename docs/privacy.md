@@ -45,6 +45,15 @@ Implemented in `privacy/redact.py`:
 - Taiwan-oriented mobile patterns (including cases where `09…` follows CJK text without a word boundary).
 - Long runs of digits (e.g. 10+), which often indicate account or ID numbers.
 
+Examples (original → redacted):
+
+- `請聯絡我 john.doe+med@example.com` → `請聯絡我 […]`
+- `我的電話是0912-345-678，晚上可接` → `我的電話是[…]，晚上可接`
+- `我的電話是+886 912345678` → `我的電話是[…]`
+- `客服備註手機09xxxxxxxx也要遮罩（CJK後面直接接09）` → `客服備註手機[…]也要遮罩（CJK後面直接接09）`
+- `保單號碼 123456789012` → `保單號碼 […]`
+- `請記住我住台北市大安區，最近胸悶兩天` → *(unchanged by current regex rules)*
+
 **Limits:** Names, addresses, free-form clinical details in the user’s wording, and many international phone formats may **not** be removed. Treat LLM calls as receiving **possibly sensitive free text** unless you add stricter policies (on-prem models, DLP, or blocking certain intents without human review).
 
 ## Prompt instructions

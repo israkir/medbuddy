@@ -27,11 +27,11 @@ The app is positioned as a **potential standalone medication companion**: first-
 The repo today centers on LINE and the HTTP API; a **dedicated mobile client** is a product direction, not a shipped guarantee. The screens below are **concept-only** mockups to illustrate that idea—not screenshots of a production app.
 
 <p align="center">
-  <img src="../assets/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">
+  <img src="../assets/screenshots/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">
   &nbsp;
-  <img src="../assets/mobile-2.png" alt="Concept: standalone app secondary flow" width="260">
+  <img src="../assets/screenshots/mobile-2.png" alt="Concept: standalone app secondary flow" width="260">
   &nbsp;
-  <img src="../assets/mobile-3.png" alt="Concept: standalone app detail or settings" width="260">
+  <img src="../assets/screenshots/mobile-3.png" alt="Concept: standalone app detail or settings" width="260">
 </p>
 
 ---
@@ -76,7 +76,7 @@ The repo today centers on LINE and the HTTP API; a **dedicated mobile client** i
 | Topic | Detail |
 |-------|--------|
 | **Hold-to-talk → backend** | **expo-av** recording from **Medication helper** or the **tab bar** mic → **`POST /v1/app/messages/voice`** (`lib/companionApi.ts`). **STT** uses the user’s stored **`locale`** (`en` / `zh-TW`). Success path: show **transcript** + reply, then **expo-speech** reads the reply (profile locale, with i18n fallback). **Web:** voice upload not supported; use keyboard. **`useVoiceRecording`:** if **`onRecordingUri`** is set, the generic “saved” alert is skipped (companion / tab bar). |
-| **vs LINE** | **LINE:** voice note → STT → assistant → **text** reply only (same as typed messages). **Expo:** after **`POST /v1/app/messages/voice`**, the client **reads the reply aloud** with **expo-speech** in the user’s profile language (not server-synthesized audio). |
+| **vs LINE** | **LINE:** voice note → STT → assistant → **text** by default, or **text + m4a** when **`MEDBUDDY_LINE_VOICE_REPLIES`** is enabled (see [`features.md`](features.md) §1.1). **Expo:** after **`POST /v1/app/messages/voice`**, the client **reads the reply aloud** with **expo-speech** in the user’s profile language (not server-synthesized audio unless you add it). |
 | **Dose reminders** | Backend sends **LINE push** only for LINE `userId` users. **No** Expo local notifications in this codebase slice. |
 | **Keyboard / dictation** | Users can still dictate into the chat field via OS keyboard; that text follows **`POST /v1/app/messages`**. |
 
