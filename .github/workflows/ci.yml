@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/backend/pyproject.toml
+
+      - name: Install backend (editable + dev)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -q -U pip
+          .venv/bin/pip install -q -e "./apps/backend[dev]"
+
+      - name: Format (Black)
+        run: .venv/bin/black --check apps/backend/src apps/backend/tests
+
+      - name: Lint (Ruff)
+        run: .venv/bin/ruff check apps/backend/src apps/backend/tests
+
+      - name: Tests
+        env:
+          MEDBUDDY_INTEGRATION: mock
+          MOCK_EXTERNAL_SERVICES: "true"
+        run: cd apps/backend && "$GITHUB_WORKSPACE/.venv/bin/pytest" -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Lint (ESLint)
+        working-directory: apps/frontend
+        run: npm run lint
+
+      - name: Typecheck (tsc)
+        working-directory: apps/frontend
+        run: npm run typecheck

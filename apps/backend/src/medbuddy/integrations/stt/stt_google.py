@@ -14,6 +14,24 @@ _STT_TIMEOUT_S = 120.0
 log = logging.getLogger(__name__)
 
 
+def _normalize_language_code(language_code: str) -> str:
+    """Map short locales to explicit BCP-47 tags accepted by Google STT."""
+    raw = (language_code or "").strip()
+    if not raw:
+        return "zh-TW"
+
+    lower = raw.lower()
+    aliases = {
+        "en": "en-US",
+        "zh": "zh-TW",
+    }
+    if lower in aliases:
+        return aliases[lower]
+
+    # Keep caller-provided region/script tags, but normalize separator casing.
+    return raw.replace("_", "-")
+
+
 class GoogleSpeechToText(SpeechToTextPort):
     def __init__(
         self,
@@ -29,7 +47,7 @@ class GoogleSpeechToText(SpeechToTextPort):
 
     async def transcribe_m4a(self, audio: bytes, *, language_code: str | None = None) -> str:
         audio_bytes = len(audio)
-        req_language = language_code or self._language_code
+        req_language = _normalize_language_code(language_code or self._language_code)
         log.info(
             "Google STT request start: audio_bytes=%d language=%s timeout_s=%.1f",
             audio_bytes,
