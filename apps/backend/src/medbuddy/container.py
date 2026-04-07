@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 from medbuddy.config import Settings
 from medbuddy.engine.types import AppServices
 from medbuddy.protocols.ports import LLMPort
@@ -50,7 +52,12 @@ def _build_llm(settings: Settings) -> LLMPort:
     )
 
 
-def build_app_services(settings: Settings) -> AppServices:
+def build_app_services(
+    settings: Settings,
+    *,
+    outbound_http: httpx.AsyncClient | None = None,
+    stt_http: httpx.AsyncClient | None = None,
+) -> AppServices:
     if settings.mock_external_services:
         storage = MockObjectStorage()
         tts = MockTextToSpeech(storage=storage)
@@ -66,6 +73,7 @@ def build_app_services(settings: Settings) -> AppServices:
             conversations=InMemoryConversationStore(),
             settings=settings,
             drug_caches=None,
+            internal_media=None,
         )
 
     if not settings.line_channel_access_token:
@@ -89,13 +97,19 @@ def build_app_services(settings: Settings) -> AppServices:
     llm = _build_llm(settings)
 
     if settings.whisper_service_url:
-        stt = WhisperHttpSTT(base_url=settings.whisper_service_url)
+        stt = WhisperHttpSTT(
+            base_url=settings.whisper_service_url,
+            http_client=stt_http,
+        )
     else:
         log.warning("WHISPER_SERVICE_URL missing; using MockSpeechToText for STT")
         stt = MockSpeechToText(locale=settings.locale)
 
     drug_caches = None
-    drugs_backend: HttpDrugData | CachingDrugData = HttpDrugData(locale=settings.locale)
+    drugs_backend: HttpDrugData | CachingDrugData = HttpDrugData(
+        locale=settings.locale,
+        http_client=outbound_http,
+    )
 
     if settings.supabase_url and settings.supabase_publishable_key:
         try:
@@ -118,7 +132,10 @@ def build_app_services(settings: Settings) -> AppServices:
             user_data = SupabaseUserData(sb_client, settings)
             conversations_store = SupabaseConversationStore(sb_client, user_data)
             drug_caches = SupabaseDrugCaches(sb_client, settings)
-            drugs_backend = CachingDrugData(HttpDrugData(locale=settings.locale), drug_caches)
+            drugs_backend = CachingDrugData(
+                HttpDrugData(locale=settings.locale, http_client=outbound_http),
+                drug_caches,
+            )
     else:
         log.warning(
             "Real mode without Supabase: user and conversation data stay in memory. "
@@ -127,6 +144,8 @@ def build_app_services(settings: Settings) -> AppServices:
         )
         user_data = MockUserData(settings)
         conversations_store = InMemoryConversationStore()
+
+    internal_media = storage if isinstance(storage, LocalPublicObjectStorage) else None
 
     return AppServices(
         line=line,
@@ -139,4 +158,5 @@ def build_app_services(settings: Settings) -> AppServices:
         conversations=conversations_store,
         settings=settings,
         drug_caches=drug_caches,
+        internal_media=internal_media,
     )

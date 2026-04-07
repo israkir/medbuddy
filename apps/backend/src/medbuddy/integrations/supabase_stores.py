@@ -10,6 +10,8 @@ from typing import Any
 from medbuddy.config import Settings
 from medbuddy.models.domain import (
     ConversationTurn,
+    DoseClarificationPending,
+    DoseEventPendingCandidate,
     DoseEventReminderPayload,
     MedicationDraft,
     MedicationRecord,
@@ -601,6 +603,210 @@ class SupabaseUserData(UserDataPort):
         uresp = await _run_q(q_update)
         updated = uresp.data or []
         return len(updated)
+
+    async def list_pending_dose_candidates(
+        self, line_user_id: str, *, max_items: int = 5
+    ) -> list[DoseEventPendingCandidate]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        now_iso = datetime.now(UTC).isoformat()
+        limit = max(1, max_items)
+
+        def q_rows() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("id, scheduled_at, medications(name, dosage, schedule)")
+                .eq("patient_id", uid)
+                .is_("taken_at", "null")
+                .lte("scheduled_at", now_iso)
+                .order("scheduled_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+
+        resp = await _run_q(q_rows)
+        rows = resp.data or []
+        out: list[DoseEventPendingCandidate] = []
+        for r in rows:
+            med = r.get("medications")
+            if isinstance(med, list):
+                med = med[0] if med else None
+            if not isinstance(med, dict):
+                continue
+            out.append(
+                DoseEventPendingCandidate(
+                    dose_event_id=str(r["id"]),
+                    medication_name=str(med.get("name") or ""),
+                    dosage=str(med.get("dosage") or ""),
+                    schedule=str(med.get("schedule") or ""),
+                    scheduled_at=_parse_ts(r["scheduled_at"]),
+                )
+            )
+        return out
+
+    async def list_recent_taken_dose_candidates(
+        self, line_user_id: str, *, max_items: int = 5
+    ) -> list[DoseEventPendingCandidate]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        cutoff_iso = (
+            datetime.now(UTC) - timedelta(hours=_RECENT_TAKEN_DOSE_NOTE_HOURS)
+        ).isoformat()
+        limit = max(1, max_items)
+
+        def q_rows() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("id, scheduled_at, medications(name, dosage, schedule)")
+                .eq("patient_id", uid)
+                .not_.is_("taken_at", "null")
+                .gte("taken_at", cutoff_iso)
+                .order("taken_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+
+        resp = await _run_q(q_rows)
+        rows = resp.data or []
+        out: list[DoseEventPendingCandidate] = []
+        for r in rows:
+            med = r.get("medications")
+            if isinstance(med, list):
+                med = med[0] if med else None
+            if not isinstance(med, dict):
+                continue
+            out.append(
+                DoseEventPendingCandidate(
+                    dose_event_id=str(r["id"]),
+                    medication_name=str(med.get("name") or ""),
+                    dosage=str(med.get("dosage") or ""),
+                    schedule=str(med.get("schedule") or ""),
+                    scheduled_at=_parse_ts(r["scheduled_at"]),
+                )
+            )
+        return out
+
+    async def get_dose_clarification_pending(
+        self, line_user_id: str
+    ) -> DoseClarificationPending | None:
+        def q() -> Any:
+            return (
+                self._client.table("patients")
+                .select("pending_agent_clarification")
+                .eq("external_user_id", line_user_id)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        if not rows:
+            return None
+        raw = rows[0].get("pending_agent_clarification")
+        return DoseClarificationPending.from_json(raw)
+
+    async def set_dose_clarification_pending(
+        self, line_user_id: str, pending: DoseClarificationPending | None
+    ) -> None:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        payload = {"pending_agent_clarification": pending.to_json() if pending else None}
+
+        def u() -> Any:
+            return self._client.table("patients").update(payload).eq("id", uid).execute()
+
+        await _run_q(u)
+
+    async def mark_dose_events_taken(
+        self,
+        line_user_id: str,
+        dose_event_ids: list[str],
+        *,
+        notes: str | None = None,
+    ) -> int:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        now_iso = datetime.now(UTC).isoformat()
+        payload: dict[str, Any] = {"taken_at": now_iso}
+        if notes is not None:
+            n = notes.strip()
+            if len(n) > 500:
+                n = n[:500]
+            if n:
+                payload["notes"] = n
+        total = 0
+        for eid in dose_event_ids:
+
+            def q(eid: str = eid) -> Any:
+                return (
+                    self._client.table("dose_events")
+                    .update(payload)
+                    .eq("id", eid)
+                    .eq("patient_id", uid)
+                    .is_("taken_at", "null")
+                    .lte("scheduled_at", now_iso)
+                    .execute()
+                )
+
+            uresp = await _run_q(q)
+            rows = uresp.data or []
+            total += len(rows)
+        return total
+
+    async def append_note_to_dose_events(
+        self,
+        line_user_id: str,
+        dose_event_ids: list[str],
+        *,
+        notes: str,
+    ) -> int:
+        addition = notes.strip()
+        if not addition:
+            return 0
+        if len(addition) > 500:
+            addition = addition[:500]
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        total = 0
+        for eid in dose_event_ids:
+
+            def q_sel(eid: str = eid) -> Any:
+                return (
+                    self._client.table("dose_events")
+                    .select("notes")
+                    .eq("id", eid)
+                    .eq("patient_id", uid)
+                    .not_.is_("taken_at", "null")
+                    .limit(1)
+                    .execute()
+                )
+
+            sresp = await _run_q(q_sel)
+            srows = sresp.data or []
+            if not srows:
+                continue
+            existing_notes: str | None = None
+            raw_n = srows[0].get("notes")
+            if isinstance(raw_n, str) and raw_n.strip():
+                existing_notes = raw_n.strip()
+            merged = _merge_dose_event_notes(existing_notes, addition)
+            if not merged:
+                continue
+            merged_final = merged
+
+            def q_upd(eid: str = eid, merged_final: str = merged_final) -> Any:
+                return (
+                    self._client.table("dose_events")
+                    .update({"notes": merged_final})
+                    .eq("id", eid)
+                    .eq("patient_id", uid)
+                    .not_.is_("taken_at", "null")
+                    .execute()
+                )
+
+            uresp = await _run_q(q_upd)
+            total += len(uresp.data or [])
+        return total
 
     async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:
         """Attach ``notes`` to the dose instant with the latest ``taken_at`` (within 48h)."""

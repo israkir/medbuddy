@@ -84,6 +84,10 @@ class GeminiLLM(LLMPort):
         self._chat_model = intent_model
         self._locale = locale
 
+    @property
+    def drug_cache_provenance_id(self) -> str:
+        return self._intent_model
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

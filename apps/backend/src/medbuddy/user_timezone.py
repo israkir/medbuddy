@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_USER_TIMEZONE = "Asia/Taipei"
 
@@ -13,7 +13,7 @@ def is_valid_iana_timezone(name: str) -> bool:
         return False
     try:
         ZoneInfo(s)
-    except Exception:
+    except (ZoneInfoNotFoundError, OSError):
         return False
     return True
 

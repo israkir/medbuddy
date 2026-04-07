@@ -17,7 +17,6 @@ from medbuddy.drug_cache_keys import (
     resolve_medication_id_for_personalization,
 )
 from medbuddy.engine.types import AppServices
-from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.i18n import t
 from medbuddy.llm.schemas import InteractionCheckResult
 from medbuddy.models.domain import ConversationTurn, Intent, InteractionResult, MedicationRecord
@@ -74,7 +73,7 @@ class InteractionCheckTool:
         try:
             ofda = await svc.drugs.fetch_openfda_label_snippet(q)
         except Exception:
-            log.debug("interaction_check: OpenFDA fetch failed for %r", q)
+            log.debug("interaction_check: OpenFDA fetch failed query_len=%d", len(q))
             ofda = None
 
         if ofda:
@@ -135,11 +134,7 @@ class InteractionCheckTool:
                 extra_query_text=safe_text if safe_text != user_text else None,
             )
             prov_source = (
-                grounding_sources[0]
-                if grounding_sources
-                else (
-                    "mock_llm" if isinstance(svc.llm, MockLLM) else svc.settings.active_llm_model_id
-                )
+                grounding_sources[0] if grounding_sources else svc.llm.drug_cache_provenance_id
             )
             await svc.drug_caches.save_personalized_reply(
                 user_uuid=user_row["id"],

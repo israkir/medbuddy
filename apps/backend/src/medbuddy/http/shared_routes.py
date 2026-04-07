@@ -9,7 +9,6 @@ from fastapi.responses import PlainTextResponse
 
 from medbuddy.config import get_settings
 from medbuddy.engine.types import AppServices
-from medbuddy.integrations.local_public_storage import get_file
 from medbuddy.reminders.enqueue import enqueue_reminder_jobs_now
 
 router = APIRouter(tags=["infrastructure"])
@@ -21,8 +20,11 @@ async def health() -> str:
 
 
 @router.get("/internal-media/{file_id:path}")
-async def internal_media(file_id: str) -> Response:
-    data = get_file(file_id)
+async def internal_media(request: Request, file_id: str) -> Response:
+    svc: AppServices = request.app.state.services
+    if svc.internal_media is None:
+        raise HTTPException(status_code=404)
+    data = await svc.internal_media.get_blob(file_id)
     if data is None:
         raise HTTPException(status_code=404)
     return Response(content=data, media_type="application/octet-stream")

@@ -8,22 +8,52 @@ alwaysApply: false
 
 ## Tooling (do not fight the config)
 
-- **Python** `>=3.11`. Package lives under `src/medbuddy/`; tests under `tests/`.
-- **Format / lint**: Black and Ruff as in `pyproject.toml` (line length 100, `py311`). Run `make be-lint` or rely on pre-commit before commit.
-- **Tests**: `pytest` with `pytest-asyncio` (`asyncio_mode = auto`). New behavior or fixes need tests in `tests/` unless explicitly trivial (then say why in the PR).
+- **Python** `>=3.11`. Package: `src/medbuddy/`; tests: `tests/`.
+- **Format / lint**: Black + Ruff per `pyproject.toml` (line length 100, `py311`). Run `make be-lint` or pre-commit before commit.
+- **Tests**: `pytest` + `pytest-asyncio` (`asyncio_mode = auto`). New behavior or fixes need tests unless trivial (explain in PR).
 
-## Structure
+## Python style and maintainability
 
-- **FastAPI** app entry: `medbuddy.main` (mounts routers). Settings: `pydantic-settings` (`medbuddy.config`).
-- **Channels**: LINE-specific code in `channels/line/` (webhook, signature, LINE pipeline); standalone app HTTP in `channels/mobile/` (auth, schemas, routes). Shared infrastructure routes in `http/shared_routes.py` (e.g. health, media URLs).
-- **Application layer**: shared use cases both channels call (e.g. `application/assistant_turn.py`) — avoid duplicating LLM/drug/history logic in `channels/*`.
-- **Ports / integrations**: **protocols** (`protocols/`), **integrations** (`integrations/` — `mocks/` plus concrete adapters at package root), shared **engine** types (`engine/`). Extend these patterns instead of ad-hoc modules outside `integrations/`.
+- **Types**: Annotate public APIs, Pydantic models, and non-obvious function signatures. Prefer explicit `Optional` / `None` handling over silent defaults.
+- **Imports**: Standard library → third party → `medbuddy`; avoid circular imports by keeping domain logic out of router modules when it balloons.
+- **Errors**: Use specific exceptions or HTTP-friendly patterns consistent with existing code; do not swallow errors without logging context (never log secrets).
+- **Dependencies**: Prefer stdlib and existing project abstractions (`protocols/`, `integrations/`) before adding packages.
 
-## Security and config
+## Logging
 
-- **No secrets** in code or committed `.env`. Use env vars consumed via settings; never log tokens or webhook secrets.
-- Preserve **LINE signature verification** and existing webhook behavior unless the task explicitly changes security semantics.
+- **Setup**: Use a module-level logger (`logging.getLogger(__name__)`, often named `log` in this repo). Respect existing configuration in `medbuddy.logging_config` and root logging — do not reconfigure logging in library-style modules.
+- **INFO**: Log at important, infrequent checkpoints so operations are traceable: channel/webhook boundaries (accept/reject at high level), application use-case start or completion when useful, outbound integration outcomes (success/finish without raw payloads), scheduler/reminder lifecycle events. Prefer stable identifiers (request id, job id) over free text; avoid chatter inside tight loops or per-token LLM streams unless the task explicitly requires it.
+- **WARNING**: Use for recoverable or degraded behavior: retries, fallbacks, optional data missing, rate limits or timeouts handled without failing the whole request, deprecated code paths, “continuing with defaults” situations. Include enough context to debug (operation name, integration, numeric codes) without PII or secrets.
+- **ERROR**: Use when a request, job, or integration step fails after handling or when an invariant is broken and the failure should surface in monitors/alerts. Log with actionable context; use `exc_info=True` when logging from an `except` block if the stack trace is safe to emit. Never duplicate the same ERROR on every retry without backoff or aggregation.
+- **DEBUG**: Reserve for verbose diagnostics (local/staging); assume production often runs at INFO or higher.
+
+Logging must stay consistent with **Security** above: no tokens, credentials, raw auth headers, or unnecessary PII/prompt bodies in any level.
+
+## Structure and layering
+
+- **FastAPI** entry: `medbuddy.main` (routers). Settings: `pydantic-settings` (`medbuddy.config`).
+- **Channels**: LINE in `channels/line/`; mobile HTTP in `channels/mobile/`. Shared HTTP in `http/shared_routes.py`.
+- **Application**: Shared use cases in `application/` (e.g. `assistant_turn.py`) — no duplicated LLM / drug / history logic in `channels/*`.
+- **Ports / integrations**: Protocols in `protocols/`; adapters in `integrations/` (`mocks/` + concrete implementations). Shared types in `engine/`. Extend these patterns; avoid one-off integration modules elsewhere.
+
+Dependency direction: **HTTP handlers** → **application use cases** → **protocols** ← **integrations**. Do not import concrete integrations from domain/application layers when a protocol already exists.
+
+## Security and config (highest priority)
+
+- **Secrets**: No secrets in source or committed `.env`. Configure via env vars through settings only; never log tokens, API keys, webhook secrets, or raw `Authorization` headers.
+- **LINE**: Preserve signature verification and webhook semantics unless the task explicitly changes them; fail closed on verification errors.
+- **Input**: Validate with Pydantic at boundaries; reject unexpected fields where models use that pattern; treat all external payloads as untrusted.
+- **Auth**: For mobile routes, keep auth checks consistent with existing patterns; do not weaken checks for “temporary” debug paths.
+- **Data leakage**: Structured logs and error messages must not include PII or full user prompts/responses unless existing logging contracts require it; when in doubt, redact or omit.
+- **Dependencies**: Prefer pinned/minimum versions per `pyproject.toml`; do not casually upgrade security-sensitive libs without a quick notes/changelog pass if the repo requires it.
+
+## Performance (hot paths and scalability)
+
+- **Async**: Use `async def` and async HTTP/DB clients on request paths. Do not call blocking I/O (`time.sleep`, sync file/network I/O, heavy CPU work) inside async handlers — offload (`asyncio.to_thread`, a worker queue like ARQ where the project already uses it, or a dedicated sync service).
+- **I/O**: Reuse clients (e.g. shared `httpx.AsyncClient`) where the codebase already does; avoid per-request client creation unless required for isolation.
+- **Payloads**: Stream or chunk large responses when applicable; avoid loading unbounded collections into memory.
+- **Caching**: Only add caching with explicit TTL/invalidation strategy and tests; beware stale medical or user-specific data.
 
 ## Commits / repo
 
-- Commits that touch backend must stay consistent with repo **pre-commit** and **`CHANGELOG.md`** rules (see root `Makefile` and `CHANGELOG.md`).
+- Backend changes stay consistent with **pre-commit** and **`CHANGELOG.md`** (see root `Makefile` and `CHANGELOG.md`).

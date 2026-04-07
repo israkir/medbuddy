@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
@@ -13,7 +13,9 @@ from medbuddy.llm.schemas import (
 
 __all__ = [
     "ConversationTurn",
+    "DoseClarificationPending",
     "DoseEventReminderPayload",
+    "DoseEventPendingCandidate",
     "DrugGrounding",
     "HealthSummary",
     "Intent",
@@ -105,6 +107,75 @@ class DoseEventReminderPayload:
     user_timezone: str
     user_locale: str
     is_nudge: bool = False
+
+
+@dataclass(frozen=True)
+class DoseEventPendingCandidate:
+    """Minimal pending-dose row for adherence disambiguation prompts."""
+
+    dose_event_id: str
+    medication_name: str
+    dosage: str
+    schedule: str
+    scheduled_at: datetime
+
+
+DoseClarificationKind = Literal["pending_taken", "note_on_taken"]
+
+
+@dataclass(frozen=True)
+class DoseClarificationPending:
+    """Server-side state for deterministic follow-up after a dose disambiguation prompt."""
+
+    kind: DoseClarificationKind
+    option_ids: tuple[str, ...]
+    pending_note: str | None
+    expires_at: datetime
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "option_ids": list(self.option_ids),
+            "pending_note": self.pending_note,
+            "expires_at": self.expires_at.replace(tzinfo=UTC).isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, data: Any) -> DoseClarificationPending | None:
+        if not isinstance(data, dict):
+            return None
+        kind = data.get("kind")
+        if kind not in ("pending_taken", "note_on_taken"):
+            return None
+        raw_ids = data.get("option_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return None
+        option_ids = tuple(str(x).strip() for x in raw_ids if str(x).strip())
+        if len(option_ids) != len(raw_ids):
+            return None
+        exp_raw = data.get("expires_at")
+        if not isinstance(exp_raw, str):
+            return None
+        try:
+            exp = datetime.fromisoformat(exp_raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=UTC)
+        pn = data.get("pending_note")
+        pending_note: str | None
+        if pn is None:
+            pending_note = None
+        elif isinstance(pn, str):
+            pending_note = pn.strip() or None
+        else:
+            return None
+        return cls(
+            kind=kind,
+            option_ids=option_ids,
+            pending_note=pending_note,
+            expires_at=exp,
+        )
 
 
 @dataclass

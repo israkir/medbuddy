@@ -32,6 +32,7 @@ from medbuddy.agents.tools.medication_crud import (
     ListMedicationsTool,
     RemoveMedicationTool,
 )
+from medbuddy.application.dose_clarification_resolve import try_resolve_pending_dose_clarification
 from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.profile_intents import try_profile_intent_reply
 from medbuddy.engine.types import AppServices
@@ -123,6 +124,16 @@ class MedicationAgent:
             user_key,
             ConversationTurn(role="user", content=user_text, at=datetime.now(UTC)),
         )
+
+        clarify_reply = await try_resolve_pending_dose_clarification(
+            svc, user_key=user_key, user_text=user_text, locale=locale
+        )
+        if clarify_reply is not None:
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=clarify_reply, at=datetime.now(UTC)),
+            )
+            return clarify_reply
 
         locale_reply = await try_locale_change_reply(
             svc,

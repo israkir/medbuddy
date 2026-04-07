@@ -60,6 +60,9 @@
     "removed": "已從清單移除：{name}。",
     "remove_not_found": "清單上找不到這個藥名，請再說一次，或先問「我的藥清單」。",
     "confirm_dose_none": "目前沒有可以勾選的近期用藥時段；若您指的是某個時間或藥名，再說一點細節好嗎？",
+    "confirm_dose_ambiguous": "我看到有不只一筆可能符合的用藥，想請您確認是哪一筆：\n{options}\n您可以回覆藥名與時間；若上述都已服用，也可以回覆「全部」。",
+    "confirm_dose_note_ambiguous": "我看到近期已服用紀錄不只一筆，想請您確認這段備註要加在哪一筆：\n{options}\n請回覆藥名與時間。",
+    "confirm_dose_clarify_invalid": "請用選項上的數字回覆（例如 1 或 2）；若以上全都適用也可回覆「全部」。",
     "confirm_dose_recorded": "好的，已幫你記下 {count} 筆「已服藥」。謝謝你告訴我。",
     "confirm_dose_recorded_with_note": "好的，已幫你記下 {count} 筆「已服藥」，並附上備註：{note}",
     "confirm_dose_note_appended": "好的，已把你說的內容加在最近一筆已服藥紀錄上：{note}"

@@ -190,3 +190,9 @@ create policy "medbuddy_drug_personalization_cache_anon_rw"
     to anon
     using (true)
     with check (true);
+
+-- Ephemeral agent state (dose disambiguation). Safe to clear anytime.
+alter table public.patients add column if not exists pending_agent_clarification jsonb;
+
+comment on column public.patients.pending_agent_clarification is
+    'Optional JSON: pending dose clarification (option dose_event ids + expires_at).';

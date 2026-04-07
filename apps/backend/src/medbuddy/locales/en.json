@@ -60,6 +60,9 @@
     "removed": "Removed from your list: {name}.",
     "remove_not_found": "I couldn’t find that one on your list — try the drug name again, or ask to see your medications.",
     "confirm_dose_none": "I don’t see a recent dose waiting to be checked off. If you meant a certain time or medicine, tell me a little more and I’ll try again.",
+    "confirm_dose_ambiguous": "I see more than one dose that could match. Which one did you take?\n{options}\nYou can reply with the medication name and time, or say \"all\" if you took all listed doses.",
+    "confirm_dose_note_ambiguous": "I found more than one recent taken dose. Which dose should I attach this note to?\n{options}\nPlease reply with the medication name and time.",
+    "confirm_dose_clarify_invalid": "Please reply with one of the numbers shown (for example 1 or 2), or say \"all\" if that applies.",
     "confirm_dose_recorded": "Got it—I’ve marked {count} dose(s) as taken. Thanks for letting me know.",
     "confirm_dose_recorded_with_note": "Got it—I’ve marked {count} dose(s) as taken and saved your note: {note}",
     "confirm_dose_note_appended": "Got it—I’ve added that to your most recent dose record: {note}"

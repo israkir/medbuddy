@@ -16,16 +16,14 @@ def test_llm_provider_defaults_to_gemini(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     s = Settings()
     assert s.llm_provider == "gemini"
-    assert s.active_llm_model_id == s.gemini_model
 
 
-def test_llm_provider_openai_sets_active_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_llm_provider_openai_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MOCK_EXTERNAL_SERVICES", "true")
     monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
     s = Settings()
     assert s.llm_provider == "openai"
-    assert s.active_llm_model_id == "gpt-4.1-mini"
 
 
 def test_invalid_llm_provider(monkeypatch: pytest.MonkeyPatch) -> None:

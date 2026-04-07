@@ -6,7 +6,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from medbuddy.config import Settings, get_settings
-from medbuddy.models.domain import DoseEventReminderPayload, MedicationDraft, MedicationRecord
+from medbuddy.models.domain import (
+    DoseClarificationPending,
+    DoseEventPendingCandidate,
+    DoseEventReminderPayload,
+    MedicationDraft,
+    MedicationRecord,
+)
 from medbuddy.reminders.prefs import (
     iter_dose_instants_for_medication,
     reminder_blob_from_draft,
@@ -49,6 +55,7 @@ class MockUserData(UserDataPort):
         self._users: dict[str, dict[str, Any]] = {}
         self._meds: dict[str, list[MedicationRecord]] = {}
         self._doses: dict[str, dict[str, Any]] = {}
+        self._dose_clarification: dict[str, dict[str, Any] | None] = {}
 
     def _reminder_settings(self) -> Settings:
         return self._settings if self._settings is not None else get_settings()
@@ -296,6 +303,85 @@ class MockUserData(UserDataPort):
         d["last_nudge_at"] = datetime.now(UTC)
         return True
 
+    async def get_dose_clarification_pending(
+        self, line_user_id: str
+    ) -> DoseClarificationPending | None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        raw = self._dose_clarification.get(line_user_id)
+        return DoseClarificationPending.from_json(raw) if raw else None
+
+    async def set_dose_clarification_pending(
+        self, line_user_id: str, pending: DoseClarificationPending | None
+    ) -> None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        self._dose_clarification[line_user_id] = pending.to_json() if pending else None
+
+    async def mark_dose_events_taken(
+        self,
+        line_user_id: str,
+        dose_event_ids: list[str],
+        *,
+        notes: str | None = None,
+    ) -> int:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        now = datetime.now(UTC)
+        note_val: str | None = None
+        if notes is not None:
+            nstrip = notes.strip()
+            note_val = nstrip[:500] if nstrip else None
+        n = 0
+        for eid in dose_event_ids:
+            d = self._doses.get(eid)
+            if not d:
+                continue
+            if d["line_user_id"] != line_user_id or d["user_internal_id"] != uid:
+                continue
+            if d.get("taken_at") is not None:
+                continue
+            if d["scheduled_at"] > now:
+                continue
+            d["taken_at"] = now
+            if note_val:
+                d["notes"] = note_val
+            n += 1
+        return n
+
+    async def append_note_to_dose_events(
+        self,
+        line_user_id: str,
+        dose_event_ids: list[str],
+        *,
+        notes: str,
+    ) -> int:
+        await asyncio.sleep(0)
+        addition = notes.strip()
+        if not addition:
+            return 0
+        if len(addition) > 500:
+            addition = addition[:500]
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        n = 0
+        for eid in dose_event_ids:
+            d = self._doses.get(eid)
+            if not d:
+                continue
+            if d["line_user_id"] != line_user_id or d["user_internal_id"] != uid:
+                continue
+            if d.get("taken_at") is None:
+                continue
+            existing = d.get("notes")
+            ex = existing.strip() if isinstance(existing, str) else ""
+            merged = _merge_dose_event_notes(ex or None, addition)
+            if merged:
+                d["notes"] = merged
+                n += 1
+        return n
+
     async def mark_pending_doses_taken(self, line_user_id: str, *, notes: str | None = None) -> int:
         await asyncio.sleep(0)
         row = await self.get_or_create_user(line_user_id)
@@ -324,6 +410,55 @@ class MockUserData(UserDataPort):
                     d["notes"] = note_val
                 n += 1
         return n
+
+    async def list_pending_dose_candidates(
+        self, line_user_id: str, *, max_items: int = 5
+    ) -> list[DoseEventPendingCandidate]:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        now = datetime.now(UTC)
+        candidates = [
+            DoseEventPendingCandidate(
+                dose_event_id=did,
+                medication_name=str(d["name"]),
+                dosage=str(d["dosage"]),
+                schedule=str(d["schedule"]),
+                scheduled_at=d["scheduled_at"],
+            )
+            for did, d in self._doses.items()
+            if d["line_user_id"] == line_user_id
+            and d["user_internal_id"] == uid
+            and d.get("taken_at") is None
+            and d["scheduled_at"] <= now
+        ]
+        candidates.sort(key=lambda c: c.scheduled_at, reverse=True)
+        return candidates[: max(1, max_items)]
+
+    async def list_recent_taken_dose_candidates(
+        self, line_user_id: str, *, max_items: int = 5
+    ) -> list[DoseEventPendingCandidate]:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(hours=_RECENT_TAKEN_DOSE_NOTE_HOURS)
+        candidates = [
+            DoseEventPendingCandidate(
+                dose_event_id=did,
+                medication_name=str(d["name"]),
+                dosage=str(d["dosage"]),
+                schedule=str(d["schedule"]),
+                scheduled_at=d["scheduled_at"],
+            )
+            for did, d in self._doses.items()
+            if d["line_user_id"] == line_user_id
+            and d["user_internal_id"] == uid
+            and d.get("taken_at") is not None
+            and d["taken_at"] >= cutoff
+        ]
+        candidates.sort(key=lambda c: c.scheduled_at, reverse=True)
+        return candidates[: max(1, max_items)]
 
     async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:
         await asyncio.sleep(0)

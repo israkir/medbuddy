@@ -31,13 +31,13 @@ async def _drug_grounding_text(svc: AppServices, drug_name: str) -> str | None:
         if tfda:
             parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
     except Exception:
-        log.debug("medication_crud: TFDA lookup failed for %r", q)
+        log.debug("medication_crud: TFDA lookup failed query_len=%d", len(q))
     try:
         ofda = await svc.drugs.fetch_openfda_label_snippet(q)
         if ofda:
             parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
     except Exception:
-        log.debug("medication_crud: OpenFDA lookup failed for %r", q)
+        log.debug("medication_crud: OpenFDA lookup failed query_len=%d", len(q))
     return "\n\n".join(parts) if parts else None
 
 
@@ -105,7 +105,12 @@ class AddMedicationTool:
             )
 
         await sync_and_enqueue_reminders(svc, user_key)
-        log.info("add_medication: user_key=%s added med_name=%r", user_key, saved.name)
+        log.info(
+            "add_medication: user_key=%s med_id=%s name_len=%d",
+            user_key,
+            saved.id,
+            len(saved.name or ""),
+        )
         return ToolResult(reply=reply, structured=saved)
 
 
@@ -142,6 +147,9 @@ class RemoveMedicationTool:
 
         await sync_and_enqueue_reminders(svc, user_key)
         log.info(
-            "remove_medication: user_key=%s removed med_id=%s name=%r", user_key, mid, target.name
+            "remove_medication: user_key=%s med_id=%s name_len=%d",
+            user_key,
+            mid,
+            len(target.name or ""),
         )
         return ToolResult(reply=t("medication.removed", locale=locale, name=target.name))
