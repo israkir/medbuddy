@@ -12,7 +12,7 @@ COPY apps/backend/pyproject.toml apps/backend/README.md /app/
 COPY apps/backend/src/medbuddy /app/src/medbuddy
 COPY docker-entrypoint-web.sh /app/docker-entrypoint-web.sh
 
-RUN pip install --no-cache-dir ".[llm,supabase,tts,reminders]" \
+RUN pip install --no-cache-dir ".[llm,supabase,reminders]" \
     && chmod +x /app/docker-entrypoint-web.sh
 
 EXPOSE 8000

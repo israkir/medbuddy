@@ -49,17 +49,6 @@ class SpeechToTextPort(Protocol):
 
 
 @runtime_checkable
-class TextToSpeechPort(Protocol):
-    async def synthesize_to_m4a_url(
-        self,
-        text: str,
-        base_public_url: str,
-        *,
-        language_code: str | None = None,
-    ) -> tuple[str, int]: ...
-
-
-@runtime_checkable
 class LLMPort(Protocol):
     """LLM adapters must expose a stable id for drug-cache provenance (mock vs real model id)."""
 
@@ -157,26 +146,6 @@ class DrugDataPort(Protocol):
     async def fetch_tfda_snippet(self, query: str) -> DrugGrounding | None: ...
 
     async def fetch_openfda_label_snippet(self, query: str) -> DrugGrounding | None: ...
-
-
-@runtime_checkable
-class ObjectStoragePort(Protocol):
-    async def upload_temp_audio(
-        self,
-        *,
-        data: bytes,
-        content_type: str,
-        suffix: str,
-    ) -> str: ...
-
-    async def delete_object(self, public_url: str) -> None: ...
-
-
-@runtime_checkable
-class InternalMediaPort(Protocol):
-    """Serves bytes for ``GET /internal-media/{id}`` (local in-process storage only)."""
-
-    async def get_blob(self, file_id: str) -> bytes | None: ...
 
 
 @runtime_checkable

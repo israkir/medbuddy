@@ -15,7 +15,6 @@ dependencies = [
   "pydantic-settings>=2.13.1",
   "httpx>=0.28.1",
   "google-cloud-speech>=2.38.0",
-  "google-cloud-texttospeech>=2.36.0",
   "line-bot-sdk==3.22.0",
   "python-multipart>=0.0.24",
 ]
@@ -32,9 +31,6 @@ dev = [
 ]
 voice = [
   "pydub>=0.25.1",
-]
-tts = [
-  "edge-tts>=7.2.8",
 ]
 llm = [
   "google-genai>=1.70.0",

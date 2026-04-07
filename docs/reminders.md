@@ -75,7 +75,7 @@ Apply new columns on existing projects via the same file’s **`ALTER TABLE ... 
 
 There is **no** global reminder timezone env var — **`patients.timezone`** in Postgres is the source of truth for local clock and LINE push copy.
 
-**Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root **Dockerfile** (`pip install ".[llm,supabase,tts,reminders]"`).
+**Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root **Dockerfile** (`pip install ".[llm,supabase,reminders]"`).
 
 ## Processes
 

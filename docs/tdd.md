@@ -33,7 +33,7 @@
 
 MedBuddy helps patients manage medications and ask medication-related questions. The **primary product** (this document's focus) is **LINE Messaging** plus the **FastAPI** backend — webhooks, dose reminder push, and an **HTTP API** for integrations and tests. A **reference Expo app** (`apps/frontend/`) exists as a future surface; it is not a co-equal channel in this phase (see [`frontend-expo.md`](frontend-expo.md)).
 
-**Prototype scope:** Text-in, text-out only. LINE audio (STT/TTS) code paths exist for engineering exploration but are not part of prototype product acceptance.
+**Prototype scope:** Text-in, text-out only. LINE voice notes may be transcribed (STT); assistant replies stay text. That path is not part of prototype product acceptance.
 
 | Channel | Entry point | Role |
 |---------|-------------|------|
@@ -127,7 +127,7 @@ agents/             (abstract)               (concrete or mock)
 
 ### 2.5 Text-only prototype acceptance
 
-**Decision:** Product acceptance is defined on text paths only. Voice (STT/TTS) code paths are present for engineering exploration but are explicitly excluded from prototype acceptance criteria.
+**Decision:** Product acceptance is defined on text paths only. Voice-note ingest (STT) is explicitly excluded from prototype acceptance criteria.
 
 **Rationale:** Reduces test surface, makes safety-copy review tractable, and provides a clear ceiling for what "works" before adding voice latency, failure modes, and accessibility expectations.
 
@@ -193,8 +193,6 @@ apps/backend/src/medbuddy/
 │   ├── drugs_http.py            # HttpDrugData (OpenFDA + TFDA stub)
 │   ├── caching_drugs.py         # CachingDrugData (cache wrapper around DrugDataPort)
 │   ├── stt_google.py            # GoogleSpeechToText (engineering exploratory, not prototype)
-│   ├── edge_tts_service.py      # EdgeTtsService (engineering exploratory, not prototype)
-│   ├── local_public_storage.py  # LocalPublicObjectStorage (temp audio)
 │   └── mocks/                   # MockLLM, MockLineClient, MockUserData, etc.
 │
 ├── privacy/
@@ -219,7 +217,7 @@ apps/backend/src/medbuddy/
 │   └── intent_hooks.py          # try_intent_hooks() — pilot feature hook registry
 │
 ├── http/
-│   └── shared_routes.py         # /health, /internal-media/{id}, /internal/reminders/reconcile
+│   └── shared_routes.py         # /health, /internal/reminders/reconcile
 │
 └── locales/
     ├── zh-TW.json               # Primary locale (Traditional Chinese, Taiwan)
@@ -323,12 +321,9 @@ channels/line/orchestrator.py
     │ download_message_content(message_id)     # LINE blob API
     │ stt.transcribe(audio_bytes)              # Google Speech-to-Text or mock
     │ run_assistant_text_turn(user_key, transcript)
-    │ [if voice reply requested]
-    │   tts.synthesize(reply_text) → audio_bytes
-    │   storage.save(audio_bytes) → public_url
-    │ line_client.reply_message_batch([audio_msg, text_msg])
+    │ LINE reply: text only (same assistant reply as text chats)
     ▼
-LINE platform (batch reply)
+LINE platform
 ```
 
 > This flow is not part of prototype product acceptance. See `prd.md §2` and `§9 (NG-1)`.
@@ -529,15 +524,6 @@ Cache invalidates naturally when the patient's medication list changes, because 
 Liveness check. No auth required.
 
 **Response:** `200 OK`, body `"ok"` (plain text). Used by Docker health checks and load balancers.
-
----
-
-#### `GET /internal-media/{file_id}`
-
-Serves short-lived TTS audio files for LINE voice replies. Requires `PUBLIC_BASE_URL` to be set. Files are deleted after TTL by `LocalPublicObjectStorage`.
-
-**Errors:**
-- `404 Not Found` — file does not exist or has expired.
 
 ---
 
@@ -889,7 +875,7 @@ The backend uses `SUPABASE_PUBLISHABLE_KEY` (anon key) — never the `service_ro
 
 ### 10.5 Internal endpoints
 
-`POST /internal/reminders/reconcile` is protected by `X-Cron-Secret` matching `MEDBUDDY_CRON_SECRET`. Neither this endpoint nor `/internal-media/{id}` is intended for public client use — expose them on an internal network or behind a gateway in production.
+`POST /internal/reminders/reconcile` is protected by `X-Cron-Secret` matching `MEDBUDDY_CRON_SECRET`. It is not intended for public client use — expose it on an internal network or behind a gateway in production.
 
 ### 10.6 Production safeguards
 
@@ -1027,7 +1013,7 @@ make check         # lint + test (CI gate)
 
 ### 14.1 Single-container (default, Render)
 
-`Dockerfile` (Python 3.12-slim-bookworm) installs all extras (`[llm,supabase,tts,reminders]`). `docker-entrypoint-web.sh` starts:
+`Dockerfile` (Python 3.12-slim-bookworm) installs all extras (`[llm,supabase,reminders]`). `docker-entrypoint-web.sh` starts:
 - **uvicorn** — always.
 - **arq worker** — only when `REDIS_URL` is non-empty.
 
@@ -1114,11 +1100,11 @@ All settings are in `config.py` (Pydantic `BaseSettings`). Priority order: `MEDB
 | `OPENAI_API_KEY` | — | Required when `LLM_PROVIDER=openai` |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | |
 
-### 15.4 Storage and speech
+### 15.4 Speech (STT) and public URL
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `PUBLIC_BASE_URL` | `http://localhost:8000` | HTTPS base URL for LINE-accessible audio |
+| `PUBLIC_BASE_URL` | `http://localhost:8000` | Public origin of this API (webhooks, logging, future features) |
 | `GOOGLE_SPEECH_API_KEY` | — | For Google Speech-to-Text (exploratory) |
 | `GOOGLE_SPEECH_PROJECT_ID` | — | Google Cloud project ID |
 | `GOOGLE_SPEECH_LOCATION` | `global` | Speech-to-Text V2 location |
@@ -1218,7 +1204,7 @@ These are best-effort targets for the prototype — not contractual SLAs.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Voice (STT/TTS) as product feature | Out of prototype scope | Code paths exist; not validated. See `prd.md §2`. |
+| Voice notes (STT ingest) as product feature | Out of prototype scope | Code path exists; not validated. See `prd.md §2`. |
 | Rich LINE Flex messages / "mark taken" postback | Not implemented | Reminders are plain text. |
 | Local push notifications for HTTP-only users | Not implemented | LINE push is the only reminder delivery channel. |
 | TFDA live API integration | Stub | `fetch_tfda_snippet()` returns `None`; `source=tfda` rows are never created. |

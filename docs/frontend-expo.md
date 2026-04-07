@@ -43,7 +43,7 @@ The app is positioned as a **potential standalone medication companion**: first-
 | **Medications** | Catalog, **`MedicationListCard`**, visit questions, **`MedicationQuestionsPanel`**, **expo-speech** listen via **`MedicationExplanationContext`** |
 | **Family** | Informational copy; placeholder invite (no backend) |
 | **Settings** | Language (zh-TW / en), persisted before splash hides |
-| **Medication helper (chat)** | `app/companion.tsx` — messages, **suggested prompts**, **read-aloud** (on-device TTS), rotating chips / prompts toward meds and visit prep (see app for current UX) |
+| **Medication helper (chat)** | `app/companion.tsx` — messages, **suggested prompts**, **read-aloud** (device speech synthesis), rotating chips / prompts toward meds and visit prep (see app for current UX) |
 | **Visit summary** | Doctor-ready draft screen; may call **`GET /v1/app/summary`** when API mode is on; local **AsyncStorage** draft for offline or sharing |
 
 ---

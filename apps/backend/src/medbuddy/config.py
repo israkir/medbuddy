@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     mock_external_services: bool = Field(
         default=False,
-        description="Use in-memory mocks for LINE, STT, TTS, LLM, drugs, storage",
+        description="Use in-memory mocks for LINE, STT, LLM, drugs, users",
         validation_alias=AliasChoices("mock_external_services", "MOCK_EXTERNAL_SERVICES"),
     )
 
@@ -71,17 +71,6 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return s
 
-    @field_validator("tts_provider", mode="before")
-    @classmethod
-    def _normalize_tts_provider(cls, v: object) -> str:
-        if v is None or v == "":
-            return "edge"
-        s = str(v).lower().strip()
-        if s not in ("edge", "google"):
-            msg = f"Invalid TTS_PROVIDER {v!r}; use edge or google"
-            raise ValueError(msg)
-        return s
-
     @field_validator("medbuddy_integration", mode="before")
     @classmethod
     def _normalize_medbuddy_integration(cls, v: object) -> str | None:
@@ -97,7 +86,7 @@ class Settings(BaseSettings):
 
     public_base_url: str = Field(
         default="http://localhost:8000",
-        description="Public HTTPS base URL for LINE-accessible audio (production)",
+        description="Public base URL of this API (logging, links, future outbound media)",
     )
 
     # Real integrations (optional when mock_external_services is False)
@@ -150,53 +139,6 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("GOOGLE_SPEECH_LOCATION", "google_speech_location"),
     )
 
-    tts_provider: str = Field(
-        default="edge",
-        description=(
-            "TTS adapter for LINE voice replies: edge (edge-tts, optional [tts] extra) or "
-            "google (Cloud Text-to-Speech; optional GOOGLE_TTS_APPLICATION_CREDENTIALS, else ADC)."
-        ),
-        validation_alias=AliasChoices("MEDBUDDY_TTS_PROVIDER", "TTS_PROVIDER", "tts_provider"),
-    )
-    google_tts_language_code: str = Field(
-        default="",
-        description=(
-            "If set, pins Google TTS language for all users (overrides profile locale). "
-            "Leave empty to use each user's stored locale on LINE (fallback: MEDBUDDY_LOCALE)."
-        ),
-        validation_alias=AliasChoices("GOOGLE_TTS_LANGUAGE_CODE", "google_tts_language_code"),
-    )
-    google_tts_voice_name: str = Field(
-        default="",
-        description=(
-            "Optional Google TTS voice id (e.g. zh-TW-Neural2-A). Empty uses the API default for "
-            "the resolved language. Omit for mixed en/zh-TW users unless you pin a single language."
-        ),
-        validation_alias=AliasChoices("GOOGLE_TTS_VOICE_NAME", "google_tts_voice_name"),
-    )
-    google_tts_application_credentials: str = Field(
-        default="",
-        description=(
-            "Path to the service-account JSON used only by Cloud Text-to-Speech. "
-            "Empty falls back to GOOGLE_APPLICATION_CREDENTIALS / default ADC."
-        ),
-        validation_alias=AliasChoices(
-            "GOOGLE_TTS_APPLICATION_CREDENTIALS",
-            "google_tts_application_credentials",
-        ),
-    )
-    line_voice_reply_for_text: bool = Field(
-        default=False,
-        description=(
-            "LINE: send TTS audio plus text when the user sent a text message "
-            "(default: audio only after the user sends a voice message)."
-        ),
-        validation_alias=AliasChoices(
-            "MEDBUDDY_LINE_VOICE_REPLY_FOR_TEXT",
-            "line_voice_reply_for_text",
-        ),
-    )
-
     conversation_history_turns: int = 5
     dose_clarification_ttl_seconds: int = Field(
         default=900,
@@ -208,8 +150,6 @@ class Settings(BaseSettings):
             "dose_clarification_ttl_seconds",
         ),
     )
-    audio_temp_ttl_seconds: int = 60
-
     drug_reference_cache_ttl_hours: int = Field(
         default=168,
         ge=0,

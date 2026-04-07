@@ -19,7 +19,7 @@
 | **Assistant chat** | **`run_assistant_text_turn`** — one user text in, one reply string out. Used by **LINE** (text + STT transcript from voice) and **`POST /v1/app/messages`**. Implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py). |
 | **LINE-only (no full assistant turn)** | **`follow`** → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
 | **HTTP without chat pipeline** | **`GET /v1/app/health`**, **`GET /v1/app/info`**, **`GET /v1/app/me`**, **`POST /v1/app/onboarding`**, **`GET /v1/app/summary`** — auth + user store / LLM as documented below. |
-| **Infrastructure** | **`GET /health`**, **`GET /internal-media/{file_id}`** (TTS audio for LINE), **`POST /internal/reminders/reconcile`** (cron). |
+| **Infrastructure** | **`GET /health`**, **`POST /internal/reminders/reconcile`** (cron). |
 
 ---
 
@@ -31,7 +31,7 @@
 |-----------------|----------------------|---------|
 | **`follow`** | Fixed **welcome** (i18n `line.follow_welcome`). | `get_or_create_user` → **`run_assistant_text_turn` is not called.** |
 | **`message` · text** | Assistant reply (text). | Webhook verified → `run_assistant_text_turn(user_key=line_user_id, user_text=…)` → `reply_text` to LINE. |
-| **`message` · audio** | Assistant reply: **audio + text** batch (when TTS configured), else behavior follows project settings. | Download audio → **STT** (`transcribe_m4a`) → same `run_assistant_text_turn` on transcript → optional **TTS** URL under `/internal-media/...` + text batch; temp file TTL cleanup. |
+| **`message` · audio** | Assistant reply: **text** (same as typed messages after STT). | Download audio → **STT** (`transcribe_m4a`) → same `run_assistant_text_turn` on transcript → text reply. |
 | **`postback`** | *(None)* | Parsed `action` is logged; **no user reply** (placeholder for future rich UI). |
 | **`message` · other types** (sticker, image, …) | *(None)* | Logged as unsupported; **no** `run_assistant_text_turn`. |
 

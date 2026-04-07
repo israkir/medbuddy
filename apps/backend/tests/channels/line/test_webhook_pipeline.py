@@ -92,6 +92,40 @@ async def test_orchestrator_text_message_runs_assistant(mock_settings):
     assert hasattr(line, "replies")
     assert len(line.replies) == 1
     assert line.replies[0]["type"] == "batch"  # type: ignore[index]
+    msgs = line.replies[0]["messages"]  # type: ignore[index]
+    assert len(msgs) == 1
+    assert msgs[0]["type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_audio_message_replies_text_after_stt(mock_settings):
+    """Voice inbound: STT transcript → same assistant path → text reply only."""
+    mock_settings.mock_external_services = True
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    svc.line.seed_voice_message("m-audio", b"fake-m4a")  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "message",
+            "replyToken": "rtoken",
+            "source": {"userId": "Uabc", "type": "user"},
+            "message": {"id": "m-audio", "type": "audio"},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    line = svc.line
+    assert len(line.replies) == 1
+    msgs = line.replies[0]["messages"]  # type: ignore[index]
+    assert len(msgs) == 1
+    assert msgs[0]["type"] == "text"
+    assert msgs[0]["text"]  # type: ignore[index]
 
 
 @pytest.mark.asyncio
@@ -153,83 +187,3 @@ async def test_orchestrator_audio_stt_error_replies_with_generic_error(mock_sett
     reply = line.replies[0]["messages"][0]  # type: ignore[index]
     assert reply["type"] == "text"
     assert reply["text"]
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_audio_http_public_base_skips_tts_text_only(mock_settings):
-    """LINE requires HTTPS audio URLs; http PUBLIC_BASE_URL yields text only (no TTS)."""
-    mock_settings.mock_external_services = True
-    mock_settings.public_base_url = "http://insecure.example"
-    svc: AppServices = __import__(
-        "medbuddy.container",
-        fromlist=["build_app_services"],
-    ).build_app_services(mock_settings)
-
-    synth_calls: list[object] = []
-
-    async def _no_synth(
-        _text: str, _base: str, *, language_code: str | None = None
-    ) -> tuple[str, int]:
-        synth_calls.append(True)
-        return "https://should-not-be-used/", 1000
-
-    svc.tts.synthesize_to_m4a_url = _no_synth  # type: ignore[method-assign]
-    svc.line.seed_voice_message("m-audio", b"fake-m4a")  # type: ignore[attr-defined]
-
-    await handle_line_event(
-        {
-            "type": "message",
-            "replyToken": "rtoken",
-            "source": {"userId": "Uabc", "type": "user"},
-            "message": {"id": "m-audio", "type": "audio"},
-            "timestamp": 1_704_000_000_000,
-            "mode": "active",
-            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "deliveryContext": {"isRedelivery": False},
-        },
-        svc,
-    )
-    assert not synth_calls
-    line = svc.line
-    assert len(line.replies) == 1
-    msgs = line.replies[0]["messages"]  # type: ignore[index]
-    assert len(msgs) == 1
-    assert msgs[0]["type"] == "text"
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_audio_non_https_upload_url_falls_back_text(mock_settings):
-    """If storage returns a non-https URL, send text only (TTS may still have run)."""
-    mock_settings.mock_external_services = True
-    mock_settings.public_base_url = "https://ok.example"
-    svc: AppServices = __import__(
-        "medbuddy.container",
-        fromlist=["build_app_services"],
-    ).build_app_services(mock_settings)
-
-    async def _bad_url_synth(
-        _text: str, _base: str, *, language_code: str | None = None
-    ) -> tuple[str, int]:
-        return "http://line-will-reject/", 1000
-
-    svc.tts.synthesize_to_m4a_url = _bad_url_synth  # type: ignore[method-assign]
-    svc.line.seed_voice_message("m-audio", b"fake-m4a")  # type: ignore[attr-defined]
-
-    await handle_line_event(
-        {
-            "type": "message",
-            "replyToken": "rtoken",
-            "source": {"userId": "Uabc", "type": "user"},
-            "message": {"id": "m-audio", "type": "audio"},
-            "timestamp": 1_704_000_000_000,
-            "mode": "active",
-            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "deliveryContext": {"isRedelivery": False},
-        },
-        svc,
-    )
-    line = svc.line
-    assert len(line.replies) == 1
-    msgs = line.replies[0]["messages"]  # type: ignore[index]
-    assert len(msgs) == 1
-    assert msgs[0]["type"] == "text"
