@@ -36,7 +36,6 @@ gemini_llm    supabase_stores  drugs_http
 | | `channels/mobile/` | Mobile REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
 | | `application/profile_intents.py` | Profile updates when intent is `update_profile` (`extract_profile_patch`) |
-| | `application/locale_intents.py` | Legacy locale helper (locale updates are now handled via `update_profile`) |
 | **Agents** | `agents/medication_agent.py` | `MedicationAgent` — `interpret_user_turn` → maps `TurnInterpretation` to tools (adherence slots → `ConfirmDoseTool`) |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
 | | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `RemoveMedicationTool` |
@@ -48,14 +47,14 @@ gemini_llm    supabase_stores  drugs_http
 | | `protocols/drug_caches.py` | `DrugCachesPort` |
 | **Engine** | `engine/types.py` | `AppServices` dataclass — DI container |
 | **Container** | `container.py` | `build_app_services(settings)` — wires mock vs real adapters |
-| **Integrations** | `integrations/gemini_llm.py`, `integrations/openai_llm.py` | LLM adapters (`LLM_PROVIDER` selects which runs) |
+| **Integrations** | `integrations/llm/gemini_llm.py`, `integrations/llm/openai_llm.py` | LLM adapters (`LLM_PROVIDER` selects which runs) |
 | | `integrations/line_client.py` | LINE Messaging API SDK |
-| | `integrations/supabase_stores.py` | Supabase Postgres (patients, meds, turns, dose events) |
+| | `integrations/persistence/supabase_stores.py` | Supabase Postgres (patients, meds, turns, dose events) |
 | | `integrations/drugs_http.py` | OpenFDA HTTP + TFDA stub |
 | | `integrations/caching_drugs.py` | `CachingDrugData` wrapper with TTL |
-| | `integrations/supabase_drug_caches.py` | `SupabaseDrugCaches` (personalization cache) |
+| | `integrations/persistence/supabase_drug_caches.py` | `SupabaseDrugCaches` (personalization cache) |
 | | `integrations/edge_tts_service.py` | edge-tts TTS for LINE voice replies |
-| | `integrations/stt_google.py` | Google Cloud Speech-to-Text V2 |
+| | `integrations/stt/stt_google.py` | Google Cloud Speech-to-Text V2 |
 | | `integrations/local_public_storage.py` | Short-lived audio URLs for LINE |
 | | `integrations/mocks/` | In-memory mock adapters for all ports |
 | **Privacy** | `privacy/redact.py` | `redact_pii_text()` — emails, phone patterns, digit runs |
@@ -138,13 +137,13 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | Port | Mock | Real |
 |------|------|------|
 | **LINE** | `integrations/mocks/line.py` | `integrations/line_client.py` — needs `LINE_CHANNEL_ACCESS_TOKEN` |
-| **LLM** | `integrations/mocks/llm.py` | `integrations/gemini_llm.py` or `integrations/openai_llm.py` — set `LLM_PROVIDER` and `GEMINI_API_KEY` or `OPENAI_API_KEY`; install `[llm]` extra |
-| **STT** | `integrations/mocks/stt.py` | `integrations/stt_google.py` — needs `GOOGLE_SPEECH_API_KEY` and `GOOGLE_SPEECH_PROJECT_ID` |
+| **LLM** | `integrations/mocks/llm.py` | `integrations/llm/gemini_llm.py` or `integrations/llm/openai_llm.py` — set `LLM_PROVIDER` and `GEMINI_API_KEY` or `OPENAI_API_KEY`; install `[llm]` extra |
+| **STT** | `integrations/mocks/stt.py` | `integrations/stt/stt_google.py` — needs `GOOGLE_SPEECH_API_KEY` and `GOOGLE_SPEECH_PROJECT_ID` |
 | **TTS** | `integrations/mocks/tts.py` | `integrations/edge_tts_service.py` — install `[tts]` extra |
 | **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
 | **Object storage** | In-memory mock | `integrations/local_public_storage.py` when `PUBLIC_BASE_URL` is set |
-| **Users / turns** | In-memory mocks | `integrations/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are set; install `[supabase]` extra, apply `supabase/schema.sql` |
-| **Drug caches** | No-op | `integrations/supabase_drug_caches.py` + `integrations/caching_drugs.py` (Supabase required) |
+| **Users / turns** | In-memory mocks | `integrations/persistence/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are set; install `[supabase]` extra, apply `supabase/schema.sql` |
+| **Drug caches** | No-op | `integrations/persistence/supabase_drug_caches.py` + `integrations/caching_drugs.py` (Supabase required) |
 
 **Key environment variables** (see [`.env.example`](.env.example)):
 

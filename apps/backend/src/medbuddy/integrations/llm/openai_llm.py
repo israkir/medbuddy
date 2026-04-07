@@ -1,7 +1,7 @@
 """OpenAI Chat Completions adapter (e.g. gpt-4.1-mini).
 
 Implements :class:`medbuddy.protocols.ports.LLMPort` with the same behaviour as
-:class:`medbuddy.integrations.gemini_llm.GeminiLLM`, using structured outputs via
+:class:`medbuddy.integrations.llm.gemini_llm.GeminiLLM`, using structured outputs via
 ``client.chat.completions.parse`` for Pydantic schemas.
 
 Requires optional dependency: ``pip install 'medbuddy-api[llm]'`` (``openai`` package).
@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
@@ -104,36 +105,108 @@ class OpenAILLM(LLMPort):
         return self._model
 
     def _generate_sync(self, model: str, prompt: str) -> str:
-        resp = self._client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
+        t0 = time.perf_counter()
+        try:
+            resp = self._client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
+        except Exception:
+            log.error(
+                "OpenAI chat completion failed: model=%s prompt_chars=%d",
+                model,
+                len(prompt),
+                exc_info=True,
+            )
+            raise
+        out = (resp.choices[0].message.content or "").strip()
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        usage = getattr(resp, "usage", None)
+        pt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+        ct = getattr(usage, "completion_tokens", None) if usage is not None else None
+        log.info(
+            "OpenAI chat completion ok: model=%s prompt_chars=%d response_chars=%d "
+            "duration_ms=%.1f prompt_tokens=%r completion_tokens=%r",
+            model,
+            len(prompt),
+            len(out),
+            elapsed_ms,
+            pt,
+            ct,
         )
-        return (resp.choices[0].message.content or "").strip()
+        return out
 
     def _generate_structured_sync(self, model: str, prompt: str, schema: type[T]) -> T:
-        resp = self._client.chat.completions.parse(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format=schema,
-            temperature=0.1,
-        )
+        t0 = time.perf_counter()
+        schema_name = schema.__name__
+        try:
+            resp = self._client.chat.completions.parse(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format=schema,
+                temperature=0.1,
+            )
+        except Exception:
+            log.error(
+                "OpenAI structured completion failed: model=%s schema=%s prompt_chars=%d",
+                model,
+                schema_name,
+                len(prompt),
+                exc_info=True,
+            )
+            raise
         msg = resp.choices[0].message
         refusal = getattr(msg, "refusal", None)
         if refusal:
+            log.warning(
+                "OpenAI structured completion refusal: model=%s schema=%s prompt_chars=%d",
+                model,
+                schema_name,
+                len(prompt),
+            )
             raise LLMParseError(f"Model refusal for {schema.__name__}: {str(refusal)[:200]}")
         if msg.parsed is not None:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            usage = getattr(resp, "usage", None)
+            pt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+            ct = getattr(usage, "completion_tokens", None) if usage is not None else None
+            log.info(
+                "OpenAI structured completion ok: model=%s schema=%s prompt_chars=%d "
+                "duration_ms=%.1f prompt_tokens=%r completion_tokens=%r",
+                model,
+                schema_name,
+                len(prompt),
+                elapsed_ms,
+                pt,
+                ct,
+            )
             return msg.parsed
         raw = (msg.content or "").strip()
         if not raw:
             raise LLMParseError(f"Empty response for schema {schema.__name__}")
         try:
             data = json.loads(_strip_json_fence(raw))
-            return schema.model_validate(data)
+            parsed = schema.model_validate(data)
         except (json.JSONDecodeError, Exception) as exc:
             raise LLMParseError(
                 f"Could not parse {schema.__name__} from model output: {raw[:200]}"
             ) from exc
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        usage = getattr(resp, "usage", None)
+        pt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+        ct = getattr(usage, "completion_tokens", None) if usage is not None else None
+        log.info(
+            "OpenAI structured completion ok: model=%s schema=%s prompt_chars=%d "
+            "duration_ms=%.1f prompt_tokens=%r completion_tokens=%r (parsed_from_text)",
+            model,
+            schema_name,
+            len(prompt),
+            elapsed_ms,
+            pt,
+            ct,
+        )
+        return parsed
 
     def _interpret_turn_sync(
         self, user_text: str, *, recent_context: str | None = None

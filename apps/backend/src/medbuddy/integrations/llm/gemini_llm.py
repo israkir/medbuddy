@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
@@ -112,19 +113,73 @@ class GeminiLLM(LLMPort):
     # ------------------------------------------------------------------
 
     def _generate_sync(self, model: str, prompt: str) -> str:
-        resp = self._client.models.generate_content(model=model, contents=prompt)
-        return (resp.text or "").strip()
+        t0 = time.perf_counter()
+        try:
+            resp = self._client.models.generate_content(model=model, contents=prompt)
+        except Exception:
+            log.error(
+                "Gemini generate_content failed: model=%s prompt_chars=%d",
+                model,
+                len(prompt),
+                exc_info=True,
+            )
+            raise
+        out = (resp.text or "").strip()
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        meta = getattr(resp, "usage_metadata", None)
+        pt = getattr(meta, "prompt_token_count", None) if meta is not None else None
+        ct = getattr(meta, "candidates_token_count", None) if meta is not None else None
+        log.info(
+            "Gemini generate_content ok: model=%s prompt_chars=%d response_chars=%d "
+            "duration_ms=%.1f prompt_token_count=%r candidates_token_count=%r",
+            model,
+            len(prompt),
+            len(out),
+            elapsed_ms,
+            pt,
+            ct,
+        )
+        return out
 
     def _generate_structured_sync(self, model: str, prompt: str, schema: type[T]) -> T:
         """Generate content and parse into a Pydantic schema via response_schema."""
+        t0 = time.perf_counter()
+        schema_name = schema.__name__
         config = self._genai_types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=schema,
         )
-        resp = self._client.models.generate_content(model=model, contents=prompt, config=config)
+        try:
+            resp = self._client.models.generate_content(
+                model=model, contents=prompt, config=config
+            )
+        except Exception:
+            log.error(
+                "Gemini structured generate_content failed: model=%s schema=%s prompt_chars=%d",
+                model,
+                schema_name,
+                len(prompt),
+                exc_info=True,
+            )
+            raise
+
+        meta = getattr(resp, "usage_metadata", None)
+        pt = getattr(meta, "prompt_token_count", None) if meta is not None else None
+        ct = getattr(meta, "candidates_token_count", None) if meta is not None else None
 
         # Prefer the SDK's parsed object (available when response_schema is honoured)
         if hasattr(resp, "parsed") and resp.parsed is not None:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            log.info(
+                "Gemini structured ok: model=%s schema=%s prompt_chars=%d duration_ms=%.1f "
+                "prompt_token_count=%r candidates_token_count=%r",
+                model,
+                schema_name,
+                len(prompt),
+                elapsed_ms,
+                pt,
+                ct,
+            )
             return resp.parsed  # type: ignore[return-value]
 
         # Fallback: parse the text ourselves
@@ -133,11 +188,23 @@ class GeminiLLM(LLMPort):
             raise LLMParseError(f"Empty response for schema {schema.__name__}")
         try:
             data = json.loads(_strip_json_fence(raw))
-            return schema.model_validate(data)
+            parsed = schema.model_validate(data)
         except (json.JSONDecodeError, Exception) as exc:
             raise LLMParseError(
                 f"Could not parse {schema.__name__} from model output: {raw[:200]}"
             ) from exc
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        log.info(
+            "Gemini structured ok: model=%s schema=%s prompt_chars=%d duration_ms=%.1f "
+            "prompt_token_count=%r candidates_token_count=%r (parsed_from_text)",
+            model,
+            schema_name,
+            len(prompt),
+            elapsed_ms,
+            pt,
+            ct,
+        )
+        return parsed
 
     # ------------------------------------------------------------------
     # LLMPort — intent classification

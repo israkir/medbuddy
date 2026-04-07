@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from medbuddy.config import Settings
-from medbuddy.integrations.supabase_stores import (
+from medbuddy.integrations.persistence.supabase_stores import (
     SupabaseConversationStore,
     SupabaseUserData,
     create_supabase_client,

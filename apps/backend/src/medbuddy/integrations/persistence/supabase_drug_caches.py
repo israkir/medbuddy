@@ -58,11 +58,14 @@ class SupabaseDrugCaches(DrugCachesPort):
             return None
         rows = resp.data or []
         if not rows:
+            log.info("DB drug_reference_cache.get: source=%s key=%s result=miss", source, key)
             return None
         row = rows[0]
         exp = _parse_ts(row.get("expires_at"))
         if exp is not None and exp < datetime.now(UTC):
+            log.info("DB drug_reference_cache.get: source=%s key=%s result=expired", source, key)
             return None
+        log.info("DB drug_reference_cache.get: source=%s key=%s result=hit", source, key)
         return row
 
     async def upsert_reference(
@@ -105,6 +108,7 @@ class SupabaseDrugCaches(DrugCachesPort):
 
         try:
             await _run_q(q)
+            log.info("DB drug_reference_cache.upsert: source=%s key=%s", source, key)
         except Exception as e:  # noqa: BLE001
             log.warning("drug_reference_cache upsert failed: %s", e)
 
@@ -151,12 +155,27 @@ class SupabaseDrugCaches(DrugCachesPort):
             return None
         rows = resp.data or []
         if not rows:
+            log.info(
+                "DB drug_personalization_cache.get: patient_id=%s query=%s result=miss",
+                user_uuid,
+                query_fingerprint,
+            )
             return None
         row = rows[0]
         exp = _parse_ts(row.get("expires_at"))
         if exp is not None and exp < datetime.now(UTC):
+            log.info(
+                "DB drug_personalization_cache.get: patient_id=%s query=%s result=expired",
+                user_uuid,
+                query_fingerprint,
+            )
             return None
         text = row.get("personalized_text")
+        log.info(
+            "DB drug_personalization_cache.get: patient_id=%s query=%s result=hit",
+            user_uuid,
+            query_fingerprint,
+        )
         return str(text).strip() if text else None
 
     async def save_personalized_reply(
@@ -198,5 +217,11 @@ class SupabaseDrugCaches(DrugCachesPort):
 
         try:
             await _run_q(q)
+            log.info(
+                "DB drug_personalization_cache.upsert: patient_id=%s query=%s locale=%s",
+                user_uuid,
+                query_fingerprint,
+                locale,
+            )
         except Exception as e:  # noqa: BLE001
             log.warning("drug_personalization_cache upsert failed: %s", e)

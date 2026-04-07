@@ -7,7 +7,7 @@ from medbuddy.drug_cache_keys import (
     DRUG_REFERENCE_SOURCE_TFDA,
     normalize_query_key,
 )
-from medbuddy.integrations.supabase_drug_caches import SupabaseDrugCaches
+from medbuddy.integrations.persistence.supabase_drug_caches import SupabaseDrugCaches
 from medbuddy.models.domain import DrugGrounding
 from medbuddy.protocols.ports import DrugDataPort
 

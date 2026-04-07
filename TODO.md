@@ -56,6 +56,8 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Observability
 
+- [ ] Implement an end-to-end **observability system**: centralized structured logs, distributed tracing, core service metrics, dashboards, and alert rules for backend/API/worker health and LLM/STT error budgets.
+
 - [ ] Optional: JSON logs, correlation IDs; readiness vs liveness; metrics/alerts (LINE vs **`/v1/app`**, LLM/STT failures).
 
 - [ ] **Performance and LLM cost:** Profile end-to-end application performance (assistant turns, reminders, mobile API); estimate and track **token usage** per path/provider; optimize prompts, context windows, caching, and model/routing choices to reduce latency and cost.

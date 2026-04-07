@@ -60,14 +60,14 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 
 | Method / path | Assistant pipeline? | Behavior |
 |---------------|---------------------|----------|
-| **`GET /health`** | No | JSON `{"status":"ok","channel":"standalone"}`. |
-| **`GET /info`** | No | Channel + API version metadata. |
-| **`GET /me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. |
-| **`POST /onboarding`** | No | **`UserDataPort.save_onboarding_profile`** — name, optional age, gender, contacts, notes, **IANA `timezone`**, **`locale`** (`en` \| `zh-TW`). |
-| **`POST /messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn(user_key=app_user_id, user_text=…)`** → `{"reply":"…"}`. |
-| **`GET /summary`** | No (dedicated tool path) | **`GenerateHealthSummaryTool`** with full history/meds — structured **doctor summary** JSON (+ `plain_text`), not the same JSON shape as chat-only summary text. |
+| **`GET /v1/app/health`** | No | JSON health response for HTTP clients. |
+| **`GET /v1/app/info`** | No | Public API metadata (non-secret). |
+| **`GET /v1/app/me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. |
+| **`POST /v1/app/onboarding`** | No | **`UserDataPort.save_onboarding_profile`** — name, optional age, gender, contacts, notes, **IANA `timezone`**, **`locale`** (`en` \| `zh-TW`). |
+| **`POST /v1/app/messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn(user_key=app_user_id, user_text=…)`** → `{"reply":"…"}`. |
+| **`GET /v1/app/summary`** | No (dedicated tool path) | **`GenerateHealthSummaryTool`** with full history/meds — structured **doctor summary** JSON (+ `plain_text`), not the same JSON shape as chat-only summary text. |
 
-**Reference UI:** Expo **`Medication helper`** calls **`POST /messages`** when live API mode is on — see [`frontend-expo.md`](frontend-expo.md).
+**Reference UI:** Expo **`Medication helper`** calls **`POST /v1/app/messages`** when live API mode is on — see [`frontend-expo.md`](frontend-expo.md).
 
 ---
 
@@ -86,7 +86,7 @@ All **chat** turns share this flow (LINE text/voice transcript and **`POST /v1/a
 9. **Append** the **assistant** turn and return reply text.
 
 **Routing** uses the configured **`Intent`** enum for the primary tool/fallback branch ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
-`add_medication`, `update_medication`, `list_medications`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.9**).
+`add_medication`, `update_medication`, `list_medications`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `emergency`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.9**).
 
 ---
 

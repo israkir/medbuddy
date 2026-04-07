@@ -112,10 +112,14 @@ Sections below use these fields where they add clarity; small or purely operatio
 |------------|-----------|----------|
 | `ListMedicationsTool` | `list_medications` | `agents/tools/medication_crud.py` |
 | `AddMedicationTool` | `add_medication` | `agents/tools/medication_crud.py` |
+| `UpdateMedicationTool` | `update_medication` | `agents/tools/medication_crud.py` |
 | `RemoveMedicationTool` | `remove_medication` | `agents/tools/medication_crud.py` |
 | `ConfirmDoseTool` | `confirm_dose` | `agents/tools/confirm_dose.py` |
+| `ReportMissedDoseTool` | `report_missed_dose` | `agents/tools/report_missed_dose.py` |
 | `ExplainMedicationTool` | `explain_medication` | `agents/tools/drug_lookup.py` |
+| `ReportSideEffectsTool` | `report_side_effects` | `agents/tools/side_effects.py` |
 | `InteractionCheckTool` | `interaction_check` | `agents/tools/interaction_check.py` |
+| `LogVitalTool` | `log_vital` | `agents/tools/log_vital.py` |
 | `GenerateHealthSummaryTool` | `request_summary` | `agents/tools/health_summary.py` |
 
 ---
@@ -295,7 +299,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 |-------|----------|
 | Trigger | Successful **`add_medication`** or **`remove_medication`** via **`MedicationAgent`** tools (LINE webhook or **`POST /v1/app/messages`**). |
 | Extraction | On add, the LLM can return structured **reminder preferences** (e.g. first reminder in N minutes, daily horizon days, whether to fan daily rows, optional local time). Stored under **`medications.raw_metadata.reminder`** and consumed when building `dose_events` (e.g. “in 5 minutes” → a single upcoming instant without fanning the full horizon). Env defaults `MEDBUDDY_REMINDER_*` apply when fields are unset. |
-| Scheduling | `UserDataPort.sync_upcoming_dose_events` replaces future `dose_events` per prefs + defaults: typically one local time per day (`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`) in `patients.timezone` (IANA), horizon `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, cap 90). Free-text `schedule` on the med does **not** expand to multiple daily times in v1 (may still appear in copy). |
+| Scheduling | `UserDataPort.sync_upcoming_dose_events` replaces future `dose_events` per prefs + defaults: one or more local times per day (if extracted via `daily_local_hhmm_list`), otherwise fallback `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` (`09:00` by default), interpreted in `patients.timezone` (IANA), horizon `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, cap 90). Free-text `schedule` itself is not parsed into clock times in v1 (it may still appear in copy). |
 | Delivery | With Redis, `enqueue_reminder_jobs` schedules arq `send_reminder_for_dose` with `_defer_until = scheduled_at`. Worker runs `deliver_dose_reminder` → LINE `push_message`, then `reminder_sent_at`. |
 | Nudges (optional) | If **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is non-empty (comma-separated minutes), after the primary push the worker may enqueue **`send_reminder_nudge`** jobs for follow-up LINE pushes until intervals are exhausted, the user marks doses taken, or the local day of the scheduled dose ends. Copy: **`reminder.line_push_nudge`**. |
 | Chat adherence | **`interpret_user_turn`** + **`ConfirmDoseTool`** — when structured fields indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.7). |
