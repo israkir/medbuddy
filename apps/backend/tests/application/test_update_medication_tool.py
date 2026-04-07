@@ -44,6 +44,7 @@ async def test_update_medication_updates_dosage_schedule_and_instructions() -> N
     assert meds[0].schedule == "after breakfast"
     assert meds[0].instructions == "avoid tea right after dose"
     assert "updated aspirin" in reply.lower()
+    assert "upcoming 3 days" in reply.lower()
 
 
 @pytest.mark.asyncio

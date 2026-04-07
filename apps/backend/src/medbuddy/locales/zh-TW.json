@@ -67,6 +67,7 @@
     "list_empty": "目前還沒有用藥記錄；您方便時告訴我藥名，我們一起建立。",
     "removed": "已從清單移除：{name}。",
     "updated": "已更新 {name}。劑量：{dosage}。服用時間：{schedule}。備註：{instructions}",
+    "update_reminder_followup": "要不要依這次更新幫您設定提醒？如果要，請告訴我要提醒多久（例如：未來 3 天）以及偏好的提醒時間。",
     "update_not_found": "我目前無法判斷要更新哪一個藥，請加上藥名。",
     "update_incomplete": "我有找到 {name}，但還需要你告訴我要改哪個欄位（藥名、劑量、時間或備註）。",
     "remove_not_found": "清單上找不到這個藥名，請再說一次，或先問「我的藥清單」。",

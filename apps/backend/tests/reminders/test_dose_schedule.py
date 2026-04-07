@@ -29,8 +29,9 @@ def test_iter_scheduled_future_only() -> None:
         horizon_days=3,
         now_utc=now,
     )
-    # Apr 7 15:00 UTC is late evening Taipei; same-calendar-day 09:00 is skipped → 2 future slots.
-    assert len(instants) == 2
+    # Apr 7 15:00 UTC is late evening Taipei; today's 09:00 is past, but we still return
+    # the next 3 future dose days.
+    assert len(instants) == 3
     for at in instants:
         assert at > now
         assert at.tzinfo == UTC

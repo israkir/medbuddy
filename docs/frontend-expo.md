@@ -22,6 +22,18 @@
 
 The app is positioned as a **potential standalone medication companion**: first-run onboarding, tabbed home experience, in-app “Medication helper” chat, **hold-to-talk → backend STT** (`/v1/app/messages/voice`), **automatic read-aloud** of replies in the user’s profile language (**expo-speech**), manual **read-aloud** on any bubble, and the same **`run_assistant_text_turn`** core as LINE text. **Dose reminders** remain **LINE push only** in the current backend; the Expo app does **not** receive the same proactive reminder pipeline (see [`reminders.md`](reminders.md)).
 
+### Standalone mobile app (concept)
+
+The repo today centers on LINE and the HTTP API; a **dedicated mobile client** is a product direction, not a shipped guarantee. The screens below are **concept-only** mockups to illustrate that idea—not screenshots of a production app.
+
+<p align="center">
+  <img src="../assets/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">
+  &nbsp;
+  <img src="../assets/mobile-2.png" alt="Concept: standalone app secondary flow" width="260">
+  &nbsp;
+  <img src="../assets/mobile-3.png" alt="Concept: standalone app detail or settings" width="260">
+</p>
+
 ---
 
 ## Stack and layout

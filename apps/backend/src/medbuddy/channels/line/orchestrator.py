@@ -30,6 +30,8 @@ async def _handle_user_message(
     line_user_id: str,
     reply_token: str,
     user_text: str,
+    locale: str,
+    inbound_was_audio: bool,
 ) -> None:
     reply_text = await run_assistant_text_turn(
         svc,
@@ -37,12 +39,66 @@ async def _handle_user_message(
         user_text=user_text,
     )
 
+    mode = svc.settings.line_voice_replies
+    want_voice = mode == "always" or (mode == "audio_inbound" and inbound_was_audio)
+    if want_voice and svc.tts is None:
+        log.warning(
+            "LINE flow: user_id=%s voice reply skipped (TTS not configured)",
+            line_user_id,
+        )
+        want_voice = False
+    if want_voice and not reply_text.strip():
+        want_voice = False
+
+    if not want_voice:
+        log.info(
+            "LINE flow: user_id=%s assistant reply len=%d chars — text only",
+            line_user_id,
+            len(reply_text),
+        )
+        await svc.line.reply_text(reply_token, reply_text)
+        return
+
+    pub = (svc.settings.public_base_url or "").strip()
+    if not pub.lower().startswith("https:"):
+        log.warning(
+            "LINE flow: user_id=%s voice reply may fail — public_base_url is not HTTPS",
+            line_user_id,
+        )
+
+    tts = svc.tts
+    assert tts is not None
+
+    try:
+        m4a, duration_ms = await tts.synthesize_m4a(reply_text, language_code=locale)
+        audio_id = svc.line_audio_blobs.put(m4a)
+        audio_url = svc.line_audio_blobs.public_url(audio_id)
+    except Exception:
+        log.error(
+            "LINE flow: user_id=%s TTS/blob failed; falling back to text",
+            line_user_id,
+            exc_info=True,
+        )
+        await svc.line.reply_text(reply_token, reply_text)
+        return
+
+    await svc.line.reply_message_batch(
+        reply_token,
+        [
+            {"type": "text", "text": reply_text},
+            {
+                "type": "audio",
+                "originalContentUrl": audio_url,
+                "duration": duration_ms,
+            },
+        ],
+    )
     log.info(
-        "LINE flow: user_id=%s assistant reply len=%d chars — text reply",
+        "LINE flow: user_id=%s assistant reply len=%d chars — text+audio duration_ms=%s",
         line_user_id,
         len(reply_text),
+        duration_ms,
     )
-    await svc.line.reply_text(reply_token, reply_text)
 
 
 async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
@@ -104,11 +160,15 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             line_user_id,
             len(text),
         )
+        row = await svc.users.get_or_create_user(line_user_id)
+        loc = effective_user_locale(row.get("locale"))
         await _handle_user_message(
             svc,
             line_user_id=line_user_id,
             reply_token=reply_token,
             user_text=text,
+            locale=loc,
+            inbound_was_audio=False,
         )
         return
 
@@ -141,6 +201,8 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             line_user_id=line_user_id,
             reply_token=reply_token,
             user_text=user_text,
+            locale=loc,
+            inbound_was_audio=True,
         )
         return
 

@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`POST /v1/app/messages/voice`** (standalone HTTP): multipart audio upload → Speech-to-Text (user profile **`locale`**) → same assistant turn as text → JSON **`reply`** + **`transcript`**. Reference Expo **Medication helper** / tab bar mic use this path; spoken answers use **expo-speech** on the client (LINE replies after voice STT remain **text-only** in the current LINE orchestrator).
+- **`POST /v1/app/messages/voice`** (standalone HTTP): multipart audio upload → Speech-to-Text (profile **`locale`**) → same assistant turn as text → JSON **`reply`** + **`transcript`**. Expo uses **expo-speech** for playback on the client.
+- **LINE voice replies**: After the assistant generates text, optional **Google Cloud Text-to-Speech** (MP3 → **m4a** via **ffmpeg**) plus ephemeral **`GET /v1/line/media/audio/{id}`** URLs let LINE receive **text + audio** in one reply batch. Toggle with **`MEDBUDDY_LINE_VOICE_REPLIES`** (`audio_inbound` default, `always`, or `off`). Requires **`PUBLIC_BASE_URL`** as **HTTPS** reachable by LINE, **`GOOGLE_SPEECH_PROJECT_ID`** (shared with STT / ADC), and **ffmpeg** on the server (included in the repo **Dockerfile**).
 - **Upcoming dose schedule intent**: New `Intent.upcoming_doses` with `ListUpcomingDosesTool` answers “what’s next / today / soon” from materialized `dose_events` (not guessed frequency text). `UserDataPort.list_upcoming_dose_events` and shared window/formatting in `reminders/upcoming_display.py`. Patient context for external LLMs now includes the same authoritative schedule block via `application/patient_llm_context.patient_context_for_llm` (used by explain, interaction, side effects, health summary, fallback `compose_reply`, and post-add compose when reminders are already synced).
 - **GitHub Actions CI**: Workflow runs backend Black + Ruff + pytest and frontend ESLint + TypeScript on pushes to `main` and on pull requests.
 - **Emergency and side-effect intents**: Added `Intent.emergency` (fixed localized emergency reply, no LLM body generation) and `Intent.report_side_effects` with `ReportSideEffectsTool`.
@@ -42,7 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **LINE voice replies**: Removed server-side speech synthesis and short-lived media hosting for LINE audio replies. Inbound LINE voice messages still use STT; assistant replies on LINE are text-only.
 - `LLMPort.extract_dose_confirmation_note` and related adapters/schemas after adherence was folded into `interpret_user_turn`.
 - Obsolete duplicate assistant flow module `application/medication_intents.py`.
 

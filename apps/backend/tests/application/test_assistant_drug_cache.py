@@ -29,6 +29,8 @@ async def test_personalization_cache_hit_short_circuits(mock_settings) -> None:
         users=base.users,
         conversations=base.conversations,
         settings=base.settings,
+        line_audio_blobs=base.line_audio_blobs,
+        tts=base.tts,
         drug_caches=caches,
     )
     out = await run_assistant_text_turn(svc, user_key="cache-hit-user", user_text="解釋阿斯匹靈")
@@ -53,6 +55,8 @@ async def test_personalization_cache_miss_saves_after_compose(mock_settings) -> 
         users=base.users,
         conversations=base.conversations,
         settings=base.settings,
+        line_audio_blobs=base.line_audio_blobs,
+        tts=base.tts,
         drug_caches=caches,
     )
     out = await run_assistant_text_turn(svc, user_key="cache-miss-user", user_text="解釋阿斯匹靈")
@@ -84,6 +88,8 @@ async def test_personalization_llm_meta_source_is_model_when_no_reference_data(
         users=base.users,
         conversations=base.conversations,
         settings=base.settings,
+        line_audio_blobs=base.line_audio_blobs,
+        tts=base.tts,
         drug_caches=caches,
     )
     out = await run_assistant_text_turn(svc, user_key="no-ref-user", user_text="解釋阿斯匹靈")
