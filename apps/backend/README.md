@@ -1,6 +1,6 @@
 # MedBuddy backend
 
-FastAPI service with **two delivery channels** sharing a single assistant core: **LINE** (`/v1/line/...`) and the **standalone mobile client** (`/v1/app/...`). The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern for intent routing.
+FastAPI service with **two delivery channels** sharing a single assistant core: **LINE** (`/v1/line/...`) and the **standalone mobile client** (`/v1/app/...`). The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern: **`LLMPort.interpret_user_turn`** yields **`TurnInterpretation`** (intent + adherence slots), then tools run.
 
 Paths below are relative to **`apps/backend/`**.
 
@@ -13,7 +13,7 @@ channels/line/   channels/mobile/
       ↓                 ↓
    application/assistant_turn.py    ← single entry point for both channels
           ↓
-   agents/MedicationAgent           ← intent → tool dispatch
+   agents/MedicationAgent           ← interpret_user_turn → tool dispatch
           ↓
    agents/tools/                    ← medication CRUD, drug lookup, interactions, summary
           ↓
@@ -37,13 +37,13 @@ gemini_llm    supabase_stores  drugs_http
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
 | | `application/profile_intents.py` | Profile updates when intent is `update_profile` (`extract_profile_patch`) |
 | | `application/locale_intents.py` | Locale changes when intent is `update_locale` (`extract_locale_intent`) |
-| **Agents** | `agents/medication_agent.py` | `MedicationAgent` — maps intents to tools and executes them |
+| **Agents** | `agents/medication_agent.py` | `MedicationAgent` — `interpret_user_turn` → maps `TurnInterpretation` to tools (adherence slots → `ConfirmDoseTool`) |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
 | | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `RemoveMedicationTool` |
 | | `agents/tools/drug_lookup.py` | `ExplainMedicationTool` (grounding + LLM compose + cache) |
 | | `agents/tools/interaction_check.py` | `InteractionCheckTool` |
 | | `agents/tools/health_summary.py` | `GenerateHealthSummaryTool` (doctor-ready output) |
-| **Models** | `models/domain.py` | `Intent` enum, `MedicationDraft`, `MedicationRecord`, `ConversationTurn` |
+| **Models** | `models/domain.py` | `Intent`, `TurnInterpretation`, `MedicationDraft`, `MedicationRecord`, `ConversationTurn` |
 | **Protocols** | `protocols/ports.py` | Abstract interfaces: `LLMPort`, `UserDataPort`, `LineMessagingPort`, etc. |
 | | `protocols/drug_caches.py` | `DrugCachesPort` |
 | **Engine** | `engine/types.py` | `AppServices` dataclass — DI container |

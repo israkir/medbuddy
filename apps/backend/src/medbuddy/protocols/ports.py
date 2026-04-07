@@ -10,10 +10,10 @@ from medbuddy.models.domain import (
     DoseEventReminderPayload,
     DrugGrounding,
     HealthSummary,
-    Intent,
     InteractionResult,
     MedicationDraft,
     MedicationRecord,
+    TurnInterpretation,
 )
 
 # Keys: ``preferred_name``, ``age_years``, ``gender``, ``emergency_contact``, ``health_notes``.
@@ -49,15 +49,14 @@ class TextToSpeechPort(Protocol):
 
 @runtime_checkable
 class LLMPort(Protocol):
-    async def classify_intent(
+    async def interpret_user_turn(
         self, user_text: str, *, recent_context: str | None = None
-    ) -> Intent: ...
+    ) -> TurnInterpretation:
+        """Structured intent + adherence slots; server dispatches tools using these fields."""
+        ...
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
         """Structured profile fields from chat (LLM). Empty dict if nothing to update."""
-
-    async def extract_dose_confirmation_note(self, user_text: str, *, locale: str) -> str | None:
-        """Optional note (side effect, context) for the dose(s) being marked taken."""
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         """If the user wants English or zh-TW replies, return ``en`` or ``zh-TW``; else ``None``."""

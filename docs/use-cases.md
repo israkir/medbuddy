@@ -75,25 +75,25 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 
 All **chat** turns share this flow (LINE text/voice transcript and **`POST /v1/app/messages`**).
 
-1. **Redact** PII for classification (`redact_pii_text`).
-2. **Load** user row + medication list **and** recent conversation turns **in parallel**; **classify intent** via **`LLM`** with optional **recent redacted dialogue** (`recent_context`) so short follow-ups align with the prior assistant turn (or mock rules in tests).
+1. **Redact** PII before turn interpretation (`redact_pii_text`).
+2. **Load** user row + medication list **and** recent conversation turns **in parallel**; **`interpret_user_turn`** via **`LLM`** with optional **recent redacted dialogue** (`recent_context`) so short follow-ups align with the prior assistant turn (or `MockLLM` in tests).
 3. **Append** the **user** turn to conversation store (raw text).
 4. **Locale change (first short-circuit):** [`try_locale_change_reply`](../apps/backend/src/medbuddy/application/locale_intents.py) — see **§3.8** `update_locale`. If it returns a string, **append assistant turn and return** (no hooks/tools below).
 5. **Intent hooks** — optional pilot short-circuit (**§5**).
-6. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.9**). *Classifier + context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
-7. **`update_profile`** — regex/heuristic parse + `patch_user_profile` (**§3.7**).
-8. **Tool dispatch** — `list` / `add` / `remove` / **`confirm_dose`** / `explain` / `interaction_check` / `request_summary` (**§3**).
-9. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`log_vital`**, **`general_question`**). **`confirm_dose`** is **not** a fallback — it uses **`ConfirmDoseTool`** (**§3.10**).
+6. **`off_topic`** — fixed refusal string (`agent.off_topic`), **no** `compose_reply` for the body (**§3.9**). *`interpret_user_turn` + recent context narrow this label to clearly unrelated chit-chat—not brief answers about reminders or dosing.*
+7. **`update_profile`** — **`extract_profile_patch`** (structured LLM) + `patch_user_profile` (**§3.7**).
+8. **Tool dispatch** — `list` / `add` / `remove` / **`confirm_dose`** (only when interpretation includes adherence slots; **§3.10**) / `explain` / `interaction_check` / `request_summary` (**§3**).
+9. **Fallback** — `compose_reply` with **no** drug grounding for intents **without** a registered tool (e.g. **`log_vital`**, **`general_question`**), **or** when intent is **`confirm_dose`** but **neither** **`record_pending_dose_as_taken`** nor **`dose_adherence_note`** is set (**§3.10**).
 10. **Append** the **assistant** turn and return reply text.
 
-**Classification** uses the configured **`Intent`** enum ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
-`add_medication`, `list_medications`, `remove_medication`, `explain_medication`, `interaction_check`, `confirm_dose`, `log_vital`, `request_summary`, `update_profile`, `update_locale`, `off_topic`, `general_question`.
+**Routing** uses the configured **`Intent`** enum for the primary tool/fallback branch ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
+`add_medication`, `list_medications`, `remove_medication`, `explain_medication`, `interaction_check`, `confirm_dose`, `log_vital`, `request_summary`, `update_profile`, `update_locale`, `off_topic`, `general_question`. Adherence side effects also depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.10**).
 
 ---
 
 ## 3. Intents (chat) — behaviors and examples
 
-Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) decides the label.
+Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockLLM`) decides **`intent`** and adherence slots.
 
 ### 3.1 `list_medications`
 
@@ -178,7 +178,7 @@ Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) de
 |--|--|
 | **Scenario** | User asks to switch **UI/reply language** (`en` or `zh-TW`). |
 | **Examples** | “switch to English” · 「請用中文」 · “I prefer English replies from now on”. |
-| **Outcome** | Classifier returns **`update_locale`** → **`extract_locale_intent`** (structured LLM) → **`patch_user_profile`** with **`locale`**. Already on target → **`locale.unchanged`**; invalid → **`locale.unclear`**. |
+| **Outcome** | **`interpret_user_turn`** yields **`update_locale`** → **`extract_locale_intent`** (structured LLM) → **`patch_user_profile`** with **`locale`**. Already on target → **`locale.unchanged`**; invalid → **`locale.unclear`**. |
 | **Note** | **`extract_locale_intent`** is instructed to treat “explain this in English” (content only) as **not** a UI locale switch. Normalization helpers live in [`user_locale.py`](../apps/backend/src/medbuddy/user_locale.py). |
 
 ---
@@ -190,7 +190,7 @@ Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) de
 | **Scenario** | Message is **clearly** not medication- or care-related (weather, sports, random chit-chat with no care angle). |
 | **Examples** | “What’s the weather today?” · 「今天天氣怎麼樣」 |
 | **Outcome** | Fixed **`agent.off_topic`** string in the user’s **effective locale**. **No** `compose_reply`. |
-| **Note** | Very short replies that **answer** the assistant about reminders, dosing, or scheduling (e.g. 「一次」, “once”, “7 days”) should **not** be labeled **`off_topic`** — the classifier receives **recent context** for that. |
+| **Note** | Very short replies that **answer** the assistant about reminders, dosing, or scheduling (e.g. 「一次」, “once”, “7 days”) should **not** be labeled **`off_topic`** — **`interpret_user_turn`** receives **recent context** for that. |
 
 ---
 
@@ -198,10 +198,10 @@ Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) de
 
 | | |
 |--|--|
-| **Scenario** | User says they **already took** their medication (adherence confirmation in text). |
-| **Examples** | 「吃了」 · “I took it” · “took my morning pills” |
-| **Outcome** | **`ConfirmDoseTool`** marks **`taken_at`** on the latest eligible **`dose_events`** row(s). Reply from **`medication.confirm_dose_recorded`** or **`medication.confirm_dose_none`**. **No** `compose_reply`. |
-| **Contrast** | Different from asking *how* to dose or what to do if you forgot — those tend to stay **`general_question`** or other intents. |
+| **Scenario** | User turn is about **adherence logging**: they clearly **took** the scheduled dose and/or want a **note** on the dose record (including a follow-up after they already took it). **`interpret_user_turn`** must set **`record_pending_dose_as_taken`** and/or **`dose_adherence_note`**; intent is usually **`confirm_dose`**, but **slots** drive side effects—not the label alone. |
+| **Examples** | 「吃了」 · “I took it” · “took my morning pills” · follow-up: “please note dizziness for my doctor” (note only, after pending cleared). |
+| **Outcome** | If at least one adherence slot is set: **`ConfirmDoseTool`** applies them ( **`taken_at`** when **`record_pending_dose_as_taken`**, optional **`dose_events.notes`**). Replies from **`medication.confirm_dose_*`**. If **`confirm_dose`** intent but **no** slots: **`compose_reply`** (e.g. symptom-only line mis-labeled). |
+| **Contrast** | Ongoing symptoms **without** an explicit took-dose / dose-log meaning stay **`general_question`** with adherence fields false/null — **no** automatic **`taken_at`**. Different from asking *how* to dose or what to do if you forgot. |
 
 ---
 
@@ -230,7 +230,7 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Scenario:** Pilot intercepts a classified intent before fixed refusals, profile, tools, or fallback.
 
-**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **locale** short-circuit first → **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`**) → **`compose_reply`** fallback.
+**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`**: **locale** short-circuit first → **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.10**) → **`compose_reply`** fallback.
 
 ---
 
@@ -242,7 +242,7 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Behavior:** **`dose_events`** rebuild from extraction prefs + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. Free-text **`schedule`** echoed but **v1** does not expand to multiple times per day.
 
-**Adherence in chat:** Users can confirm intake via **`confirm_dose`** (**§3.10**) so **`taken_at`** is set without LINE postback.
+**Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.10**), **`taken_at`** can be set without LINE postback.
 
 **Full reference:** [`reminders.md`](reminders.md).
 

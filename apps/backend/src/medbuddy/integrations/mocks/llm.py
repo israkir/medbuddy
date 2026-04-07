@@ -15,6 +15,7 @@ from medbuddy.models.domain import (
     InteractionResult,
     MedicationDraft,
     MedicationRecord,
+    TurnInterpretation,
 )
 from medbuddy.protocols.ports import LLMPort, ProfilePatch
 
@@ -22,8 +23,10 @@ from medbuddy.protocols.ports import LLMPort, ProfilePatch
 class MockLLM(LLMPort):
     """Test double: no keyword intent routing.
 
-    Set ``intent=`` (and optional extraction overrides) to mirror what production LLMs return
-    via structured output. Defaults: ``classify_intent`` → ``general_question``;
+    Set ``intent=`` (and optional ``record_pending_dose_as_taken``, ``dose_adherence_note``, …)
+    to mirror production structured output from ``interpret_user_turn``. Defaults:
+    ``interpret_user_turn`` → ``general_question`` with adherence fields off unless
+    ``intent`` is ``confirm_dose`` (then ``record_pending_dose_as_taken`` defaults true).
     ``extract_medication_draft`` / ``extract_locale_intent`` / ``resolve_medication_removal_id``
     return ``None`` unless overridden.
     """
@@ -35,7 +38,8 @@ class MockLLM(LLMPort):
         locale: str = "zh-TW",
         reply_template: str | None = None,
         profile_patch: ProfilePatch | None = None,
-        dose_note: str | None = None,
+        dose_adherence_note: str | None = None,
+        record_pending_dose_as_taken: bool | None = None,
         medication_draft: MedicationDraft | None = None,
         removal_medication_id: str | None = None,
         locale_intent: str | None = None,
@@ -44,19 +48,29 @@ class MockLLM(LLMPort):
         self._locale = locale
         self.reply_template = reply_template or t("mocks.llm.reply_template", locale=locale)
         self._profile_patch = profile_patch
-        self._dose_note = dose_note
+        self._dose_adherence_note = dose_adherence_note
+        self._record_pending_dose_as_taken = record_pending_dose_as_taken
         self._medication_draft = medication_draft
         self._removal_medication_id = removal_medication_id
         self._locale_intent = locale_intent
-        self.last_classify_input: str | None = None
+        self.last_interpret_user_turn_input: str | None = None
 
-    async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+    async def interpret_user_turn(
+        self, user_text: str, *, recent_context: str | None = None
+    ) -> TurnInterpretation:
         await asyncio.sleep(0)
-        self.last_classify_input = user_text
+        self.last_interpret_user_turn_input = user_text
         _ = recent_context
-        if self._intent is not None:
-            return self._intent
-        return Intent.GENERAL_QUESTION
+        it = self._intent if self._intent is not None else Intent.GENERAL_QUESTION
+        record = self._record_pending_dose_as_taken
+        if record is None:
+            record = it == Intent.CONFIRM_DOSE
+        return TurnInterpretation(
+            intent=it,
+            reasoning="mock",
+            record_pending_dose_as_taken=record,
+            dose_adherence_note=self._dose_adherence_note,
+        )
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
         await asyncio.sleep(0)
@@ -64,13 +78,6 @@ class MockLLM(LLMPort):
         if self._profile_patch is not None:
             return dict(self._profile_patch)
         return {}
-
-    async def extract_dose_confirmation_note(self, user_text: str, *, locale: str) -> str | None:
-        await asyncio.sleep(0)
-        _ = (user_text, locale)
-        if self._dose_note is not None:
-            return self._dose_note
-        return None
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         await asyncio.sleep(0)

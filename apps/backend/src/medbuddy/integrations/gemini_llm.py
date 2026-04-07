@@ -22,10 +22,12 @@ from typing import Any, TypeVar
 from medbuddy.exceptions import LLMParseError
 from medbuddy.i18n import t
 from medbuddy.llm.intent_classification_prompt import format_intent_classification_prompt
-from medbuddy.llm.intent_map import map_intent_label
 from medbuddy.llm.medication_draft_build import medication_draft_from_extraction
+from medbuddy.llm.turn_interpretation import (
+    turn_interpretation_from_classification,
+    turn_interpretation_on_parse_failure,
+)
 from medbuddy.llm.schemas import (
-    DoseConfirmationNoteExtraction,
     HealthSummaryResult,
     IntentClassification,
     InteractionCheckResult,
@@ -38,10 +40,10 @@ from medbuddy.llm.schemas import (
 from medbuddy.models.domain import (
     ConversationTurn,
     HealthSummary,
-    Intent,
     InteractionResult,
     MedicationDraft,
     MedicationRecord,
+    TurnInterpretation,
 )
 from medbuddy.prompts.persona import get_system_persona
 from medbuddy.protocols.ports import LLMPort, ProfilePatch
@@ -118,7 +120,9 @@ class GeminiLLM(LLMPort):
     # LLMPort — intent classification
     # ------------------------------------------------------------------
 
-    def _classify_sync(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+    def _interpret_turn_sync(
+        self, user_text: str, *, recent_context: str | None = None
+    ) -> TurnInterpretation:
         prompt = format_intent_classification_prompt(
             user_text=user_text, recent_context=recent_context
         )
@@ -127,13 +131,15 @@ class GeminiLLM(LLMPort):
                 self._intent_model, prompt, IntentClassification
             )
         except LLMParseError:
-            log.warning("classify_intent: structured parse failed, using general_question")
-            return Intent.GENERAL_QUESTION
-        return map_intent_label(parsed.intent)
+            log.warning("interpret_user_turn: structured parse failed; safe fallback")
+            return turn_interpretation_on_parse_failure()
+        return turn_interpretation_from_classification(parsed)
 
-    async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
+    async def interpret_user_turn(
+        self, user_text: str, *, recent_context: str | None = None
+    ) -> TurnInterpretation:
         return await asyncio.to_thread(
-            self._classify_sync, user_text, recent_context=recent_context
+            self._interpret_turn_sync, user_text, recent_context=recent_context
         )
 
     def _extract_locale_intent_sync(self, user_text: str) -> str | None:
@@ -198,32 +204,6 @@ class GeminiLLM(LLMPort):
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
         return await asyncio.to_thread(self._extract_profile_patch_sync, user_text, locale=locale)
-
-    def _extract_dose_confirmation_note_sync(self, user_text: str, *, locale: str) -> str | None:
-        _ = locale
-        prompt = (
-            "The user is talking about a scheduled medication dose they took (or are describing in a "
-            "follow-up right after confirming). "
-            "If they mention a side effect, symptom, or anything they want noted for this dose "
-            "(for their doctor or records), put it in note; otherwise note must be null.\n\n"
-            f"User: {user_text}"
-        )
-        try:
-            parsed: DoseConfirmationNoteExtraction = self._generate_structured_sync(
-                self._chat_model, prompt, DoseConfirmationNoteExtraction
-            )
-        except LLMParseError:
-            log.warning("extract_dose_confirmation_note: structured parse failed")
-            return None
-        if parsed.note is None:
-            return None
-        n = parsed.note.strip()
-        return n if n else None
-
-    async def extract_dose_confirmation_note(self, user_text: str, *, locale: str) -> str | None:
-        return await asyncio.to_thread(
-            self._extract_dose_confirmation_note_sync, user_text, locale=locale
-        )
 
     # ------------------------------------------------------------------
     # LLMPort — reply composition
