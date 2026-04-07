@@ -36,14 +36,14 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 **Summary:** Receive LINE events (follow, text, voice), authenticate the webhook, and run the shared assistant pipeline for text and transcribed voice.
 
-**User value:** Primary user-facing channel: chat and voice in LINE, with optional TTS replies and the same assistant core as the HTTP API.
+**User value:** Primary user-facing channel: chat and voice in LINE (voice transcribed via STT), with the same assistant core as the HTTP API.
 
 **Capabilities**
 
 - Webhook endpoint accepts verified LINE events when `LINE_CHANNEL_SECRET` is set; mock mode may skip signature verification (see backend README).
 - New followers get a deterministic **welcome** from i18n (`get_or_create_user`); this path does **not** call `run_assistant_text_turn`.
 - Text messages map LINE `userId` → `user_key` → `run_assistant_text_turn(user_key, user_text)` → reply as LINE text (or batch with audio for voice replies).
-- Voice messages: download audio → STT (Google Speech-to-Text or mock) → same assistant pipeline on transcript; optional TTS returns a short-lived public URL under `/internal-media/...` with batch audio + text and TTL cleanup.
+- Voice messages: download audio → STT (Google Speech-to-Text or mock) → same assistant pipeline on transcript; reply is **text only**.
 
 **Implementation**
 
@@ -51,7 +51,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 **Configuration**
 
-- `LINE_CHANNEL_SECRET`, `PUBLIC_BASE_URL` (for TTS fetch), Google STT/TTS service settings as documented in the backend README.
+- `LINE_CHANNEL_SECRET`, Google STT service settings as documented in the backend README.
 
 ---
 
@@ -83,14 +83,13 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 ### 1.3 Global and operations routes
 
-**Summary:** Liveness, internal media for TTS, and cron-style reminder reconciliation.
+**Summary:** Liveness and cron-style reminder reconciliation.
 
 **User value:** Operations and LINE audio delivery without exposing assistant logic on extra paths.
 
 **Capabilities**
 
 - **`GET /health`** — Plain-text liveness for load balancers and Compose.
-- **`GET /internal-media/{file_id}`** — Serves generated TTS for LINE; `PUBLIC_BASE_URL` must point at this host.
 - **`POST /internal/reminders/reconcile`** — When `MEDBUDDY_CRON_SECRET` matches header `X-Cron-Secret`, re-enqueues reminder jobs for due, unsent, not-taken `dose_events`.
 
 ---
@@ -264,7 +263,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 ## 7. Integrations
 
-**Summary:** Pluggable providers for LINE, LLM, STT, TTS, drug data, storage, and background jobs.
+**Summary:** Pluggable providers for LINE, LLM, STT, drug data, and background jobs.
 
 **User value:** Deploy with different vendors or full mocks for development and CI.
 
@@ -275,10 +274,8 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 | LINE | Webhook + push (reply and reminder worker). |
 | LLM | `LLM_PROVIDER` selects `GeminiLLM` (`google-genai`, default `gemini-2.5-flash`) or `OpenAILLM` (Chat Completions, default `gpt-4.1-mini`). Same `LLMPort` for `interpret_user_turn`, compose, extraction. |
 | Google Speech-to-Text | STT for LINE voice. |
-| edge-tts | TTS for voice replies. |
 | OpenFDA HTTP | Drug label snippets for grounding and reference cache. |
 | TFDA | Placeholder — `fetch_tfda_snippet` returns `None` until a real client exists. |
-| Local public storage | Short-lived audio files for LINE when `public_base_url` is configured. |
 | Redis + arq | Deferred `send_reminder_for_dose` jobs when `REDIS_URL` is set and `[reminders]` is installed. |
 
 **Configuration**

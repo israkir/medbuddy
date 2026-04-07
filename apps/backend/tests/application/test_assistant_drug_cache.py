@@ -24,10 +24,8 @@ async def test_personalization_cache_hit_short_circuits(mock_settings) -> None:
     svc = AppServices(
         line=base.line,
         stt=base.stt,
-        tts=base.tts,
         llm=MockLLM(intent=Intent.EXPLAIN_MEDICATION),
         drugs=base.drugs,
-        storage=base.storage,
         users=base.users,
         conversations=base.conversations,
         settings=base.settings,
@@ -50,10 +48,8 @@ async def test_personalization_cache_miss_saves_after_compose(mock_settings) -> 
     svc = AppServices(
         line=base.line,
         stt=base.stt,
-        tts=base.tts,
         llm=MockLLM(intent=Intent.EXPLAIN_MEDICATION),
         drugs=base.drugs,
-        storage=base.storage,
         users=base.users,
         conversations=base.conversations,
         settings=base.settings,
@@ -83,10 +79,8 @@ async def test_personalization_llm_meta_source_is_model_when_no_reference_data(
     svc = AppServices(
         line=base.line,
         stt=base.stt,
-        tts=base.tts,
         llm=MockLLM(intent=Intent.EXPLAIN_MEDICATION),
         drugs=drugs,
-        storage=base.storage,
         users=base.users,
         conversations=base.conversations,
         settings=base.settings,

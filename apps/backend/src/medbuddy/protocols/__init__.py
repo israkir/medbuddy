@@ -4,9 +4,7 @@ from medbuddy.protocols.ports import (
     DrugDataPort,
     LineMessagingPort,
     LLMPort,
-    ObjectStoragePort,
     SpeechToTextPort,
-    TextToSpeechPort,
     UserDataPort,
 )
 
@@ -16,8 +14,6 @@ __all__ = [
     "DrugDataPort",
     "LineMessagingPort",
     "LLMPort",
-    "ObjectStoragePort",
     "SpeechToTextPort",
-    "TextToSpeechPort",
     "UserDataPort",
 ]

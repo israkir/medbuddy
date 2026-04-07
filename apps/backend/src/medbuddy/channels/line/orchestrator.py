@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.engine.types import AppServices
@@ -14,12 +13,6 @@ from medbuddy.models.domain import MessageKind
 from medbuddy.user_locale import effective_user_locale
 
 log = logging.getLogger(__name__)
-
-
-def _line_fetchable_https_url(url: str) -> bool:
-    """LINE rejects audio ``originalContentUrl`` unless it is an absolute https URL."""
-    p = urlparse((url or "").strip())
-    return p.scheme == "https" and bool(p.netloc)
 
 
 def _message_kind(message: dict[str, Any]) -> MessageKind:
@@ -37,62 +30,12 @@ async def _handle_user_message(
     line_user_id: str,
     reply_token: str,
     user_text: str,
-    prefer_audio_reply: bool,
-    reply_locale: str | None = None,
 ) -> None:
     reply_text = await run_assistant_text_turn(
         svc,
         user_key=line_user_id,
         user_text=user_text,
     )
-
-    if prefer_audio_reply:
-        log.info(
-            "LINE flow: user_id=%s assistant reply len=%d chars — TTS + text batch",
-            line_user_id,
-            len(reply_text),
-        )
-        base = (svc.settings.public_base_url or "").strip()
-        if not _line_fetchable_https_url(base):
-            log.warning(
-                "LINE audio reply skipped: PUBLIC_BASE_URL must be an absolute https URL "
-                "so LINE can fetch the audio (scheme=%s). Sending text only.",
-                urlparse(base).scheme or "(empty)",
-            )
-            await svc.line.reply_text(reply_token, reply_text)
-            return
-
-        audio_url, duration_ms = await svc.tts.synthesize_to_m4a_url(
-            reply_text,
-            svc.settings.public_base_url,
-            language_code=reply_locale,
-        )
-
-        async def _cleanup() -> None:
-            await asyncio.sleep(svc.settings.audio_temp_ttl_seconds)
-            await svc.storage.delete_object(audio_url)
-
-        asyncio.create_task(_cleanup())
-
-        if not _line_fetchable_https_url(audio_url):
-            log.warning(
-                "LINE audio reply skipped: stored audio URL is not https — sending text only",
-            )
-            await svc.line.reply_text(reply_token, reply_text)
-            return
-
-        await svc.line.reply_message_batch(
-            reply_token,
-            [
-                {
-                    "type": "audio",
-                    "originalContentUrl": audio_url,
-                    "duration": duration_ms,
-                },
-                {"type": "text", "text": reply_text},
-            ],
-        )
-        return
 
     log.info(
         "LINE flow: user_id=%s assistant reply len=%d chars — text reply",
@@ -161,15 +104,11 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             line_user_id,
             len(text),
         )
-        row = await svc.users.get_or_create_user(line_user_id)
-        loc = effective_user_locale(row.get("locale"))
         await _handle_user_message(
             svc,
             line_user_id=line_user_id,
             reply_token=reply_token,
             user_text=text,
-            prefer_audio_reply=svc.settings.line_voice_reply_for_text,
-            reply_locale=loc,
         )
         return
 
@@ -202,8 +141,6 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             line_user_id=line_user_id,
             reply_token=reply_token,
             user_text=user_text,
-            prefer_audio_reply=True,
-            reply_locale=loc,
         )
         return
 

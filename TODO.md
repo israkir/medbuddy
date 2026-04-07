@@ -26,7 +26,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 - [ ] **LINE:** **`LINE_CHANNEL_SECRET`**, **`LINE_CHANNEL_ACCESS_TOKEN`**; keep signature verification on in prod.
 
-- [ ] **`PUBLIC_BASE_URL`** — HTTPS origin LINE uses for TTS fetch URLs.
+- [ ] **`PUBLIC_BASE_URL`** — Optional public origin for this API (webhooks, documentation).
 
 - [ ] LLM: **`GEMINI_*`** or **`OPENAI_*`** per **`LLM_PROVIDER`**
 
@@ -36,7 +36,6 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 - [ ] **Supabase** (or other DB) is wired — ensure **`schema.sql`** is applied and migrations are tracked for your deployment process.
 
-- [ ] Replace **`LocalPublicObjectStorage`** with **durable object storage** if you run multiple API instances or need survival across restarts.
 
 ### Drug caches (`drug_reference_cache`, `drug_personalization_cache`)
 
@@ -64,7 +63,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Security and resilience
 
-- [ ] Timeouts/retries on outbound HTTP; rate limiting on public surfaces; review **`/internal-media`** when storage is shared.
+- [ ] Timeouts/retries on outbound HTTP; rate limiting on public surfaces.
 
 ### Reports
 

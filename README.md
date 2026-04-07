@@ -1,15 +1,17 @@
 <p align="center">
   <a href="https://github.com/israkir/medbuddy">
-    <img src="assets/medbuddy-logo.png" alt="MedBuddy logo" height="60">
+    <img src="assets/medbuddy-logo.png" alt="MedBuddy logo featuring a cute pill mascot wearing a headset" height="60">
   </a>
 </p>
 
 <h1 align="center">MedBuddy</h1>
+
 <h3 align="center">Patient-facing medication companion — LINE messaging, voice, dose reminders, and HTTP API</h3>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/lint-ruff-d261ff.svg" alt="Lint: Ruff"></a>
   <a href="https://github.com/israkir/medbuddy/actions/workflows/ci.yml"><img src="https://github.com/israkir/medbuddy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 

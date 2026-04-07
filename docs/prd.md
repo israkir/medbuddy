@@ -30,16 +30,16 @@ The current phase is a **text-only prototype** targeting a small controlled pilo
 
 ## 2. Prototype scope and boundaries
 
-The prototype validates **text-in, text-out** conversational interactions only. This scope boundary is intentional: lower cost to test, easier safety-copy review, and a clear ceiling for what "works" before adding STT/TTS failure modes and latency.
+The prototype validates **text-in, text-out** conversational interactions only. This scope boundary is intentional: lower cost to test, easier safety-copy review, and a clear ceiling for what "works" before adding voice-input failure modes and latency.
 
 | Dimension | In prototype scope | Out of prototype scope |
 |-----------|--------------------|------------------------|
-| **LINE** | Text messages → assistant → text replies. Dose reminder push is text only. | Voice notes, STT/TTS as supported user journeys (engineering exploration only). |
+| **LINE** | Text messages → assistant → text replies. Dose reminder push is text only. | Voice notes and speech-to-text transcription as supported user journeys (engineering exploration only). |
 | **HTTP API** | `POST /v1/app/messages` with text body; same assistant core as LINE. | Voice upload, streaming, real-time audio. |
 | **Feature set** | Closed set in §7: list/add/remove meds, explain, interaction check, confirm dose, profile/locale, health summary, general Q&A, off-topic refusal. | Open-domain "do anything" assistant behavior. |
 | **Mobile client** | HTTP API is callable by integrations and the reference Expo app. | Expo app as a co-equal validated channel. |
 
-> **Engineering note:** Repository code paths for LINE audio (Google Speech-to-Text / TTS) may exist for experimentation. Product acceptance for the prototype is defined on **text paths only** until a future phase explicitly promotes voice.
+> **Engineering note:** Repository code may ingest LINE voice audio via Google Speech-to-Text. Product acceptance for the prototype is defined on **text paths only** until a future phase explicitly promotes voice.
 
 ---
 
@@ -149,7 +149,7 @@ Requirements are feature-level. Implementation details are in [`tdd.md`](tdd.md)
 | C-3 | HTTP `POST /messages` accepts a text body, runs the same assistant pipeline as LINE, and returns a text reply. | Yes |
 | C-4 | HTTP endpoints for health check, user profile (`/me`), onboarding, and summary are documented and functional. | Yes |
 | C-5 | Internal reminder reconcile endpoint allows a cron job to re-enqueue missed reminder deliveries. | Yes |
-| C-6 | LINE audio message → STT → assistant → optional TTS reply. | **No** — engineering exploratory only. |
+| C-6 | LINE audio message → STT → assistant → text reply. | **No** — engineering exploratory only. |
 
 ### 7.2 Conversation and intent handling
 
@@ -214,7 +214,7 @@ Requirements are feature-level. Implementation details are in [`tdd.md`](tdd.md)
 
 | ID | Item | Rationale |
 |----|------|-----------|
-| NG-1 | Voice as part of prototype acceptance | STT/TTS may exist in code; prototype sign-off is text-only (§2). |
+| NG-1 | Voice as part of prototype acceptance | Voice-note STT may exist in code; prototype sign-off is text-only (§2). |
 | NG-2 | Clinical diagnosis or prescribing guidance | Regulatory and liability boundary; prompts enforce this. |
 | NG-3 | TFDA live API integration | Stub until a real client; OpenFDA is the primary registry today. |
 | NG-4 | Rich LINE Flex messages or postback "mark taken" | Reminders are plain text; adherence is chat-text only in v1. |
@@ -237,7 +237,7 @@ Prototype success is judged against these criteria at pilot conclusion.
 | G4 — Bilingual | Both `zh-TW` and `en` locales validated by a native speaker. Locale can be switched mid-conversation. | Native speaker sign-off on both locales. |
 | G5 — Privacy | No raw PII fields observed in LLM prompts during audit of 20 sample turns. | 0 violations in audit. |
 
-**Explicitly not required for prototype:** voice success rate, word error rate (WER), TTS quality, multimodal analytics, cost-per-user.
+**Explicitly not required for prototype:** voice success rate, word error rate (WER), multimodal analytics, cost-per-user.
 
 ---
 
@@ -311,7 +311,7 @@ Horizons are product intent, not guarantees. Each phase requires an explicit go/
 
 | Theme | Goals |
 |-------|-------|
-| **Voice (conditional)** | If demand is clear: promote LINE audio to a supported feature with STT/TTS SLAs, failure fallbacks ("please type or retry"), and updated PRD acceptance criteria. |
+| **Voice (conditional)** | If demand is clear: promote LINE voice notes with transcription accuracy SLAs, failure fallbacks ("please type or retry"), and updated PRD acceptance criteria. |
 | **Retention and adherence** | Conversational adjustment of reminder preferences. Richer adherence history view. Consider caregiver-facing read-only summaries (policy review required). |
 | **Regional data** | TFDA or additional registries where legally and technically viable. Improved caching strategy. |
 | **Mobile** | Reference Expo app beyond prototype: auth model hardened, cost controls, optional local notifications if the product strategy extends beyond LINE. |

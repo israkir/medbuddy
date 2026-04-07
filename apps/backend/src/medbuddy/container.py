@@ -8,60 +8,23 @@ import httpx
 
 from medbuddy.config import Settings
 from medbuddy.engine.types import AppServices
-from medbuddy.protocols.ports import LLMPort, ObjectStoragePort
+from medbuddy.protocols.ports import LLMPort
 from medbuddy.integrations.mocks import (
     InMemoryConversationStore,
     MockDrugData,
     MockLineClient,
     MockLLM,
-    MockObjectStorage,
     MockSpeechToText,
-    MockTextToSpeech,
     MockUserData,
 )
 from medbuddy.integrations.caching_drugs import CachingDrugData
 from medbuddy.integrations.drugs_http import HttpDrugData
-from medbuddy.integrations.edge_tts_service import EdgeTtsService
-from medbuddy.integrations.tts.tts_google import GoogleTextToSpeech
 from medbuddy.integrations.llm.gemini_llm import GeminiLLM
 from medbuddy.integrations.llm.openai_llm import OpenAILLM
 from medbuddy.integrations.line_client import LineHttpClient
-from medbuddy.integrations.local_public_storage import LocalPublicObjectStorage
 from medbuddy.integrations.stt.stt_google import GoogleSpeechToText
 
 log = logging.getLogger(__name__)
-
-
-def _build_tts(settings: Settings, storage: ObjectStoragePort):
-    if settings.tts_provider == "google":
-        try:
-            import google.cloud.texttospeech_v1  # noqa: F401
-        except ImportError:
-            log.warning(
-                "TTS_PROVIDER=google but google-cloud-texttospeech is not installed; "
-                "falling back to Edge TTS or mock"
-            )
-        else:
-            pin = settings.google_tts_language_code.strip() or None
-            voice_raw = settings.google_tts_voice_name.strip()
-            voice_name = voice_raw or None
-            tts_creds = settings.google_tts_application_credentials.strip() or None
-            return GoogleTextToSpeech(
-                storage=storage,
-                pinned_language_code=pin,
-                fallback_locale=settings.locale,
-                voice_name=voice_name,
-                credentials_path=tts_creds,
-            )
-    try:
-        ev = settings.locale.replace("_", "-").strip().lower()
-        default_voice = (
-            "en-US-JennyNeural" if ev == "en" or ev.startswith("en-") else "zh-TW-HsiaoChenNeural"
-        )
-        return EdgeTtsService(storage=storage, voice=default_voice)
-    except ImportError:
-        log.warning("edge-tts not installed; using MockTextToSpeech for TTS")
-        return MockTextToSpeech(storage=storage)
 
 
 def _build_llm(settings: Settings) -> LLMPort:
@@ -91,21 +54,16 @@ def build_app_services(
     outbound_http: httpx.AsyncClient | None = None,
 ) -> AppServices:
     if settings.mock_external_services:
-        storage = MockObjectStorage()
-        tts = MockTextToSpeech(storage=storage)
         loc = settings.locale
         return AppServices(
             line=MockLineClient(),
             stt=MockSpeechToText(locale=loc),
-            tts=tts,
             llm=MockLLM(locale=loc),
             drugs=MockDrugData(locale=loc),
-            storage=storage,
             users=MockUserData(settings),
             conversations=InMemoryConversationStore(),
             settings=settings,
             drug_caches=None,
-            internal_media=None,
         )
 
     if not settings.line_channel_access_token:
@@ -113,14 +71,6 @@ def build_app_services(
         raise ValueError(msg)
 
     line = LineHttpClient(channel_access_token=settings.line_channel_access_token)
-    storage: LocalPublicObjectStorage | MockObjectStorage
-    if settings.public_base_url:
-        storage = LocalPublicObjectStorage(public_base_url=settings.public_base_url)
-    else:
-        log.warning("public_base_url empty; using mock storage (LINE audio URLs may be invalid)")
-        storage = MockObjectStorage()
-
-    tts = _build_tts(settings, storage)
 
     llm = _build_llm(settings)
 
@@ -174,18 +124,13 @@ def build_app_services(
         user_data = MockUserData(settings)
         conversations_store = InMemoryConversationStore()
 
-    internal_media = storage if isinstance(storage, LocalPublicObjectStorage) else None
-
     return AppServices(
         line=line,
         stt=stt,
-        tts=tts,
         llm=llm,
         drugs=drugs_backend,
-        storage=storage,
         users=user_data,
         conversations=conversations_store,
         settings=settings,
         drug_caches=drug_caches,
-        internal_media=internal_media,
     )

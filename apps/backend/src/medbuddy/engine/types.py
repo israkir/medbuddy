@@ -7,12 +7,9 @@ from medbuddy.protocols.drug_caches import DrugCachesPort
 from medbuddy.protocols.ports import (
     ConversationStorePort,
     DrugDataPort,
-    InternalMediaPort,
     LineMessagingPort,
     LLMPort,
-    ObjectStoragePort,
     SpeechToTextPort,
-    TextToSpeechPort,
     UserDataPort,
 )
 
@@ -21,12 +18,9 @@ from medbuddy.protocols.ports import (
 class AppServices:
     line: LineMessagingPort
     stt: SpeechToTextPort
-    tts: TextToSpeechPort
     llm: LLMPort
     drugs: DrugDataPort
-    storage: ObjectStoragePort
     users: UserDataPort
     conversations: ConversationStorePort
     settings: Settings
     drug_caches: DrugCachesPort | None = None
-    internal_media: InternalMediaPort | None = None
