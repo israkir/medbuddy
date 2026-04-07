@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Settings`**: **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** as comma-separated minutes (per **`.env.example`**) no longer crashes startup — **`pydantic-settings`** was JSON-decoding **`list[int]`** before validators, and values like **`15,30,60`** are not valid JSON for a list.
+
 ### Removed
 
 - **`application/medication_intents.py`**: Unused duplicate of **`MedicationAgent`** tool flows (LINE and mobile already use **`run_assistant_text_turn`** → **`MedicationAgent`**).
