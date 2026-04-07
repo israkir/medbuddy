@@ -10,9 +10,11 @@ from medbuddy.models.domain import (
     DoseClarificationPending,
     DoseEventPendingCandidate,
     DoseEventReminderPayload,
+    MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
     VitalLogRecord,
+    parse_pending_agent_clarification,
 )
 from medbuddy.reminders.prefs import (
     iter_dose_instants_for_medication,
@@ -393,6 +395,22 @@ class MockUserData(UserDataPort):
         await self.get_or_create_user(line_user_id)
         self._dose_clarification[line_user_id] = pending.to_json() if pending else None
 
+    async def get_medication_add_confirmation_pending(
+        self, line_user_id: str
+    ) -> MedicationAddConfirmationPending | None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        raw = self._dose_clarification.get(line_user_id)
+        parsed = parse_pending_agent_clarification(raw) if raw else None
+        return parsed if isinstance(parsed, MedicationAddConfirmationPending) else None
+
+    async def set_medication_add_confirmation_pending(
+        self, line_user_id: str, pending: MedicationAddConfirmationPending | None
+    ) -> None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        self._dose_clarification[line_user_id] = pending.to_json() if pending else None
+
     async def mark_dose_events_taken(
         self,
         line_user_id: str,
@@ -489,7 +507,9 @@ class MockUserData(UserDataPort):
                 n += 1
         return n
 
-    async def mark_pending_doses_missed(self, line_user_id: str, *, notes: str | None = None) -> int:
+    async def mark_pending_doses_missed(
+        self, line_user_id: str, *, notes: str | None = None
+    ) -> int:
         await asyncio.sleep(0)
         row = await self.get_or_create_user(line_user_id)
         uid = row["id"]

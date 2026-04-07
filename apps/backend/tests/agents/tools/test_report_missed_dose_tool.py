@@ -25,7 +25,9 @@ async def test_report_missed_dose_marks_latest_pending_window() -> None:
     jobs = await svc.users.sync_upcoming_dose_events(key)
     assert jobs
     dose_id, _ = jobs[0]
-    svc.users._doses[dose_id]["scheduled_at"] = datetime.now(UTC) - timedelta(hours=2)  # noqa: SLF001
+    svc.users._doses[dose_id]["scheduled_at"] = datetime.now(UTC) - timedelta(
+        hours=2
+    )  # noqa: SLF001
 
     tool = ReportMissedDoseTool()
     r1 = await tool.run(
@@ -45,4 +47,3 @@ async def test_report_missed_dose_marks_latest_pending_window() -> None:
         locale="en",
     )
     assert "see a pending recent dose" in r2.reply.lower()
-

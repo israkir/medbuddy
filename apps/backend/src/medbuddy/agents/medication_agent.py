@@ -36,6 +36,9 @@ from medbuddy.agents.tools.medication_crud import (
     UpdateMedicationTool,
 )
 from medbuddy.application.dose_clarification_resolve import try_resolve_pending_dose_clarification
+from medbuddy.application.medication_add_confirm_resolve import (
+    try_resolve_pending_medication_add_confirmation,
+)
 from medbuddy.application.profile_intents import try_profile_intent_reply
 from medbuddy.engine.types import AppServices
 from medbuddy.exceptions import MedBuddyError
@@ -132,6 +135,16 @@ class MedicationAgent:
             user_key,
             ConversationTurn(role="user", content=user_text, at=datetime.now(UTC)),
         )
+
+        med_confirm_reply = await try_resolve_pending_medication_add_confirmation(
+            svc, user_key=user_key, user_text=user_text, locale=locale
+        )
+        if med_confirm_reply is not None:
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=med_confirm_reply, at=datetime.now(UTC)),
+            )
+            return med_confirm_reply
 
         clarify_reply = await try_resolve_pending_dose_clarification(
             svc, user_key=user_key, user_text=user_text, locale=locale

@@ -13,9 +13,11 @@ from medbuddy.models.domain import (
     DoseClarificationPending,
     DoseEventPendingCandidate,
     DoseEventReminderPayload,
+    MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
     VitalLogRecord,
+    parse_pending_agent_clarification,
 )
 from medbuddy.reminders.prefs import (
     iter_dose_instants_for_medication,
@@ -824,6 +826,38 @@ class SupabaseUserData(UserDataPort):
 
         await _run_q(u)
 
+    async def get_medication_add_confirmation_pending(
+        self, line_user_id: str
+    ) -> MedicationAddConfirmationPending | None:
+        def q() -> Any:
+            return (
+                self._client.table("patients")
+                .select("pending_agent_clarification")
+                .eq("external_user_id", line_user_id)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        if not rows:
+            return None
+        raw = rows[0].get("pending_agent_clarification")
+        parsed = parse_pending_agent_clarification(raw)
+        return parsed if isinstance(parsed, MedicationAddConfirmationPending) else None
+
+    async def set_medication_add_confirmation_pending(
+        self, line_user_id: str, pending: MedicationAddConfirmationPending | None
+    ) -> None:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        payload = {"pending_agent_clarification": pending.to_json() if pending else None}
+
+        def u() -> Any:
+            return self._client.table("patients").update(payload).eq("id", uid).execute()
+
+        await _run_q(u)
+
     async def mark_dose_events_taken(
         self,
         line_user_id: str,
@@ -861,7 +895,9 @@ class SupabaseUserData(UserDataPort):
             total += len(rows)
         return total
 
-    async def mark_pending_doses_missed(self, line_user_id: str, *, notes: str | None = None) -> int:
+    async def mark_pending_doses_missed(
+        self, line_user_id: str, *, notes: str | None = None
+    ) -> int:
         """Set ``missed_at`` on the most recent past pending dose instant (all meds at that time)."""
         user = await self.get_or_create_user(line_user_id)
         uid = str(user["id"])

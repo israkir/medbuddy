@@ -33,6 +33,7 @@ async def test_messages_add_medication(mock_settings) -> None:
             name="阿斯匹靈",
             dosage="100mg",
             schedule="每天飯後",
+            instructions="飯後服用",
         ),
     )
     app.dependency_overrides[get_services] = lambda: svc
@@ -71,17 +72,18 @@ async def test_messages_add_medication_when_classifier_returns_add_intent(mock_s
             schedule="after meal",
             first_reminder_in_minutes=2,
             materialize_daily_reminders=False,
+            instructions="after meal",
         ),
     )
     app.dependency_overrides[get_services] = lambda: svc
     try:
         with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                r = await client.post(
-                    "/v1/app/messages",
-                    json={"text": "add majezik 100mg after meal, in 2 mins"},
-                    headers=_headers(user=uid),
-                )
+                    r = await client.post(
+                        "/v1/app/messages",
+                        json={"text": "add majezik 100mg daily after meal, in 2 mins"},
+                        headers=_headers(user=uid),
+                    )
     finally:
         app.dependency_overrides.pop(get_services, None)
     assert r.status_code == 200

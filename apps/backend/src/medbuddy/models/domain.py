@@ -14,6 +14,7 @@ from medbuddy.llm.schemas import (
 __all__ = [
     "ConversationTurn",
     "DoseClarificationPending",
+    "MedicationAddConfirmationPending",
     "DoseEventReminderPayload",
     "DoseEventPendingCandidate",
     "DrugGrounding",
@@ -190,6 +191,144 @@ class DoseClarificationPending:
             pending_note=pending_note,
             expires_at=exp,
         )
+
+
+MEDICATION_ADD_CONFIRM_KIND = "medication_add_confirm"
+
+
+def _medication_draft_to_json(draft: MedicationDraft) -> dict[str, Any]:
+    dl = draft.daily_reminder_local_hhmm_list
+    return {
+        "name": draft.name,
+        "dosage": draft.dosage,
+        "schedule": draft.schedule,
+        "instructions": draft.instructions,
+        "first_reminder_in_minutes": draft.first_reminder_in_minutes,
+        "materialize_daily_reminders": draft.materialize_daily_reminders,
+        "reminder_horizon_days": draft.reminder_horizon_days,
+        "needs_horizon_confirmation": draft.needs_horizon_confirmation,
+        "daily_reminder_local_hhmm": draft.daily_reminder_local_hhmm,
+        "daily_reminder_local_hhmm_list": list(dl) if dl else None,
+    }
+
+
+def _medication_draft_from_dict(data: Any) -> MedicationDraft | None:
+    if not isinstance(data, dict):
+        return None
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return None
+    dosage = str(data.get("dosage") or "").strip()
+    schedule = str(data.get("schedule") or "").strip()
+    if not dosage or not schedule:
+        return None
+    ins = data.get("instructions")
+    instructions: str | None
+    if ins is None:
+        instructions = None
+    elif isinstance(ins, str):
+        instructions = ins.strip() or None
+    else:
+        return None
+    fm = data.get("first_reminder_in_minutes")
+    first_reminder_in_minutes: int | None
+    if fm is None:
+        first_reminder_in_minutes = None
+    elif isinstance(fm, int):
+        first_reminder_in_minutes = fm if fm > 0 else None
+    elif isinstance(fm, float) and fm.is_integer():
+        iv = int(fm)
+        first_reminder_in_minutes = iv if iv > 0 else None
+    else:
+        return None
+    mat = data.get("materialize_daily_reminders")
+    if not isinstance(mat, bool):
+        mat = True
+    rh = data.get("reminder_horizon_days")
+    reminder_horizon_days: int | None
+    if rh is None:
+        reminder_horizon_days = None
+    elif isinstance(rh, int):
+        reminder_horizon_days = max(1, min(90, rh))
+    else:
+        return None
+    nhc = data.get("needs_horizon_confirmation")
+    needs_horizon_confirmation = bool(nhc) if isinstance(nhc, bool) else False
+    d1 = data.get("daily_reminder_local_hhmm")
+    daily_reminder_local_hhmm: str | None
+    if d1 is None:
+        daily_reminder_local_hhmm = None
+    elif isinstance(d1, str):
+        daily_reminder_local_hhmm = d1.strip() or None
+    else:
+        return None
+    raw_list = data.get("daily_reminder_local_hhmm_list")
+    daily_reminder_local_hhmm_list: list[str] | None = None
+    if raw_list is not None:
+        if not isinstance(raw_list, list):
+            return None
+        daily_reminder_local_hhmm_list = [
+            str(x).strip() for x in raw_list if str(x).strip()
+        ] or None
+    return MedicationDraft(
+        name=name,
+        dosage=dosage,
+        schedule=schedule,
+        instructions=instructions,
+        first_reminder_in_minutes=first_reminder_in_minutes,
+        materialize_daily_reminders=mat,
+        reminder_horizon_days=reminder_horizon_days,
+        needs_horizon_confirmation=needs_horizon_confirmation,
+        daily_reminder_local_hhmm=daily_reminder_local_hhmm,
+        daily_reminder_local_hhmm_list=daily_reminder_local_hhmm_list,
+    )
+
+
+@dataclass(frozen=True)
+class MedicationAddConfirmationPending:
+    """Pending user OK before saving a medication with missing dose, schedule, or notes."""
+
+    draft: MedicationDraft
+    expires_at: datetime
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "kind": MEDICATION_ADD_CONFIRM_KIND,
+            "draft": _medication_draft_to_json(self.draft),
+            "expires_at": self.expires_at.replace(tzinfo=UTC).isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, data: Any) -> MedicationAddConfirmationPending | None:
+        if not isinstance(data, dict):
+            return None
+        if data.get("kind") != MEDICATION_ADD_CONFIRM_KIND:
+            return None
+        exp_raw = data.get("expires_at")
+        if not isinstance(exp_raw, str):
+            return None
+        try:
+            exp = datetime.fromisoformat(exp_raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=UTC)
+        draft = _medication_draft_from_dict(data.get("draft"))
+        if draft is None:
+            return None
+        return cls(draft=draft, expires_at=exp)
+
+
+def parse_pending_agent_clarification(
+    raw: Any,
+) -> DoseClarificationPending | MedicationAddConfirmationPending | None:
+    """Decode ``patients.pending_agent_clarification`` JSON (dose choice or med-add confirm)."""
+    if not isinstance(raw, dict):
+        return None
+    kind = raw.get("kind")
+    if kind == MEDICATION_ADD_CONFIRM_KIND:
+        return MedicationAddConfirmationPending.from_json(raw)
+    return DoseClarificationPending.from_json(raw)
 
 
 @dataclass
