@@ -17,7 +17,7 @@ Paths below are relative to **`apps/frontend/`**.
 | **Medications** | `app/(tabs)/medications.tsx` | Medication catalog, "Listen" (expo-speech), visit questions panel, hold-to-talk (expo-av) |
 | **Family** | `app/(tabs)/family.tsx` | Informational copy + "invite" placeholder |
 | **Settings** | `app/(tabs)/settings.tsx` | Language picker (zh-TW / English), profile view |
-| **Companion** | `app/companion.tsx` | Chat UI — messages, suggested prompts, read-aloud, rotating starter chips |
+| **Companion** | `app/companion.tsx` | Chat UI — messages, suggested prompts, **hold-to-talk** → **`POST /v1/app/messages/voice`**, auto read-aloud (**expo-speech**), manual read-aloud, rotating starter chips |
 | **Doctor summary** | `app/doctor-summary.tsx` | Structured doctor-ready draft — main concern, symptoms, med changes, questions; Share as plain text; backed by AsyncStorage draft |
 
 ---
@@ -50,7 +50,8 @@ Copy [`.env.example`](.env.example) to `.env` here. Flags are read at bundle tim
 Runtime helpers: [`constants/integration.ts`](constants/integration.ts).
 
 When `EXPO_PUBLIC_USE_MOCK_DATA=false`, the companion and doctor-summary screens call the backend:
-- `POST /v1/app/messages` — chat turns
+- `POST /v1/app/messages` — chat turns (typed or keyboard dictation)
+- `POST /v1/app/messages/voice` — multipart audio → STT + same assistant; response includes **`transcript`** and **`reply`** (reply speech is **on-device** via expo-speech)
 - `GET /v1/app/summary` — doctor-ready health summary
 
 Onboarding uses `POST /v1/app/onboarding` (includes **`timezone`** for the device zone). Both require `X-App-User-Id` header (stable per-install ID) and optionally `Authorization: Bearer <token>`.

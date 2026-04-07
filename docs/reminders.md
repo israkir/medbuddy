@@ -51,6 +51,10 @@ flowchart LR
 2. **`enqueue_reminder_jobs`** schedules **`send_reminder_for_dose`** with **`_defer_until = scheduled_at`** when arq is installed and **`REDIS_URL`** is non-empty.
 3. The **worker** loads **`AppServices`** (same wiring as the API), runs **`get_dose_event_for_reminder`**, sends **`push_message_batch`**, then **`try_mark_reminder_sent`** so retries and orphans do not double-notify.
 
+## Chat: “what’s next” without a push
+
+The assistant **`upcoming_doses`** intent (`ListUpcomingDosesTool`) and the LLM **`patient_context_for_llm`** block read the **same** **`dose_events`** rows (after **`sync_upcoming_dose_events`**) to answer time-ordered questions (“later today,” “this week”) in **`patients.timezone`**. That is separate from LINE push delivery but uses one calendar source of truth.
+
 ## Schema (Supabase)
 
 Defined and extended in [`apps/backend/supabase/schema.sql`](../apps/backend/supabase/schema.sql):

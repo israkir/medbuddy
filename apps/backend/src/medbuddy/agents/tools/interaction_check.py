@@ -21,7 +21,7 @@ from medbuddy.i18n import t
 from medbuddy.llm.schemas import InteractionCheckResult
 from medbuddy.models.domain import ConversationTurn, Intent, InteractionResult, MedicationRecord
 from medbuddy.privacy.redact import redact_pii_text
-from medbuddy.prompts.persona import build_patient_context_for_llm
+from medbuddy.application.patient_llm_context import patient_context_for_llm
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,9 @@ class InteractionCheckTool:
         **_: Any,
     ) -> ToolResult:
         safe_text = redact_pii_text(user_text)
-        patient_ctx = build_patient_context_for_llm(user_row, medications, locale=locale)
+        patient_ctx = await patient_context_for_llm(
+            svc, user_key, user_row, medications, locale=locale
+        )
 
         # Personalization cache check
         if svc.drug_caches is not None:

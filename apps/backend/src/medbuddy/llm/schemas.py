@@ -153,10 +153,10 @@ class IntentClassification(BaseModel):
 
     intent: str = Field(
         description=(
-            "Exactly one of: emergency, add_medication, list_medications, remove_medication, "
-            "confirm_dose, report_missed_dose, update_medication, explain_medication, "
-            "report_side_effects, interaction_check, log_vital, request_summary, update_profile, "
-            "off_topic, general_question. "
+            "Exactly one of: emergency, add_medication, list_medications, upcoming_doses, "
+            "remove_medication, confirm_dose, report_missed_dose, update_medication, "
+            "explain_medication, report_side_effects, interaction_check, log_vital, request_summary, "
+            "update_profile, off_topic, general_question. "
             "emergency = life-threatening symptoms (chest pain, can't breathe, stroke, severe "
             "allergic reaction, loss of consciousness, poisoning) — highest priority. "
             "report_side_effects = user is currently experiencing a symptom they attribute to "

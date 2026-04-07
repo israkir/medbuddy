@@ -564,6 +564,41 @@ class MockUserData(UserDataPort):
         candidates.sort(key=lambda c: c.scheduled_at, reverse=True)
         return candidates[: max(1, max_items)]
 
+    async def list_upcoming_dose_events(
+        self,
+        line_user_id: str,
+        *,
+        from_utc: datetime,
+        until_utc_exclusive: datetime,
+        max_items: int = 96,
+    ) -> list[DoseEventPendingCandidate]:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        fr = from_utc if from_utc.tzinfo else from_utc.replace(tzinfo=UTC)
+        until = (
+            until_utc_exclusive
+            if until_utc_exclusive.tzinfo
+            else until_utc_exclusive.replace(tzinfo=UTC)
+        )
+        candidates = [
+            DoseEventPendingCandidate(
+                dose_event_id=did,
+                medication_name=str(d["name"]),
+                dosage=str(d["dosage"]),
+                schedule=str(d["schedule"]),
+                scheduled_at=d["scheduled_at"],
+            )
+            for did, d in self._doses.items()
+            if d["line_user_id"] == line_user_id
+            and d["user_internal_id"] == uid
+            and d.get("taken_at") is None
+            and d.get("missed_at") is None
+            and fr <= d["scheduled_at"] < until
+        ]
+        candidates.sort(key=lambda c: c.scheduled_at)
+        return candidates[: max(1, max_items)]
+
     async def list_recent_taken_dose_candidates(
         self, line_user_id: str, *, max_items: int = 5
     ) -> list[DoseEventPendingCandidate]:

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
+from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 from medbuddy.reminders.enqueue import enqueue_reminder_nudge_job
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
         return False
 
     locale = payload.user_locale
+    un = t("medication.unspecified", locale=locale)
     tz = ZoneInfo(payload.user_timezone)
     local = payload.scheduled_at.astimezone(tz)
     time_str = local.strftime("%H:%M")
@@ -28,8 +30,8 @@ async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
         "reminder.line_push",
         locale=locale,
         name=payload.medication_name,
-        dosage=payload.dosage,
-        schedule=payload.schedule,
+        dosage=dose_or_schedule_display(payload.dosage, unspecified_label=un),
+        schedule=dose_or_schedule_display(payload.schedule, unspecified_label=un),
         time_local=time_str,
     )
     await svc.line.push_message_batch(payload.line_user_id, [{"type": "text", "text": text}])
@@ -66,6 +68,7 @@ async def deliver_dose_reminder_nudge(
         return False
 
     locale = payload.user_locale
+    un = t("medication.unspecified", locale=locale)
     tz = ZoneInfo(payload.user_timezone)
     local = payload.scheduled_at.astimezone(tz)
     time_str = local.strftime("%H:%M")
@@ -73,8 +76,8 @@ async def deliver_dose_reminder_nudge(
         "reminder.line_push_nudge",
         locale=locale,
         name=payload.medication_name,
-        dosage=payload.dosage,
-        schedule=payload.schedule,
+        dosage=dose_or_schedule_display(payload.dosage, unspecified_label=un),
+        schedule=dose_or_schedule_display(payload.schedule, unspecified_label=un),
         time_local=time_str,
     )
     await svc.line.push_message_batch(payload.line_user_id, [{"type": "text", "text": text}])

@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from medbuddy.agents.base import ToolResult
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
+from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 from medbuddy.models.domain import DoseClarificationPending, DoseEventPendingCandidate
 from medbuddy.user_timezone import effective_user_timezone
 
@@ -49,7 +50,7 @@ class ConfirmDoseTool:
                 tz_name = effective_user_timezone(
                     str(user_row.get("timezone")) if user_row and user_row.get("timezone") else None
                 )
-                options = _format_disambiguation_options(candidates, tz_name=tz_name)
+                options = _format_disambiguation_options(candidates, tz_name=tz_name, locale=locale)
                 expires = datetime.now(UTC) + timedelta(
                     seconds=svc.settings.dose_clarification_ttl_seconds
                 )
@@ -87,7 +88,9 @@ class ConfirmDoseTool:
                 tz_name = effective_user_timezone(
                     str(user_row.get("timezone")) if user_row and user_row.get("timezone") else None
                 )
-                options = _format_disambiguation_options(recent_taken, tz_name=tz_name)
+                options = _format_disambiguation_options(
+                    recent_taken, tz_name=tz_name, locale=locale
+                )
                 expires = datetime.now(UTC) + timedelta(
                     seconds=svc.settings.dose_clarification_ttl_seconds
                 )
@@ -120,13 +123,15 @@ class ConfirmDoseTool:
 
 
 def _format_disambiguation_options(
-    candidates: list[DoseEventPendingCandidate], *, tz_name: str
+    candidates: list[DoseEventPendingCandidate], *, tz_name: str, locale: str
 ) -> str:
+    un = t("medication.unspecified", locale=locale)
     tz = ZoneInfo(tz_name)
     lines: list[str] = []
     for idx, c in enumerate(candidates, start=1):
         ts = c.scheduled_at if c.scheduled_at.tzinfo else c.scheduled_at.replace(tzinfo=UTC)
         local_ts = ts.astimezone(tz)
         stamp = local_ts.strftime("%Y-%m-%d %H:%M")
-        lines.append(f"{idx}) {c.medication_name} ({c.dosage}) - {stamp}")
+        dose_disp = dose_or_schedule_display(c.dosage, unspecified_label=un)
+        lines.append(f"{idx}) {c.medication_name} ({dose_disp}) - {stamp}")
     return "\n".join(lines)

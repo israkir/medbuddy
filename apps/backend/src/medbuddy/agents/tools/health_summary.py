@@ -20,7 +20,7 @@ from typing import Any
 from medbuddy.agents.base import ToolResult
 from medbuddy.engine.types import AppServices
 from medbuddy.models.domain import MedicationRecord
-from medbuddy.prompts.persona import build_patient_context_for_llm
+from medbuddy.application.patient_llm_context import patient_context_for_llm
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +49,9 @@ class GenerateHealthSummaryTool:
         **_: Any,
     ) -> ToolResult:
         history = await svc.conversations.get_recent_turns(user_key, _SUMMARY_HISTORY_TURNS)
-        patient_ctx = build_patient_context_for_llm(user_row, medications, locale=locale)
+        patient_ctx = await patient_context_for_llm(
+            svc, user_key, user_row, medications, locale=locale
+        )
 
         log.info(
             "health_summary: generating user_key=%s med_count=%d history_turns=%d",

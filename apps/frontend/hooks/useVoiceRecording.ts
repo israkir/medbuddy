@@ -7,10 +7,16 @@ import { Alert, Platform } from 'react-native';
 export type VoiceRecordingOptions = {
   /** Called after a recording is successfully stopped (before the result alert). */
   onRecordingComplete?: () => void;
+  /**
+   * When set, receives the local file URI after stop; skips the default "saved" alert
+   * so the caller can upload or hand off the clip (e.g. Medication helper).
+   */
+  onRecordingUri?: (uri: string) => void;
 };
 
 export function useVoiceRecording(options?: VoiceRecordingOptions) {
   const onRecordingComplete = options?.onRecordingComplete;
+  const onRecordingUri = options?.onRecordingUri;
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -60,16 +66,21 @@ export function useVoiceRecording(options?: VoiceRecordingOptions) {
     recordingRef.current = null;
     try {
       await rec.stopAndUnloadAsync();
+      const uri = rec.getURI() ?? '';
       setRecording(false);
       if (Platform.OS === 'ios') {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       onRecordingComplete?.();
-      Alert.alert(t('voice.resultTitle'), t('voice.resultBody'));
+      if (onRecordingUri && uri) {
+        onRecordingUri(uri);
+      } else {
+        Alert.alert(t('voice.resultTitle'), t('voice.resultBody'));
+      }
     } catch {
       setRecording(false);
     }
-  }, [onRecordingComplete, t]);
+  }, [onRecordingComplete, onRecordingUri, t]);
 
   return { recording, onPressIn, onPressOut };
 }

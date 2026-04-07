@@ -35,6 +35,7 @@ class Intent(str, Enum):
     ADD_MEDICATION = "add_medication"
     UPDATE_MEDICATION = "update_medication"
     LIST_MEDICATIONS = "list_medications"
+    UPCOMING_DOSES = "upcoming_doses"
     REMOVE_MEDICATION = "remove_medication"
     CONFIRM_DOSE = "confirm_dose"
     REPORT_MISSED_DOSE = "report_missed_dose"

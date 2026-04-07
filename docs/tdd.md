@@ -123,7 +123,7 @@ agents/             (abstract)               (concrete or mock)
 
 **Decision:** A single structured `interpret_user_turn` call classifies intent and extracts adherence fields per user turn. There is no multi-step "chain of thought" pipeline.
 
-**Rationale:** For a closed intent set (15 intents), single-call classification is cheaper, faster, and easier to test than agentic chains. A future open-domain expansion may revisit this.
+**Rationale:** For a closed intent set (16 intents), single-call classification is cheaper, faster, and easier to test than agentic chains. A future open-domain expansion may revisit this.
 
 ### 2.5 Text-only prototype acceptance
 
@@ -158,6 +158,7 @@ apps/backend/src/medbuddy/
 │
 ├── application/                 # ← Application core (Layer: Use Cases)
 │   ├── assistant_turn.py        # run_assistant_text_turn() — main entry point
+│   ├── patient_llm_context.py   # patient_context_for_llm() — dose sync + upcoming schedule blob
 │   └── profile_intents.py       # Profile update intent handling (LLM profile patch)
 │
 ├── agents/                      # ← Domain logic (Layer: Domain)
@@ -171,6 +172,7 @@ apps/backend/src/medbuddy/
 │       ├── report_missed_dose.py # ReportMissedDoseTool
 │       ├── confirm_dose.py      # ConfirmDoseTool (adherence marking)
 │       ├── log_vital.py         # LogVitalTool
+│       ├── upcoming_doses.py    # ListUpcomingDosesTool
 │       └── side_effects.py      # ReportSideEffectsTool
 │
 ├── models/
@@ -199,7 +201,7 @@ apps/backend/src/medbuddy/
 │   └── redact.py                # redact_pii_text(), redact_conversation_turns_for_llm()
 │
 ├── prompts/
-│   └── persona.py               # get_system_persona(), build_patient_context_for_llm()
+│   └── persona.py               # get_system_persona(), build_patient_context_for_llm() (+ optional upcoming block)
 │
 ├── llm/
 │   ├── schemas.py               # Pydantic models for structured LLM outputs
@@ -211,6 +213,7 @@ apps/backend/src/medbuddy/
 │   ├── deliver.py               # deliver_dose_reminder() → LINE push
 │   ├── enqueue.py               # enqueue_reminder_jobs()
 │   ├── dose_schedule.py         # gen_dose_events() — local time → UTC instants
+│   ├── upcoming_display.py      # upcoming window + user/LLM formatting for dose_events
 │   └── lifecycle.py             # sync_and_enqueue_reminders() — called after add/remove
 │
 ├── extensibility/
@@ -281,6 +284,29 @@ channels/mobile/routes.py
 HTTP client
 ```
 
+#### 4.2b Standalone voice clip (`POST /v1/app/messages/voice`)
+
+Multipart upload (field **`file`**: client recording, typically m4a from **expo-av**). Same auth as **`POST /v1/app/messages`**.
+
+```
+HTTP client
+    │ POST /v1/app/messages/voice  (multipart file)
+    │ X-App-User-Id, optional Bearer
+    ▼
+channels/mobile/routes.py
+    │ read bytes (max 10 MiB)
+    │ effective_user_locale(user profile)
+    │ stt.transcribe_m4a(bytes, language_code=locale)
+    ▼
+application/assistant_turn.py
+    │ run_assistant_text_turn(user_key, transcript)
+    ▼
+HTTP client
+    │ {"reply": "…", "transcript": "…"}
+```
+
+TTS for the reply is **client-side** (e.g. **expo-speech**) using profile/UI language — not returned as audio from this endpoint.
+
 ### 4.3 Dose reminder delivery (background)
 
 ```
@@ -343,6 +369,7 @@ TurnInterpretation (intent + adherence slots)
     ├── off_topic                 → fixed i18n refusal string (no LLM compose)
     ├── update_profile            → extract profile patch (LLM) → patch profile
     ├── list_medications          → ListMedicationsTool
+    ├── upcoming_doses            → ListUpcomingDosesTool
     ├── add_medication            → AddMedicationTool
     ├── update_medication         → UpdateMedicationTool
     ├── remove_medication         → RemoveMedicationTool
@@ -360,6 +387,7 @@ TurnInterpretation (intent + adherence slots)
 | Tool | Intent | Key operations |
 |------|--------|---------------|
 | `ListMedicationsTool` | `list_medications` | Load medication list → i18n formatted reply |
+| `ListUpcomingDosesTool` | `upcoming_doses` | Sync dose_events → list pending rows in local-time window (~7 days) → i18n formatted schedule |
 | `AddMedicationTool` | `add_medication` | LLM extract draft → persist → drug grounding → compose acknowledgment → reminder sync |
 | `UpdateMedicationTool` | `update_medication` | LLM resolve patch → update → i18n confirm → reminder sync |
 | `RemoveMedicationTool` | `remove_medication` | LLM resolve target → delete → i18n confirm → reminder sync |
@@ -666,6 +694,19 @@ Auth required. Single assistant chat turn.
 
 ---
 
+#### `POST /v1/app/messages/voice`
+
+Auth required. Multipart form with one part **`file`** (audio bytes; e.g. m4a). Runs **STT** with the user’s profile **`locale`**, then the same assistant turn as **`POST /v1/app/messages`** on the transcript.
+
+**Response:**
+```json
+{"reply": "...", "transcript": "..."}
+```
+
+**Errors:** `413` if upload too large; `422` empty audio or empty transcription; `503` if STT fails.
+
+---
+
 #### `GET /v1/app/summary`
 
 Auth required. Returns a structured doctor-ready health summary.
@@ -775,7 +816,7 @@ All LLM calls follow the same layered structure:
 | Layer | Source | Privacy treatment |
 |-------|--------|------------------|
 | **System persona** | `get_system_persona(locale)` — from `locales/*.json` `prompts.system_persona` | No PII; includes non-diagnostic instruction and `[…]` masking instruction |
-| **Patient context** | `build_patient_context_for_llm(user, medications)` | De-identified: "preferred name on file" (not the name), age band (e.g. "60s"), medication list |
+| **Patient context** | `patient_context_for_llm(...)` → `build_patient_context_for_llm(..., upcoming_doses_context=…)` | De-identified profile signals, medication list, plus **materialized** pending **`dose_events`** lines for ~7 days from local midnight (soonest first) when sync is run |
 | **Drug grounding** | OpenFDA label snippets (indications, dosage, warnings) or `None` | Registry data only; no patient PII |
 | **Conversation history** | Recent `ConversationTurn` objects | Redacted via `redact_conversation_turns_for_llm()` |
 | **User message** | Current turn | Redacted via `redact_pii_text()` |
@@ -843,7 +884,7 @@ All LLM calls follow the same layered structure:
 |------|-----------|
 | Current user message | `redact_pii_text()` before `interpret_user_turn`, `compose_reply`, and all extraction calls |
 | Conversation history | `redact_conversation_turns_for_llm()` — same patterns applied to all turns |
-| Profile fields | Coarse signals only in `build_patient_context_for_llm`: no raw name, no exact age, no health notes, no emergency contact |
+| Profile fields | Coarse signals only in `build_patient_context_for_llm`: no raw name, no exact age, no health notes, no emergency contact. Upcoming block repeats **medication names** and **local times** from `dose_events` (same data as reminder pushes). |
 | Profile extracted from chat | `extract_profile_patch` structured output; persisted fields go to storage via `patch_user_profile` |
 
 **Redaction patterns** (`privacy/redact.py`):
@@ -1171,9 +1212,11 @@ Use cases:
 
 ### 16.4 Adding a new agent tool
 
-1. Subclass `AgentTool` in `agents/tools/<name>.py`.
-2. Implement `async def run(self, **kwargs: Any) -> ToolResult`.
-3. Register the tool for the relevant `Intent` values in `MedicationAgent`.
+1. Add an `Intent` value in `models/domain.py`.
+2. Extend **`IntentClassification.intent`** allowed strings in `llm/schemas.py` and **`INTENT_CLASSIFICATION_INSTRUCTIONS`** in `llm/intent_classification_prompt.py` (and any provider-specific classification wrappers if present).
+3. Subclass or implement `AgentTool` in `agents/tools/<name>.py` with `async def run(self, **kwargs: Any) -> ToolResult`.
+4. Register the tool in `MedicationAgent`’s `_TOOL_MAP`.
+5. If the tool (or `compose_reply`) needs new persistence, add methods to `UserDataPort` and implement in `MockUserData` + `SupabaseUserData`.
 
 ### 16.5 Adding a new locale
 
@@ -1220,4 +1263,4 @@ These are best-effort targets for the prototype — not contractual SLAs.
 | Rate limiting | Not implemented | Add per-user and per-IP limits before public-facing deploy. See §10.8. |
 | API versioning strategy | No versioning | Add `Accept: application/vnd.medbuddy.v1+json` or path versioning before any breaking change. |
 | `dose_events.taken_at` vs `missed_at` | `taken_at` exists; `missed_at` added for `ReportMissedDoseTool` | Adherence reporting UI or export not yet implemented. |
-| Expo reference app STT wiring | Not wired to backend | See [`frontend-expo.md`](frontend-expo.md). |
+| Expo reference app voice → backend STT | Wired (`POST /v1/app/messages/voice`) | See [`frontend-expo.md`](frontend-expo.md); prototype acceptance remains text-first per `prd.md`. |

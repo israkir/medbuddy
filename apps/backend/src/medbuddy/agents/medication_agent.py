@@ -36,7 +36,9 @@ from medbuddy.agents.tools.medication_crud import (
     RemoveMedicationTool,
     UpdateMedicationTool,
 )
+from medbuddy.agents.tools.upcoming_doses import ListUpcomingDosesTool
 from medbuddy.application.dose_clarification_resolve import try_resolve_pending_dose_clarification
+from medbuddy.application.patient_llm_context import patient_context_for_llm
 from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.medication_add_confirm_resolve import (
     try_resolve_pending_medication_add_confirmation,
@@ -51,7 +53,7 @@ from medbuddy.privacy.redact import (
     redact_conversation_turns_for_llm,
     redact_pii_text,
 )
-from medbuddy.prompts.persona import build_patient_context_for_llm, get_system_persona
+from medbuddy.prompts.persona import get_system_persona
 from medbuddy.user_locale import effective_user_locale
 
 log = logging.getLogger(__name__)
@@ -70,9 +72,11 @@ _confirm_dose_tool = ConfirmDoseTool()
 _report_missed_dose_tool = ReportMissedDoseTool()
 _log_vital_tool = LogVitalTool()
 _side_effects_tool = ReportSideEffectsTool()
+_upcoming_doses_tool = ListUpcomingDosesTool()
 
 _TOOL_MAP: dict[Intent, Any] = {
     Intent.LIST_MEDICATIONS: _list_tool,
+    Intent.UPCOMING_DOSES: _upcoming_doses_tool,
     Intent.ADD_MEDICATION: _add_tool,
     Intent.UPDATE_MEDICATION: _update_tool,
     Intent.REMOVE_MEDICATION: _remove_tool,
@@ -209,6 +213,7 @@ class MedicationAgent:
                 if tool is _confirm_dose_tool and not _confirm_dose_should_run(interpretation):
                     reply = await _compose_fallback_reply(
                         svc,
+                        user_key=user_key,
                         intent=Intent.GENERAL_QUESTION,
                         user_row=user_row,
                         medications=medications,
@@ -237,6 +242,7 @@ class MedicationAgent:
                 # 6. Free-form LLM fallback for unhandled intents
                 reply = await _compose_fallback_reply(
                     svc,
+                    user_key=user_key,
                     intent=intent,
                     user_row=user_row,
                     medications=medications,
@@ -301,6 +307,7 @@ def _user_error_message(exc: MedBuddyError, *, locale: str) -> str:
 async def _compose_fallback_reply(
     svc: AppServices,
     *,
+    user_key: str,
     intent: Intent,
     user_row: dict[str, Any],
     medications: list[MedicationRecord],
@@ -308,7 +315,7 @@ async def _compose_fallback_reply(
     safe_text: str,
     locale: str,
 ) -> str:
-    patient_ctx = build_patient_context_for_llm(user_row, medications, locale=locale)
+    patient_ctx = await patient_context_for_llm(svc, user_key, user_row, medications, locale=locale)
     system_persona = get_system_persona(locale=locale)
     history_llm = redact_conversation_turns_for_llm(history)
     return await svc.llm.compose_reply(

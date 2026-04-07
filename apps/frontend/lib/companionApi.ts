@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
 import i18next from '@/i18n';
 import type { AppLanguage } from '@/i18n/languageStorage';
 import {
@@ -9,6 +11,9 @@ import {
 } from '@/constants/integration';
 
 const ONBOARDING_STORAGE_KEY = 'medbuddy.onboarding_profile.v1';
+
+/** AsyncStorage: recording URI handed off from the tab bar mic to the Medication helper screen. */
+export const PENDING_VOICE_HANDOFF_KEY = '@medbuddy/pending_voice_recording_v1';
 
 /** Mirrors backend `ProfileGender` (onboarding / profile patch). */
 export type ProfileGender =
@@ -215,4 +220,47 @@ export async function sendCompanionMessage(text: string): Promise<string> {
 
   const data = (await r.json()) as { reply: string };
   return data.reply ?? '';
+}
+
+export type CompanionVoiceResult = {
+  reply: string;
+  transcript: string;
+};
+
+/** Upload a local recording (m4a from expo-av); STT + same assistant pipeline as text. */
+export async function sendCompanionVoiceMessage(fileUri: string): Promise<CompanionVoiceResult> {
+  if (Platform.OS === 'web') {
+    throw new Error('Voice messages require the iOS or Android app.');
+  }
+  if (useMockData) {
+    await Promise.resolve();
+    const transcript = i18next.language.startsWith('zh') ? '（示範語音）' : '(voice sample)';
+    const reply = mockReply(transcript);
+    return { reply, transcript };
+  }
+
+  const form = new FormData();
+  const name = fileUri.split('/').pop()?.split('?')[0] || 'recording.m4a';
+  form.append('file', {
+    uri: fileUri,
+    name,
+    type: 'audio/m4a',
+  } as unknown as Blob);
+
+  const r = await fetch(`${apiBaseUrl}/v1/app/messages/voice`, {
+    method: 'POST',
+    headers: mobileHeaders(false),
+    body: form,
+  });
+
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(body || `${r.status} ${r.statusText}`);
+  }
+
+  const data = (await r.json()) as CompanionVoiceResult;
+  return {
+    reply: data.reply ?? '',
+    transcript: data.transcript ?? '',
+  };
 }

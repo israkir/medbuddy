@@ -42,8 +42,8 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 - Webhook endpoint accepts verified LINE events when `LINE_CHANNEL_SECRET` is set; mock mode may skip signature verification (see backend README).
 - New followers get a deterministic **welcome** from i18n (`get_or_create_user`); this path does **not** call `run_assistant_text_turn`.
-- Text messages map LINE `userId` → `user_key` → `run_assistant_text_turn(user_key, user_text)` → reply as LINE text (or batch with audio for voice replies).
-- Voice messages: download audio → STT (Google Speech-to-Text or mock) → same assistant pipeline on transcript; reply is **text only**.
+- Text messages map LINE `userId` → `user_key` → `run_assistant_text_turn(user_key, user_text)` → **LINE text** reply.
+- Voice messages: download audio → STT (Google Speech-to-Text or mock) → same assistant pipeline on transcript → **LINE text** reply (same modality as typed chats; **no** server-generated voice reply on LINE in the current orchestrator).
 
 **Implementation**
 
@@ -69,6 +69,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 - **`GET /v1/app/me`** — `app_user_id` and profile: `preferred_name`, `age_years`, `gender`, `emergency_contact`, `health_notes`, **`locale`** (`en` \| `zh-TW`, default `zh-TW`), **`timezone`** (IANA, default `Asia/Taipei`), `onboarding_completed_at`.
 - **`POST /v1/app/onboarding`** — Persists onboarding via `UserDataPort.save_onboarding_profile`; required `preferred_name`; optional demographics, emergency contact, health notes, optional IANA **`timezone`**, optional **`locale`** (standalone app typically sends device language choice).
 - **`POST /v1/app/messages`** — Body `text` (1–8000 chars); resolves auth → `run_assistant_text_turn(user_key=app_user_id, user_text)` → `{"reply":"…"}`.
+- **`POST /v1/app/messages/voice`** — Multipart **`file`** (short recording); **STT** with user **`locale`** → same assistant turn on transcript → `{"reply":"…","transcript":"…"}` (reply audio left to the client, e.g. **expo-speech**).
 - **`GET /v1/app/summary`** — Structured doctor-ready summary via `GenerateHealthSummaryTool`.
 
 **Implementation**
@@ -85,7 +86,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 **Summary:** Liveness and cron-style reminder reconciliation.
 
-**User value:** Operations and LINE audio delivery without exposing assistant logic on extra paths.
+**User value:** Health checks and reminder reconciliation without exposing assistant logic on extra paths.
 
 **Capabilities**
 
@@ -110,6 +111,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 | Tool class | Intent(s) | Location |
 |------------|-----------|----------|
 | `ListMedicationsTool` | `list_medications` | `agents/tools/medication_crud.py` |
+| `ListUpcomingDosesTool` | `upcoming_doses` | `agents/tools/upcoming_doses.py` |
 | `AddMedicationTool` | `add_medication` | `agents/tools/medication_crud.py` |
 | `UpdateMedicationTool` | `update_medication` | `agents/tools/medication_crud.py` |
 | `RemoveMedicationTool` | `remove_medication` | `agents/tools/medication_crud.py` |
@@ -125,7 +127,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 ## 3. Shared assistant pipeline
 
-**Summary:** `run_assistant_text_turn` (`application/assistant_turn.py`) is the single core for LINE text/voice (post-STT) and `POST /v1/app/messages`.
+**Summary:** `run_assistant_text_turn` (`application/assistant_turn.py`) is the single core for LINE text/voice (post-STT), `POST /v1/app/messages`, and `POST /v1/app/messages/voice` (post-STT).
 
 **User value:** One pipeline so behavior and safety rules stay consistent across channels.
 
@@ -133,7 +135,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 - Structured **turn interpretation** via **`LLMPort.interpret_user_turn`** (Gemini, OpenAI, or `MockLLM` in tests): one **`IntentClassification`** parse yields **`TurnInterpretation`** (`intent` + **`record_pending_dose_as_taken`** + **`dose_adherence_note`**). The model receives **recent redacted dialogue** (last few turns) so very short replies (e.g. reminder follow-ups like “once” / 「一次」) stay on-medication and are not labeled `off_topic` without context.
 - Replies and LLM scaffold copy use the user’s **`effective_user_locale`** (`patients.locale`): `compose_reply`, medication-added flow, explain/interaction fallbacks, and structured interaction analysis are locale-aware—not only the process default `MEDBUDDY_LOCALE`.
-- Handling order in `MedicationAgent` (simplified): **locale change** short-circuit → intent hooks → **`off_topic`** fixed refusal → **`update_profile`** (structured **`extract_profile_patch`**) → **tool dispatch** (list / add / remove / **`confirm_dose`** when adherence slots warrant it / explain / interaction / summary) → generic `compose_reply` for remaining intents (e.g. `log_vital`, `general_question`) **or** when **`confirm_dose`** intent has **no** adherence slots (symptom-only misroute → conversational reply).
+- Handling order in `MedicationAgent` (simplified): **locale change** short-circuit → intent hooks → **`off_topic`** fixed refusal → **`update_profile`** (structured **`extract_profile_patch`**) → **tool dispatch** (list / **`upcoming_doses`** / add / remove / **`confirm_dose`** when adherence slots warrant it / explain / interaction / summary) → generic `compose_reply` for remaining intents (e.g. `log_vital`, `general_question`) **or** when **`confirm_dose`** intent has **no** adherence slots (symptom-only misroute → conversational reply).
 - Drug snippet prefetch in the main turn applies to `explain_medication`, `interaction_check`, and (after a successful save) `add_medication` only.
 - For `explain_medication` and `interaction_check`, locale-specific **companion** instructions bias replies toward purpose, timing rationale, and cautions—without replacing clinician advice. Structured interaction lines use i18n keys under **`interaction.*`** (severity labels, recommendation prefix).
 
@@ -155,7 +157,15 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **User value** | Quick inventory without LLM hallucination on list contents. |
 | **Capabilities** | No LLM compose for the list body; data from `UserDataPort.list_medications` plus i18n intro / empty state. Display may use `build_patient_context_for_chat_display` for full stored lines in user-facing copy—that string is not for external LLM APIs (see `privacy.md`). |
 
-### 4.2 `add_medication`
+### 4.2 `upcoming_doses`
+
+| Field | Content |
+|-------|---------|
+| **Summary** | Return pending **scheduled** doses from **`dose_events`**, soonest first, in the user’s local timezone. |
+| **User value** | Answers “what’s next / later / today” from the same materialized calendar that drives LINE reminders—not inferred only from free-text **`schedule`**. |
+| **Capabilities** | **`ListUpcomingDosesTool`**: `sync_upcoming_dose_events`, then `list_upcoming_dose_events` for a ~**7-day** window from **local midnight** (pending rows: `taken_at` and `missed_at` null). User reply is i18n lines under **`medication.upcoming_*`**. |
+
+### 4.3 `add_medication`
 
 | Field | Content |
 |-------|---------|
@@ -164,7 +174,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **Capabilities** | Extraction via LLM JSON or mock heuristics → `MedicationDraft`; missing drug name → i18n `medication.add_incomplete` (no full compose). Persist via `UserDataPort.add_medication`. Post-save: reload list, `DrugDataPort` snippets for the **new** drug only (OpenFDA HTTP; TFDA stub until integrated; mocks may simulate TFDA). Does **not** use `drug_personalization_cache`. Reply via `LLMPort.compose_medication_added_reply` or i18n `medication.added` on failure. |
 | **Implementation** | Successful add may trigger reminder sync when Supabase + reminder wiring apply (§8). |
 
-### 4.3 `remove_medication`
+### 4.4 `remove_medication`
 
 | Field | Content |
 |-------|---------|
@@ -172,7 +182,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **User value** | Stop tracking a drug without navigating settings. |
 | **Capabilities** | Resolve row (LLM JSON or mock match) → `delete_medication` → i18n confirmation or not-found. Reminder rebuild when configured (same hook as add). |
 
-### 4.4 `explain_medication`
+### 4.5 `explain_medication`
 
 | Field | Content |
 |-------|---------|
@@ -180,7 +190,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **User value** | Understand medications in context of their list, with less repeated LLM cost when cached. |
 | **Capabilities** | Supabase: if `drug_personalization_cache` has a fresh row for `(user, query_fingerprint)` (fingerprint includes hash of current med list in de-identified form), return cached text, append turns, skip remote fetch and LLM. Else: `DrugDataPort` + `CachingDrugData` → `drug_reference_cache` (TTL `MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS`). Load history, store user turn; hooks / medication short-circuits; else `compose_reply` with persona, LLM-safe patient context, grounding, history. After compose: upsert personalization; `llm_meta.source` reflects `openfda` / `tfda` / model as applicable. |
 
-### 4.5 `interaction_check`
+### 4.6 `interaction_check`
 
 | Field | Content |
 |-------|---------|
@@ -188,7 +198,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **User value** | Surface interaction concerns grounded on references where available. |
 | **Capabilities** | Personalization hit → reference cache → `compose_reply` with interaction add-on → optional cache save. |
 
-### 4.6 `update_profile`
+### 4.7 `update_profile`
 
 | Field | Content |
 |-------|---------|
@@ -196,7 +206,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **User value** | Correct name, emergency contact, or notes without a separate settings API for every field. |
 | **Capabilities** | `UserDataPort.patch_user_profile` after **`LLMPort.extract_profile_patch`** (structured LLM) when intent is **`update_profile`**. |
 
-### 4.7 `confirm_dose`
+### 4.8 `confirm_dose`
 
 | Field | Content |
 |-------|---------|
@@ -204,7 +214,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | **User value** | Lightweight “I took it” (or a follow-up note on a dose already taken) without a LINE postback UI—without recording intake from ambiguous symptom-only lines. |
 | **Capabilities** | **`ConfirmDoseTool`** applies **`record_pending_dose_as_taken`** (sets **`taken_at`** on the latest past pending **`dose_events`** instant sharing that scheduled time) and/or merges **`dose_adherence_note`** (pending row or recent taken dose per `UserDataPort`). If intent is **`confirm_dose`** but **neither** slot is set, **`MedicationAgent`** uses **`compose_reply`** instead. Replies: i18n **`medication.confirm_dose_*`**; **no** `compose_reply` when the tool runs successfully. |
 
-### 4.8 `log_vital` / `request_summary` / `general_question`
+### 4.9 `log_vital` / `request_summary` / `general_question`
 
 | Field | Content |
 |-------|---------|
@@ -225,7 +235,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 | Concern | Behavior |
 |---------|----------|
 | Redaction | Before `interpret_user_turn` (user line only), `compose_reply`, medication extract/remove, and profile/locale structured extractions: `redact_pii_text` / `redact_conversation_turns_for_llm` (emails, typical phone shapes, long digit runs). **Recent-turn context** passed into `interpret_user_turn` is redacted the same way. Pattern-based, not full PHI scrubbing. |
-| Patient context for LLM | `build_patient_context_for_llm` — coarse signals (e.g. “preferred name on file” without the name), age band, medication lines; not raw `preferred_name`, `health_notes`, `emergency_contact`, exact `age_years`. |
+| Patient context for LLM | `patient_context_for_llm` (calls `sync_upcoming_dose_events` + `list_upcoming_dose_events`, then `build_patient_context_for_llm` with appended block) — same de-identified profile signals and medication lines as before, plus **clock-ordered pending `dose_events`** for ~7 days from local midnight; not raw `health_notes`, `emergency_contact`, exact `age_years`. |
 | Patient context for display | `build_patient_context_for_chat_display` — full snippet for user-facing list replies only. |
 | Storage | Conversation rows may store original user text; copies sent to the LLM adapter are redacted. |
 | Cache fingerprinting | De-identified context (and redacted query where applicable); stored personalized text may still be sensitive. |
@@ -286,7 +296,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 ## 8. LINE dose reminders (prototype)
 
-**Summary:** After medication list changes, materialize future `dose_events`, push LINE reminders near due times, optionally chain **follow-up nudges**, and record **chat-based** adherence when **`interpret_user_turn`** sets slots and **`ConfirmDoseTool`** runs (§4.7).
+**Summary:** After medication list changes, materialize future `dose_events`, push LINE reminders near due times, optionally chain **follow-up nudges**, and record **chat-based** adherence when **`interpret_user_turn`** sets slots and **`ConfirmDoseTool`** runs (§4.8).
 
 **User value:** Lightweight adherence nudges without requiring the user to open the app; optional extra pushes if a dose is still not marked taken.
 
@@ -299,7 +309,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 | Scheduling | `UserDataPort.sync_upcoming_dose_events` replaces future `dose_events` per prefs + defaults: one or more local times per day (if extracted via `daily_local_hhmm_list`), otherwise fallback `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` (`09:00` by default), interpreted in `patients.timezone` (IANA), horizon `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, cap 90). Free-text `schedule` itself is not parsed into clock times in v1 (it may still appear in copy). |
 | Delivery | With Redis, `enqueue_reminder_jobs` schedules arq `send_reminder_for_dose` with `_defer_until = scheduled_at`. Worker runs `deliver_dose_reminder` → LINE `push_message`, then `reminder_sent_at`. |
 | Nudges (optional) | If **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is non-empty (comma-separated minutes), after the primary push the worker may enqueue **`send_reminder_nudge`** jobs for follow-up LINE pushes until intervals are exhausted, the user marks doses taken, or the local day of the scheduled dose ends. Copy: **`reminder.line_push_nudge`**. |
-| Chat adherence | **`interpret_user_turn`** + **`ConfirmDoseTool`** — when structured fields indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.7). |
+| Chat adherence | **`interpret_user_turn`** + **`ConfirmDoseTool`** — when structured fields indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.8). |
 | Copy | Primary: **`reminder.line_push`** (`zh-TW`, `en`); welcome and pushes respect **`patients.locale`**. |
 | Scope | LINE push only for LINE `userId` keys; no local notifications for standalone HTTP-app users in this slice. No Flex cards or “mark taken” postback in v1. |
 | Reconcile | `POST /internal/reminders/reconcile` with `X-Cron-Secret`. |
@@ -321,7 +331,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 **Scope in this catalog**
 
-- **Not** listed alongside LINE or backend features above — see the dedicated reference: **[`frontend-expo.md`](frontend-expo.md)** for screens, env vars, mock vs API, voice limitations, and relationship to dose reminders.
+- **Not** listed alongside LINE or backend features above — see the dedicated reference: **[`frontend-expo.md`](frontend-expo.md)** for screens, env vars, mock vs API, voice upload + on-device TTS, and relationship to dose reminders.
 - Day-to-day commands: [`apps/frontend/README.md`](../apps/frontend/README.md).
 
 ---
@@ -360,7 +370,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 |----------|--------|
 | Clinical diagnosis | Prompts push back; not a substitute for professionals. |
 | Full TFDA API in production HTTP | Stub returns empty; mocks may fake TFDA. |
-| Reference Expo hold-to-talk → backend STT | Not wired; see [`frontend-expo.md`](frontend-expo.md). LINE voice + Google Speech-to-Text is the supported voice path in the primary product. |
+| Reference Expo hold-to-talk → backend STT | Wired to **`POST /v1/app/messages/voice`**; see [`frontend-expo.md`](frontend-expo.md). **LINE** voice uses STT then **text** replies only; **spoken** replies for the reference app are **on-device** (expo-speech), not returned as audio from the API. |
 | Rich LINE reminder UI | No multi-time-per-day scheduling from free-text in reminder v1. |
 
 ---

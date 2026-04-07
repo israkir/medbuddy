@@ -18,21 +18,26 @@ Maps each turn’s `content` through `redact_pii_text`. Used wherever tools pass
 
 **Exception:** `generate_health_summary` currently embeds **last 20 conversation turns without this redaction step** in the Gemini/OpenAI adapters (see below)—treat as higher sensitivity.
 
-### Patient context for external LLMs (`build_patient_context_for_llm`)
+### Patient context for external LLMs (`patient_context_for_llm` → `build_patient_context_for_llm`)
 
-Built in `apps/backend/src/medbuddy/prompts/persona.py`. Typically includes:
+**Assembler:** `apps/backend/src/medbuddy/application/patient_llm_context.py` runs `UserDataPort.sync_upcoming_dose_events`, queries **`list_upcoming_dose_events`** for a ~**7-day** window from **local calendar midnight** in **`patients.timezone`**, formats that slice with `reminders/upcoming_display.py`, then calls **`build_patient_context_for_llm`** (`apps/backend/src/medbuddy/prompts/persona.py`) with the result as **`upcoming_doses_context`**.
+
+Typical blocks in the string sent to the model:
 
 | Block | Contents |
 |--------|-----------|
 | Profile signals | Preferred **form of address** (when the user saved one—so the model can greet them naturally), **age band** (not exact age), self-reported sex/gender label, flags that health notes or emergency contact exist (without raw note/contact text). |
 | Profile gaps | Localized lines describing profile fields **not** yet stored (so the model may ask one item when relevant). |
 | Medications | Lines from the user’s saved list: drug **name**, **dosage**, **schedule** (`format_patient_medication_context`). |
+| Upcoming doses | When the sync/window yields rows: **local time** (and date if not today), **medication name**, **dosage**, **schedule** text; lines are **pending** `dose_events` only (`taken_at` / `missed_at` null), soonest first. Intro comes from `prompts.upcoming_doses_*` keys. |
 
 **Not** included: raw `health_notes`, `emergency_contact` strings, exact `age_years`.
 
+**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync). **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
+
 ### Patient context for **display** only (`build_patient_context_for_chat_display`)
 
-Full profile text for **user-facing** strings (e.g. listing meds with profile lines). **Do not** pass this blob to third-party LLM APIs; use `build_patient_context_for_llm` for model prompts and cache fingerprints.
+Full profile text for **user-facing** strings (e.g. listing meds with profile lines). **Do not** pass this blob to third-party LLM APIs; use **`patient_context_for_llm`** (or the same composition rules) for model prompts and explain/interaction cache fingerprints so **upcoming `dose_events`** stay aligned with reminders.
 
 ### Locale scaffolding
 
@@ -83,7 +88,7 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 | Input | Redaction / notes |
 |--------|-------------------|
 | `system_persona` | `get_system_persona` + optional task appendix (e.g. `gemini.medication_companion_explain` or `gemini.medication_companion_interactions`). |
-| `patient_context` | `build_patient_context_for_llm`. |
+| `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
 | `drug_grounding` | Registry snippets (TFDA / OpenFDA) or placeholder `gemini.no_drug_data`. Not end-user PII. |
 | `history` | **Redacted** turns. **Interaction fallback** passes `history=[]` in the tool. |
 | `user_message` | **Redacted** (`safe_text`). |
@@ -95,7 +100,7 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| `patient_context` | `build_patient_context_for_llm` after the new med is saved. |
+| `patient_context` | `patient_context_for_llm` after the new med is saved and reminders are synced (`sync_dose_events_first=False`). |
 | `drug_grounding` | TFDA/OpenFDA snippets for the **saved drug name**. |
 | `saved` | Authoritative `name`, `dosage`, `schedule`, optional `instructions` in the prompt. |
 | `user_message` | **Redacted** (`safe_text`). |
@@ -105,7 +110,7 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 | Input | Redaction / notes |
 |--------|-------------------|
 | `user_message` | **Redacted** (`safe_text`). |
-| `patient_context` | `build_patient_context_for_llm`. |
+| `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
 | `medications` | Explicit list lines (name, dosage, schedule) in the adapter prompt. |
 | `drug_grounding` | OpenFDA (and optional warnings excerpt) from the user query, or placeholder. |
 | History | **Not** included in the structured Gemini/OpenAI prompt (unlike `compose_reply`). |
@@ -133,7 +138,7 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| `patient_context` | `build_patient_context_for_llm`. |
+| `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
 | Medications | Name, dosage, schedule, and **per-med `instructions`** (user notes) in the adapter prompt. |
 | Recent conversation | **Last 20 turns** embedded as `[role] content` in Gemini/OpenAI adapters. **Not** run through `redact_conversation_turns_for_llm` today—treat as **more sensitive** than `compose_reply` history. |
 | Prompt | Instructs the model not to output PII in the structured summary; does not remove PII from the **input** conversation. |
@@ -154,7 +159,7 @@ Snippets from **TFDA** and/or **OpenFDA** are factual drug label excerpts, not p
 
 ## Caching (`drug_personalization_cache`)
 
-Personalized replies for explain/interaction intents are keyed by a fingerprint that includes **hashed** `patient_context` from `build_patient_context_for_llm` and **redacted** query text where applicable (`apps/backend/src/medbuddy/drug_cache_keys.py`). Cached reply text may still be sensitive; treat storage under your retention policy.
+Personalized replies for explain/interaction intents are keyed by a fingerprint that includes **hashed** `patient_context` from **`patient_context_for_llm`** (med list + **time-ordered upcoming doses** when rows exist) and **redacted** query text where applicable (`apps/backend/src/medbuddy/drug_cache_keys.py`). Cached reply text may still be sensitive; treat storage under your retention policy.
 
 ---
 
@@ -163,7 +168,7 @@ Personalized replies for explain/interaction intents are keyed by a fingerprint 
 | Concern | Location |
 |--------|----------|
 | Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
-| Patient context builders | `apps/backend/src/medbuddy/prompts/persona.py` |
+| Patient context builders | `apps/backend/src/medbuddy/prompts/persona.py`, `apps/backend/src/medbuddy/application/patient_llm_context.py` |
 | Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py` |
 | LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` |
 | Privacy overview | [docs/privacy.md](./privacy.md) |

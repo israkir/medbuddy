@@ -1,6 +1,7 @@
 """MedicationExtraction → MedicationDraft mapping."""
 
 from medbuddy.llm.medication_draft_build import (
+    dose_or_schedule_display,
     medication_draft_from_extraction,
     medication_draft_needs_add_confirmation,
 )
@@ -44,6 +45,14 @@ def test_needs_add_confirmation_when_dose_or_schedule_unspecified() -> None:
     assert medication_draft_needs_add_confirmation(
         no_notes, unspecified_label=un, user_text="aspirin 10mg daily"
     )
+
+
+def test_dose_or_schedule_display_maps_english_unspecified_to_locale_label() -> None:
+    zh = "未註明"
+    assert dose_or_schedule_display("unspecified", unspecified_label=zh) == zh
+    assert dose_or_schedule_display("Unspecified", unspecified_label=zh) == zh
+    assert dose_or_schedule_display("", unspecified_label=zh) == zh
+    assert dose_or_schedule_display("100mg", unspecified_label=zh) == "100mg"
 
 
 def test_needs_add_confirmation_when_model_infers_from_name_only() -> None:

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`POST /v1/app/messages/voice`** (standalone HTTP): multipart audio upload → Speech-to-Text (user profile **`locale`**) → same assistant turn as text → JSON **`reply`** + **`transcript`**. Reference Expo **Medication helper** / tab bar mic use this path; spoken answers use **expo-speech** on the client (LINE replies after voice STT remain **text-only** in the current LINE orchestrator).
+- **Upcoming dose schedule intent**: New `Intent.upcoming_doses` with `ListUpcomingDosesTool` answers “what’s next / today / soon” from materialized `dose_events` (not guessed frequency text). `UserDataPort.list_upcoming_dose_events` and shared window/formatting in `reminders/upcoming_display.py`. Patient context for external LLMs now includes the same authoritative schedule block via `application/patient_llm_context.patient_context_for_llm` (used by explain, interaction, side effects, health summary, fallback `compose_reply`, and post-add compose when reminders are already synced).
 - **GitHub Actions CI**: Workflow runs backend Black + Ruff + pytest and frontend ESLint + TypeScript on pushes to `main` and on pull requests.
 - **Emergency and side-effect intents**: Added `Intent.emergency` (fixed localized emergency reply, no LLM body generation) and `Intent.report_side_effects` with `ReportSideEffectsTool`.
 - **Medication update + richer adherence flows**: Added `UpdateMedicationTool`, `ReportMissedDoseTool`, `LogVitalTool`, and side-effect-aware follow-up handling in conversation flows.
@@ -29,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Google STT (zh-TW)**: Traditional Chinese Taiwan is not supported as `zh-TW` with model `long` on location `global`. STT now sends `cmn-Hant-TW` with model `chirp` and uses a regional endpoint (default `asia-southeast1` when `GOOGLE_SPEECH_LOCATION` is `global`).
+- **Medication dose/schedule copy in user locale**: List replies, reminders, confirm-dose options, add/update fallbacks, and incomplete-draft prompts now map stored English placeholders (e.g. `unspecified`) to the profile locale label (e.g. 未註明 for `zh-TW`). When the list still has missing dose or schedule, a short hint invites the user to send them for an update.
 - **Google STT transcription**: Normalize language tags sent to Speech-to-Text v2 (short `en`/`zh` → `en-US`/`zh-TW`, underscore → hyphen) so locale-derived codes match API expectations.
 - **Reminder materialization correctness**: Fixed multi-time-per-day expansion so `daily_local_hhmm_list` produces all expected `dose_events`.
 - **Dose-note persistence**: Follow-up adherence notes now merge into recent taken dose rows when applicable.
