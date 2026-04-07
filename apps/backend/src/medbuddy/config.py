@@ -192,7 +192,9 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MEDBUDDY_REMINDER_HORIZON_DAYS", "reminder_horizon_days"),
     )
 
-    reminder_nudge_intervals_minutes: list[int] = Field(
+    # str | list so EnvSettingsSource does not JSON-decode before validators (comma-separated
+    # values like "15,30,60" are not valid JSON for list[int] and raise JSONDecodeError).
+    reminder_nudge_intervals_minutes: str | list[int] = Field(
         default_factory=list,
         description=(
             "After the primary LINE reminder, optional follow-up nudges: each value is minutes "
