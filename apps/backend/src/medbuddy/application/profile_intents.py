@@ -5,8 +5,7 @@ from __future__ import annotations
 from medbuddy.engine.types import AppServices
 from medbuddy.i18n import t
 from medbuddy.models.domain import Intent
-from medbuddy.privacy.profile_parse import parse_profile_patch_from_text
-from medbuddy.protocols.ports import ProfilePatch
+from medbuddy.protocols.ports import LLMPort, ProfilePatch
 from medbuddy.prompts.persona import gender_option_label, normalized_profile_gender
 
 
@@ -49,34 +48,11 @@ async def try_profile_intent_reply(
     intent: Intent,
     user_text: str,
     locale: str,
+    llm: LLMPort,
 ) -> str | None:
     if intent != Intent.UPDATE_PROFILE:
         return None
-    raw_patch = parse_profile_patch_from_text(user_text)
-    patch: ProfilePatch = {}
-    allowed_gender = {"female", "male", "non_binary", "prefer_not_say", "other"}
-    for key in ("preferred_name", "age_years", "gender", "emergency_contact", "health_notes"):
-        if key not in raw_patch:
-            continue
-        val = raw_patch[key]
-        if key == "age_years":
-            if val is None:
-                patch[key] = None
-            elif isinstance(val, int) and 0 <= val <= 120:
-                patch[key] = val
-            elif isinstance(val, float) and val.is_integer():
-                ai = int(val)
-                if 0 <= ai <= 120:
-                    patch[key] = ai
-        elif key == "gender":
-            if isinstance(val, str):
-                g = val.strip().lower().replace("-", "_")
-                if g == "nonbinary":
-                    g = "non_binary"
-                if g in allowed_gender:
-                    patch[key] = g
-        elif isinstance(val, str) and val.strip():
-            patch[key] = val.strip()
+    patch = await llm.extract_profile_patch(user_text, locale=locale)
     if not patch:
         return t("profile.update_unclear", locale=locale)
     await svc.users.patch_user_profile(user_key, patch)

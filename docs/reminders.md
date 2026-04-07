@@ -9,8 +9,8 @@ This document describes **proactive LINE push** reminders for scheduled medicati
 
 ## What it does *not* do (v1)
 
-- **No NLP** on free-text `medications.schedule`: the prototype uses **one daily local time** per user (`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`) in **`users.timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**) calendar days per medication.
-- **Standalone HTTP app** local notifications are **not** implemented here; only **LINE push** when the user key is a LINE `userId` stored as `users.external_user_id`. (A reference **Expo** client is documented in [`frontend-expo.md`](frontend-expo.md) — it does not change reminder delivery.)
+- **No NLP** on free-text `medications.schedule`: the prototype uses **one daily local time** per patient (`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`) in **`patients.timezone`** (default `Asia/Taipei`) for **`MEDBUDDY_REMINDER_HORIZON_DAYS`** (default **14**) calendar days per medication.
+- **Standalone HTTP app** local notifications are **not** implemented here; only **LINE push** when the user key is a LINE `userId` stored as `patients.external_user_id`. (A reference **Expo** client is documented in [`frontend-expo.md`](frontend-expo.md) — it does not change reminder delivery.)
 - **Rich messages** (Flex) and **postback** “mark taken” are out of scope for this slice.
 
 ## Architecture
@@ -47,7 +47,7 @@ flowchart LR
     U --> D
 ```
 
-1. **`UserDataPort.sync_upcoming_dose_events`** deletes future **`dose_events`** for the user and inserts new rows (one instant per medication per day in the horizon, skipping instants already in the past).
+1. **`UserDataPort.sync_upcoming_dose_events`** deletes future **`dose_events`** for the patient and inserts new rows (one instant per medication per day in the horizon, skipping instants already in the past).
 2. **`enqueue_reminder_jobs`** schedules **`send_reminder_for_dose`** with **`_defer_until = scheduled_at`** when arq is installed and **`REDIS_URL`** is non-empty.
 3. The **worker** loads **`AppServices`** (same wiring as the API), runs **`get_dose_event_for_reminder`**, sends **`push_message_batch`**, then **`try_mark_reminder_sent`** so retries and orphans do not double-notify.
 
@@ -57,7 +57,7 @@ Defined and extended in [`apps/backend/supabase/schema.sql`](../apps/backend/sup
 
 | Object | Purpose |
 |--------|---------|
-| **`users.timezone`** | IANA name for daily reminder clock and LINE **`time_local`** in push copy (DB default `Asia/Taipei`). **Set by:** Postgres default on **`INSERT`** (LINE users without standalone onboarding); **`POST /v1/app/onboarding`** optional **`timezone`** (HTTP clients typically send device IANA); **`patch_user_profile`** with **`timezone`** for later changes (e.g. travel). |
+| **`patients.timezone`** | IANA name for daily reminder clock and LINE **`time_local`** in push copy (DB default `Asia/Taipei`). **Set by:** Postgres default on **`INSERT`** (LINE users without standalone onboarding); **`POST /v1/app/onboarding`** optional **`timezone`** (HTTP clients typically send device IANA); **`patch_user_profile`** with **`timezone`** for later changes (e.g. travel). |
 | **`dose_events.scheduled_at`** | When the dose is due (timestamptz, stored in UTC). |
 | **`dose_events.taken_at`** | Optional adherence field (not required by the reminder job). |
 | **`dose_events.reminder_sent_at`** | Set after a successful push; idempotency / reconcile. |
@@ -69,11 +69,11 @@ Apply new columns on existing projects via the same file’s **`ALTER TABLE ... 
 | Variable | Role |
 |----------|------|
 | **`REDIS_URL`** | Redis DSN for arq (API **enqueue** + worker **consume**; main **`Dockerfile`** runs both in one container when set). |
-| **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`** | `HH:MM` **local** time (default `09:00`) in each user’s **`users.timezone`**. |
+| **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`** | `HH:MM` **local** time (default `09:00`) in each patient’s **`patients.timezone`**. |
 | **`MEDBUDDY_REMINDER_HORIZON_DAYS`** | Days ahead to materialize (default **14**, max **90** in settings). |
 | **`MEDBUDDY_CRON_SECRET`** | Secret for **`POST /internal/reminders/reconcile`** (**`X-Cron-Secret`** header). |
 
-There is **no** global reminder timezone env var — **`users.timezone`** in Postgres is the source of truth for local clock and LINE push copy.
+There is **no** global reminder timezone env var — **`patients.timezone`** in Postgres is the source of truth for local clock and LINE push copy.
 
 **Dependencies:** install **`[reminders]`** (`arq`), included in the repo-root **Dockerfile** (`pip install ".[llm,supabase,tts,reminders]"`).
 

@@ -17,12 +17,12 @@ from medbuddy.models.domain import (
     MedicationDraft,
     MedicationRecord,
 )
-from medbuddy.protocols.ports import LLMPort
+from medbuddy.protocols.ports import LLMPort, ProfilePatch
 from medbuddy.user_locale import parse_locale_request_from_text
 
 
 class MockLLM(LLMPort):
-    """Deterministic intent + templated replies for CI."""
+    """Templated replies for CI. Intent classification uses narrow defaults unless ``intent=`` is fixed — production uses OpenAI / Gemini."""
 
     def __init__(
         self,
@@ -30,10 +30,14 @@ class MockLLM(LLMPort):
         *,
         locale: str = "zh-TW",
         reply_template: str | None = None,
+        profile_patch: ProfilePatch | None = None,
+        dose_note: str | None = None,
     ) -> None:
         self._intent = intent
         self._locale = locale
         self.reply_template = reply_template or t("mocks.llm.reply_template", locale=locale)
+        self._profile_patch = profile_patch
+        self._dose_note = dose_note
         self.last_classify_input: str | None = None
 
     async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
@@ -44,82 +48,58 @@ class MockLLM(LLMPort):
             return self._intent
         ut = user_text.strip()
         lowered = ut.lower()
-        if not parse_locale_request_from_text(ut) and re.search(
-            r"(?i)prefer\s+english|english\s+replies|i\s+want\s+english|"
-            r"i'?d\s+rather\s+(?:use|have|read)\s+english|"
-            r"請用中文回覆|改用繁體|traditional\s+chinese\s+only",
-            ut,
-        ):
-            return Intent.UPDATE_LOCALE
-        med_add = "新增" in ut or "加入" in ut or lowered.startswith("add ")
-        if not med_add and re.search(
-            r"我叫|叫我|今年\s*\d{1,3}|\d{1,3}\s*歲|歲了|電話|手機|聯絡|過敏|備註|"
-            r"my name is|call me|\d{1,3}\s*years old|emergency|allerg",
-            ut,
-            re.I,
-        ):
-            return Intent.UPDATE_PROFILE
-        if any(k in user_text for k in ("清單", "哪些藥", "有什麼藥")) or (
-            "我的藥" in user_text and "加" not in user_text and "新增" not in user_text
-        ):
-            return Intent.LIST_MEDICATIONS
-        if any(k in user_text for k in ("停藥", "刪除藥", "不吃了", "移除藥", "不用吃了")):
-            return Intent.REMOVE_MEDICATION
-        if "新增" in user_text or "加入" in user_text:
-            return Intent.ADD_MEDICATION
-        if "藥" in user_text and "加" in user_text:
-            return Intent.ADD_MEDICATION
-        if lowered.startswith("add ") or " add " in f" {lowered} ":
-            return Intent.ADD_MEDICATION
-        if lowered.startswith("list med") or "my medications" in lowered:
-            return Intent.LIST_MEDICATIONS
-        if "remove " in lowered or "stop taking" in lowered or "delete med" in lowered:
-            return Intent.REMOVE_MEDICATION
-        if (
-            "interaction" in lowered
-            or "interactions" in lowered
-            or "take together" in lowered
-            or "mix with" in lowered
-        ):
-            return Intent.INTERACTION_CHECK
-        # Obvious non-medical chit-chat before broad "what's / explain" explain-medication heuristics
-        med_hint = re.search(
-            r"(?i)藥|medication|medicine|drug|pill|dose|remind|健康|血壓|血糖|醫|藥師|"
-            r"吃藥|服藥|過敏|症狀|symptom|prescri",
-            ut,
-        )
-        if not med_hint and re.search(
-            r"(?i)\b(weather|forecast|stock\s+market|nasdaq|joke|tell\s+me\s+a\s+story|"
-            r"who\s+won|recipe\s+for|write\s+a\s+poem)\b|"
-            r"天氣怎麼樣|今天天氣|講個笑話|股票|誰贏了|寫一首詩",
-            ut,
-        ):
+        if re.search(r"(?i)天氣|weather|forecast|講個笑話|tell me a joke", ut):
             return Intent.OFF_TOPIC
         if any(
-            phrase in lowered
-            for phrase in (
-                "what is ",
-                "what's ",
-                "explain ",
-                "purpose of",
-                "why take",
-                "why do i take",
-                "what does ",
-                " for?",
+            x in lowered
+            for x in (
+                "switch to english",
+                "use english",
+                "prefer english",
+                "english replies",
+                "i prefer english",
+                "請用中文",
+                "traditional chinese",
+                "改用繁體",
             )
         ):
+            return Intent.UPDATE_LOCALE
+        if (
+            "解釋" in user_text
+            or "explain " in lowered
+            or "what's " in lowered
+            or "what is " in lowered
+        ):
             return Intent.EXPLAIN_MEDICATION
-        if "交互" in user_text or "一起" in user_text:
+        if any(k in user_text for k in ("清單", "哪些藥", "list med", "my medications")):
+            return Intent.LIST_MEDICATIONS
+        if "新增" in ut or "加入" in ut or lowered.startswith("add "):
+            return Intent.ADD_MEDICATION
+        if any(k in user_text for k in ("停藥", "remove ", "stop taking")):
+            return Intent.REMOVE_MEDICATION
+        if "交互" in user_text or "interaction" in lowered:
             return Intent.INTERACTION_CHECK
-        if "摘要" in user_text or "總結" in user_text or "summary" in lowered:
+        if "摘要" in user_text or "summary" in lowered:
             return Intent.REQUEST_SUMMARY
-        if "解釋" in user_text or "說明" in user_text:
-            return Intent.EXPLAIN_MEDICATION
-        if "dose" in lowered or "劑量" in user_text:
+        if re.search(r"(?i)(吃了|已吃|took|taken|i took|i've taken)", ut):
             return Intent.CONFIRM_DOSE
         if "血壓" in user_text or "血糖" in user_text:
             return Intent.LOG_VITAL
         return Intent.GENERAL_QUESTION
+
+    async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
+        await asyncio.sleep(0)
+        _ = (user_text, locale)
+        if self._profile_patch is not None:
+            return dict(self._profile_patch)
+        return {}
+
+    async def extract_dose_confirmation_note(self, user_text: str, *, locale: str) -> str | None:
+        await asyncio.sleep(0)
+        _ = (user_text, locale)
+        if self._dose_note is not None:
+            return self._dose_note
+        return None
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         await asyncio.sleep(0)
@@ -278,7 +258,7 @@ class MockLLM(LLMPort):
                 dosage=m.dosage,
                 schedule=m.schedule,
                 purpose=t("mocks.llm.summary_purpose_placeholder", locale=locale),
-                notes=m.instructions_zh,
+                notes=m.instructions,
             )
             for m in medications
         ]

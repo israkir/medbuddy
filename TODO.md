@@ -62,6 +62,10 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 - [ ] Timeouts/retries on outbound HTTP; rate limiting on public surfaces; review **`/internal-media`** when storage is shared.
 
+### Reports
+
+- [ ] **Doctor report for the patient:** Generate a structured summary the patient can share with a clinician (e.g. current medications, schedule, adherence, recent dose confirmations and notes), with appropriate privacy and export or share UX on mobile/LINE as the product requires.
+
 ### Quality
 
 - [ ] Make **assistant conversation** more **human-like** (natural tone, empathy, pacing; less robotic phrasing) via prompts, few-shot examples, and/or light post-processing where appropriate.

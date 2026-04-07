@@ -18,14 +18,17 @@ from typing import Any, TypeVar
 
 from medbuddy.exceptions import LLMParseError
 from medbuddy.i18n import t
+from medbuddy.llm.intent_map import map_intent_label
 from medbuddy.llm.medication_draft_build import medication_draft_from_extraction
 from medbuddy.llm.schemas import (
+    DoseConfirmationNoteExtraction,
     HealthSummaryResult,
     IntentClassification,
     InteractionCheckResult,
     LocaleIntentExtraction,
     MedicationExtraction,
     MedicationSummaryItem,
+    ProfilePatchExtraction,
     RemovalResolution,
 )
 from medbuddy.models.domain import (
@@ -37,7 +40,7 @@ from medbuddy.models.domain import (
     MedicationRecord,
 )
 from medbuddy.prompts.persona import get_system_persona
-from medbuddy.protocols.ports import LLMPort
+from medbuddy.protocols.ports import LLMPort, ProfilePatch
 from medbuddy.reminders.prefs import reminder_compose_appendix
 
 log = logging.getLogger(__name__)
@@ -56,20 +59,6 @@ def _strip_json_fence(raw: str) -> str:
         text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
         text = re.sub(r"\s*```$", "", text)
     return text.strip()
-
-
-def _map_intent_label(label: str) -> Intent:
-    raw = label.strip().lower()
-    for intent in Intent:
-        if raw == intent.value:
-            return intent
-    for intent in Intent:
-        if re.search(rf"\b{re.escape(intent.value)}\b", raw):
-            return intent
-    for intent in Intent:
-        if intent.value in raw:
-            return intent
-    return Intent.GENERAL_QUESTION
 
 
 class OpenAILLM(LLMPort):
@@ -132,9 +121,12 @@ class OpenAILLM(LLMPort):
             "add_medication, list_medications, remove_medication, confirm_dose, "
             "explain_medication, interaction_check, log_vital, request_summary, "
             "update_profile, update_locale, off_topic, general_question. "
-            "Use update_profile when the user is sharing or correcting personal profile "
-            "information (how to address them, age, emergency contact, allergies/health notes), "
-            "not asking about a specific drug. "
+            "Use update_profile only when the user is sharing or correcting stored profile "
+            "information (how to address them, age, emergency contact, allergies or persistent "
+            "health notes on file). "
+            "Do not use update_profile for medication side effects, symptoms, or one-off notes "
+            "for a doctor about a specific drug or dose — use general_question or confirm_dose "
+            "(if they took the medication) instead. "
             "Use update_locale when they want to change the assistant reply language "
             "(English vs Traditional Chinese), including paraphrases like "
             '"I\'d prefer English" or "請用中文回覆". '
@@ -161,7 +153,7 @@ class OpenAILLM(LLMPort):
         except LLMParseError:
             log.warning("classify_intent: structured parse failed, using general_question")
             return Intent.GENERAL_QUESTION
-        return _map_intent_label(parsed.intent)
+        return map_intent_label(parsed.intent)
 
     async def classify_intent(self, user_text: str, *, recent_context: str | None = None) -> Intent:
         return await asyncio.to_thread(
@@ -187,6 +179,75 @@ class OpenAILLM(LLMPort):
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         return await asyncio.to_thread(self._extract_locale_intent_sync, user_text)
+
+    def _extract_profile_patch_sync(self, user_text: str, *, locale: str) -> ProfilePatch:
+        _ = locale
+        prompt = (
+            "Extract profile fields the user wants to save. Only fill a field if it is clearly "
+            "stated. Use null for anything not explicitly given. "
+            "Do not treat one-off medication side effects or dose comments as health_notes — "
+            "those belong in conversation, not the long-term profile unless they say they want "
+            "it saved on their profile or as allergies.\n\n"
+            f"User message:\n{user_text}"
+        )
+        try:
+            extracted: ProfilePatchExtraction = self._generate_structured_sync(
+                self._model, prompt, ProfilePatchExtraction
+            )
+        except LLMParseError:
+            log.warning("extract_profile_patch: structured parse failed")
+            return {}
+        data = extracted.model_dump(exclude_none=True)
+        out: ProfilePatch = {}
+        for key in ("preferred_name", "age_years", "gender", "emergency_contact", "health_notes"):
+            if key not in data:
+                continue
+            val = data[key]
+            if key == "age_years":
+                if isinstance(val, int) and 0 <= val <= 120:
+                    out[key] = val
+                elif isinstance(val, float) and val.is_integer():
+                    ai = int(val)
+                    if 0 <= ai <= 120:
+                        out[key] = ai
+            elif key == "gender" and isinstance(val, str):
+                g = val.strip().lower().replace("-", "_")
+                if g == "nonbinary":
+                    g = "non_binary"
+                allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
+                if g in allowed:
+                    out[key] = g
+            elif isinstance(val, str) and val.strip():
+                out[key] = val.strip()
+        return out
+
+    async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
+        return await asyncio.to_thread(self._extract_profile_patch_sync, user_text, locale=locale)
+
+    def _extract_dose_confirmation_note_sync(self, user_text: str, *, locale: str) -> str | None:
+        _ = locale
+        prompt = (
+            "The user is confirming they took a scheduled medication. "
+            "If they mention a side effect, symptom, or anything they want noted for this dose "
+            "(for their doctor or records), put it in note; otherwise note must be null.\n\n"
+            f"User: {user_text}"
+        )
+        try:
+            parsed: DoseConfirmationNoteExtraction = self._generate_structured_sync(
+                self._model, prompt, DoseConfirmationNoteExtraction
+            )
+        except LLMParseError:
+            log.warning("extract_dose_confirmation_note: structured parse failed")
+            return None
+        if parsed.note is None:
+            return None
+        n = parsed.note.strip()
+        return n if n else None
+
+    async def extract_dose_confirmation_note(self, user_text: str, *, locale: str) -> str | None:
+        return await asyncio.to_thread(
+            self._extract_dose_confirmation_note_sync, user_text, locale=locale
+        )
 
     def _compose_sync(
         self,
@@ -244,7 +305,7 @@ class OpenAILLM(LLMPort):
         prompt = (
             f"{t('gemini.extract_medication_intro', locale=loc)}\n"
             f"{t('gemini.extract_medication_reminder_rules', locale=loc)}\n"
-            "Return JSON only with keys: name, dosage, schedule, instructions_zh, "
+            "Return JSON only with keys: name, dosage, schedule, instructions, "
             "first_reminder_in_minutes, materialize_daily_reminders, reminder_horizon_days, "
             "needs_horizon_confirmation, daily_reminder_local_hhmm.\n"
             f"User: {user_text}"
@@ -322,11 +383,11 @@ class OpenAILLM(LLMPort):
             schedule=saved.schedule,
         )
         extra = ""
-        if saved.instructions_zh:
+        if saved.instructions:
             extra = "\n" + t(
                 "gemini.added_notes_from_user",
                 locale=loc,
-                text=saved.instructions_zh,
+                text=saved.instructions,
             )
         appendix = reminder_compose_appendix(saved, loc)
         prompt = (
@@ -421,7 +482,7 @@ class OpenAILLM(LLMPort):
         med_lines = (
             "\n".join(
                 f"- {m.name} {m.dosage}, {m.schedule}"
-                + (f" | notes: {m.instructions_zh}" if m.instructions_zh else "")
+                + (f" | notes: {m.instructions}" if m.instructions else "")
                 for m in medications
             )
             or "None recorded."
@@ -473,7 +534,7 @@ class OpenAILLM(LLMPort):
                 dosage=m.dosage,
                 schedule=m.schedule,
                 purpose="",
-                notes=m.instructions_zh,
+                notes=m.instructions,
             )
             for m in medications
         ]

@@ -11,7 +11,6 @@ from medbuddy.protocols.ports import LLMPort
 from medbuddy.user_locale import (
     effective_user_locale,
     normalize_locale_patch,
-    parse_locale_request_from_text,
 )
 
 
@@ -31,22 +30,18 @@ async def try_locale_change_reply(
 ) -> str | None:
     """Return a short ack if the message requests a locale change; otherwise ``None``.
 
-    Fast path: :func:`parse_locale_request_from_text`. If that misses but the classifier
-    returned ``update_locale``, asks the LLM for structured ``en`` / ``zh-TW`` extraction.
+    Uses :meth:`~medbuddy.protocols.ports.LLMPort.extract_locale_intent` when the
+    classifier returns ``update_locale``.
     """
     current = effective_user_locale(user_row.get("locale"))
-    requested_raw = parse_locale_request_from_text(user_text)
-    if requested_raw is None and intent == Intent.UPDATE_LOCALE:
-        requested_raw = await llm.extract_locale_intent(user_text)
-    if requested_raw is None:
-        if intent == Intent.UPDATE_LOCALE:
-            return t("locale.unclear", locale=current)
+    if intent != Intent.UPDATE_LOCALE:
         return None
+    requested_raw = await llm.extract_locale_intent(user_text)
+    if requested_raw is None:
+        return t("locale.unclear", locale=current)
     requested = normalize_locale_patch(requested_raw)
     if requested is None:
-        if intent == Intent.UPDATE_LOCALE:
-            return t("locale.unclear", locale=current)
-        return None
+        return t("locale.unclear", locale=current)
     if requested == current:
         label = _language_label(target_locale=current, message_locale=current)
         return t("locale.unchanged", locale=current, label=label)

@@ -20,6 +20,7 @@ from medbuddy.reminders.prefs import (
     reminder_prefs_from_metadata,
 )
 from medbuddy.protocols.ports import ConversationStorePort, UserDataPort
+from medbuddy.reminders.nudge_policy import nudge_window_allows
 from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
 from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
@@ -56,13 +57,13 @@ def _med_row_to_record(row: dict[str, Any]) -> MedicationRecord:
     raw = row.get("raw_metadata")
     if not isinstance(raw, dict):
         raw = {}
-    ins = row.get("instructions_zh")
+    ins = row.get("instructions")
     return MedicationRecord(
         id=str(row["id"]),
         name=row["name"],
         dosage=row["dosage"],
         schedule=row["schedule"],
-        instructions_zh=ins if isinstance(ins, str) or ins is None else str(ins),
+        instructions=ins if isinstance(ins, str) or ins is None else str(ins),
         raw_metadata=raw,
     )
 
@@ -101,7 +102,7 @@ class SupabaseUserData(UserDataPort):
     async def _select_user_row(self, external_user_id: str) -> dict[str, Any] | None:
         def q() -> Any:
             return (
-                self._client.table("users")
+                self._client.table("patients")
                 .select(
                     "id, external_user_id, preferred_name, age_years, gender, "
                     "emergency_contact, health_notes, onboarding_completed_at, timezone, locale"
@@ -121,7 +122,7 @@ class SupabaseUserData(UserDataPort):
             return _user_row_to_dict(row)
 
         def insert() -> Any:
-            return self._client.table("users").insert({"external_user_id": line_user_id}).execute()
+            return self._client.table("patients").insert({"external_user_id": line_user_id}).execute()
 
         try:
             resp = await _run_q(insert)
@@ -170,7 +171,7 @@ class SupabaseUserData(UserDataPort):
         }
 
         def upd() -> Any:
-            return self._client.table("users").update(payload).eq("id", uid).execute()
+            return self._client.table("patients").update(payload).eq("id", uid).execute()
 
         await _run_q(upd)
         row = await self._select_user_row(line_user_id)
@@ -227,7 +228,7 @@ class SupabaseUserData(UserDataPort):
             return user
 
         def upd() -> Any:
-            return self._client.table("users").update(payload).eq("id", uid).execute()
+            return self._client.table("patients").update(payload).eq("id", uid).execute()
 
         await _run_q(upd)
         row = await self._select_user_row(line_user_id)
@@ -243,8 +244,8 @@ class SupabaseUserData(UserDataPort):
         def q() -> Any:
             return (
                 self._client.table("medications")
-                .select("id, name, dosage, schedule, instructions_zh, raw_metadata")
-                .eq("user_id", uid)
+                .select("id, name, dosage, schedule, instructions, raw_metadata")
+                .eq("patient_id", uid)
                 .order("id")
                 .execute()
             )
@@ -256,13 +257,13 @@ class SupabaseUserData(UserDataPort):
     async def add_medication(self, line_user_id: str, draft: MedicationDraft) -> MedicationRecord:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
-        ins = (draft.instructions_zh or "").strip()
+        ins = (draft.instructions or "").strip()
         payload: dict[str, Any] = {
-            "user_id": uid,
+            "patient_id": uid,
             "name": draft.name.strip(),
             "dosage": draft.dosage.strip(),
             "schedule": draft.schedule.strip(),
-            "instructions_zh": ins or None,
+            "instructions": ins or None,
             "raw_metadata": {"reminder": reminder_blob_from_draft(draft)},
         }
 
@@ -284,7 +285,7 @@ class SupabaseUserData(UserDataPort):
             return (
                 self._client.table("medications")
                 .delete()
-                .eq("user_id", uid)
+                .eq("patient_id", uid)
                 .eq("id", medication_id)
                 .execute()
             )
@@ -305,7 +306,7 @@ class SupabaseUserData(UserDataPort):
             return (
                 self._client.table("dose_events")
                 .delete()
-                .eq("user_id", uid)
+                .eq("patient_id", uid)
                 .gt("scheduled_at", cutoff)
                 .execute()
             )
@@ -328,7 +329,7 @@ class SupabaseUserData(UserDataPort):
             for at in instants:
                 rows.append(
                     {
-                        "user_id": uid,
+                        "patient_id": uid,
                         "medication_id": med.id,
                         "scheduled_at": at.isoformat(),
                     }
@@ -352,7 +353,7 @@ class SupabaseUserData(UserDataPort):
         def q_dose() -> Any:
             return (
                 self._client.table("dose_events")
-                .select("id, user_id, medication_id, scheduled_at, reminder_sent_at, taken_at")
+                .select("id, patient_id, medication_id, scheduled_at, reminder_sent_at, taken_at")
                 .eq("id", dose_event_id)
                 .limit(1)
                 .execute()
@@ -365,13 +366,13 @@ class SupabaseUserData(UserDataPort):
         dr = drows[0]
         if dr.get("reminder_sent_at") is not None or dr.get("taken_at") is not None:
             return None
-        uid = str(dr["user_id"])
+        uid = str(dr["patient_id"])
         mid = str(dr["medication_id"])
         scheduled_at = _parse_ts(dr["scheduled_at"])
 
         def q_user() -> Any:
             return (
-                self._client.table("users")
+                self._client.table("patients")
                 .select("external_user_id, timezone, locale")
                 .eq("id", uid)
                 .limit(1)
@@ -411,6 +412,92 @@ class SupabaseUserData(UserDataPort):
             scheduled_at=scheduled_at,
             user_timezone=tz_name,
             user_locale=user_locale,
+            is_nudge=False,
+        )
+
+    async def get_dose_event_for_nudge(
+        self,
+        dose_event_id: str,
+        *,
+        expected_nudge_count: int,
+        max_nudges: int,
+    ) -> DoseEventReminderPayload | None:
+        if max_nudges <= 0 or expected_nudge_count >= max_nudges:
+            return None
+
+        def q_dose() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select(
+                    "id, patient_id, medication_id, scheduled_at, reminder_sent_at, "
+                    "taken_at, reminder_nudge_count"
+                )
+                .eq("id", dose_event_id)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q_dose)
+        drows = resp.data or []
+        if not drows:
+            return None
+        dr = drows[0]
+        if dr.get("taken_at") is not None:
+            return None
+        if dr.get("reminder_sent_at") is None:
+            return None
+        if int(dr.get("reminder_nudge_count") or 0) != expected_nudge_count:
+            return None
+        uid = str(dr["patient_id"])
+        mid = str(dr["medication_id"])
+        scheduled_at = _parse_ts(dr["scheduled_at"])
+        now_utc = datetime.now(UTC)
+
+        def q_user() -> Any:
+            return (
+                self._client.table("patients")
+                .select("external_user_id, timezone, locale")
+                .eq("id", uid)
+                .limit(1)
+                .execute()
+            )
+
+        uresp = await _run_q(q_user)
+        urows = uresp.data or []
+        if not urows:
+            return None
+        line_uid = str(urows[0]["external_user_id"])
+        tz_raw = urows[0].get("timezone")
+        tz_name = effective_user_timezone(str(tz_raw) if tz_raw else None)
+        loc_raw = urows[0].get("locale")
+        user_locale = effective_user_locale(str(loc_raw) if loc_raw else None)
+        if not nudge_window_allows(scheduled_at, tz_name, now_utc=now_utc):
+            return None
+
+        def q_med() -> Any:
+            return (
+                self._client.table("medications")
+                .select("name, dosage, schedule")
+                .eq("id", mid)
+                .limit(1)
+                .execute()
+            )
+
+        mresp = await _run_q(q_med)
+        mrows = mresp.data or []
+        if not mrows:
+            return None
+        m = mrows[0]
+        return DoseEventReminderPayload(
+            dose_event_id=dose_event_id,
+            line_user_id=line_uid,
+            medication_name=str(m["name"]),
+            dosage=str(m["dosage"]),
+            schedule=str(m["schedule"]),
+            scheduled_at=scheduled_at,
+            user_timezone=tz_name,
+            user_locale=user_locale,
+            is_nudge=True,
         )
 
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:
@@ -429,6 +516,76 @@ class SupabaseUserData(UserDataPort):
         resp = await _run_q(q)
         rows = resp.data or []
         return len(rows) > 0
+
+    async def try_increment_reminder_nudge(
+        self, dose_event_id: str, *, expected_nudge_count: int
+    ) -> bool:
+        now = datetime.now(UTC)
+        payload = {
+            "reminder_nudge_count": expected_nudge_count + 1,
+            "last_nudge_at": now.isoformat(),
+        }
+
+        def q() -> Any:
+            return (
+                self._client.table("dose_events")
+                .update(payload)
+                .eq("id", dose_event_id)
+                .eq("reminder_nudge_count", expected_nudge_count)
+                .is_("taken_at", "null")
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return len(rows) > 0
+
+    async def mark_pending_doses_taken(self, line_user_id: str, *, notes: str | None = None) -> int:
+        """Set ``taken_at`` on the most recent past pending dose instant (all meds at that time)."""
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
+
+        def q_latest() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("scheduled_at")
+                .eq("patient_id", uid)
+                .is_("taken_at", "null")
+                .lte("scheduled_at", now_iso)
+                .order("scheduled_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q_latest)
+        rows = resp.data or []
+        if not rows:
+            return 0
+        target_ts = rows[0]["scheduled_at"]
+
+        payload: dict[str, Any] = {"taken_at": now_iso}
+        if notes is not None:
+            n = notes.strip()
+            if len(n) > 500:
+                n = n[:500]
+            if n:
+                payload["notes"] = n
+
+        def q_update() -> Any:
+            return (
+                self._client.table("dose_events")
+                .update(payload)
+                .eq("patient_id", uid)
+                .eq("scheduled_at", target_ts)
+                .is_("taken_at", "null")
+                .execute()
+            )
+
+        uresp = await _run_q(q_update)
+        updated = uresp.data or []
+        return len(updated)
 
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]:
         b = before_utc if before_utc.tzinfo else before_utc.replace(tzinfo=UTC)
@@ -465,7 +622,7 @@ class SupabaseConversationStore(ConversationStorePort):
             return (
                 self._client.table("conversation_turns")
                 .select("role, content, created_at")
-                .eq("user_id", uid)
+                .eq("patient_id", uid)
                 .order("created_at", desc=True)
                 .limit(max_turns)
                 .execute()
@@ -485,7 +642,7 @@ class SupabaseConversationStore(ConversationStorePort):
         if at.tzinfo is None:
             at = at.replace(tzinfo=UTC)
         payload = {
-            "user_id": uid,
+            "patient_id": uid,
             "role": turn.role,
             "content": turn.content,
             "created_at": at.isoformat(),

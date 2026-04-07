@@ -57,11 +57,10 @@ def test_recent_context_for_intent_includes_redacted_tail() -> None:
     assert "提醒" in out
 
 
-@pytest.mark.asyncio
-async def test_map_intent_label_substring_fuzzy() -> None:
-    from medbuddy.integrations.openai_llm import _map_intent_label
+def test_map_intent_label_substring_fuzzy() -> None:
+    from medbuddy.llm.intent_map import map_intent_label
 
-    assert _map_intent_label("add_medication") == Intent.ADD_MEDICATION
-    assert _map_intent_label("something add_medication extra") == Intent.ADD_MEDICATION
-    assert _map_intent_label("update_locale") == Intent.UPDATE_LOCALE
-    assert _map_intent_label("off_topic") == Intent.OFF_TOPIC
+    assert map_intent_label("add_medication") == Intent.ADD_MEDICATION
+    assert map_intent_label("something add_medication extra") == Intent.ADD_MEDICATION
+    assert map_intent_label("update_locale") == Intent.UPDATE_LOCALE
+    assert map_intent_label("off_topic") == Intent.OFF_TOPIC

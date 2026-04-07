@@ -13,6 +13,7 @@ from medbuddy.reminders.prefs import (
     reminder_prefs_from_metadata,
 )
 from medbuddy.protocols.ports import UserDataPort
+from medbuddy.reminders.nudge_policy import nudge_window_allows
 from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
 from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
@@ -133,13 +134,13 @@ class MockUserData(UserDataPort):
     async def add_medication(self, line_user_id: str, draft: MedicationDraft) -> MedicationRecord:
         await asyncio.sleep(0)
         await self.get_or_create_user(line_user_id)
-        ins = (draft.instructions_zh or "").strip()
+        ins = (draft.instructions or "").strip()
         rec = MedicationRecord(
             id=str(uuid.uuid4()),
             name=draft.name.strip(),
             dosage=draft.dosage.strip(),
             schedule=draft.schedule.strip(),
-            instructions_zh=ins or None,
+            instructions=ins or None,
             raw_metadata={"reminder": reminder_blob_from_draft(draft)},
         )
         self._meds.setdefault(line_user_id, []).append(rec)
@@ -196,6 +197,9 @@ class MockUserData(UserDataPort):
                     "scheduled_at": at,
                     "reminder_sent_at": None,
                     "taken_at": None,
+                    "notes": None,
+                    "reminder_nudge_count": 0,
+                    "last_nudge_at": None,
                     "timezone": tz_name,
                     "user_locale": effective_user_locale(row.get("locale")),
                 }
@@ -220,6 +224,42 @@ class MockUserData(UserDataPort):
             scheduled_at=d["scheduled_at"],
             user_timezone=str(d["timezone"]),
             user_locale=str(d["user_locale"]),
+            is_nudge=False,
+        )
+
+    async def get_dose_event_for_nudge(
+        self,
+        dose_event_id: str,
+        *,
+        expected_nudge_count: int,
+        max_nudges: int,
+    ) -> DoseEventReminderPayload | None:
+        await asyncio.sleep(0)
+        if max_nudges <= 0 or expected_nudge_count >= max_nudges:
+            return None
+        d = self._doses.get(dose_event_id)
+        if not d:
+            return None
+        if d.get("taken_at") is not None:
+            return None
+        if d.get("reminder_sent_at") is None:
+            return None
+        if int(d.get("reminder_nudge_count") or 0) != expected_nudge_count:
+            return None
+        scheduled_at = d["scheduled_at"]
+        tz_name = str(d["timezone"])
+        if not nudge_window_allows(scheduled_at, tz_name, now_utc=datetime.now(UTC)):
+            return None
+        return DoseEventReminderPayload(
+            dose_event_id=dose_event_id,
+            line_user_id=str(d["line_user_id"]),
+            medication_name=str(d["name"]),
+            dosage=str(d["dosage"]),
+            schedule=str(d["schedule"]),
+            scheduled_at=scheduled_at,
+            user_timezone=tz_name,
+            user_locale=str(d["user_locale"]),
+            is_nudge=True,
         )
 
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:
@@ -229,6 +269,48 @@ class MockUserData(UserDataPort):
             return False
         d["reminder_sent_at"] = datetime.now(UTC)
         return True
+
+    async def try_increment_reminder_nudge(
+        self, dose_event_id: str, *, expected_nudge_count: int
+    ) -> bool:
+        await asyncio.sleep(0)
+        d = self._doses.get(dose_event_id)
+        if not d or d.get("taken_at") is not None:
+            return False
+        if int(d.get("reminder_nudge_count") or 0) != expected_nudge_count:
+            return False
+        d["reminder_nudge_count"] = expected_nudge_count + 1
+        d["last_nudge_at"] = datetime.now(UTC)
+        return True
+
+    async def mark_pending_doses_taken(self, line_user_id: str, *, notes: str | None = None) -> int:
+        await asyncio.sleep(0)
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        now = datetime.now(UTC)
+        candidates = [
+            d
+            for d in self._doses.values()
+            if d["line_user_id"] == line_user_id
+            and d["user_internal_id"] == uid
+            and d.get("taken_at") is None
+            and d["scheduled_at"] <= now
+        ]
+        if not candidates:
+            return 0
+        target_ts = max(d["scheduled_at"] for d in candidates)
+        note_val: str | None = None
+        if notes is not None:
+            nstrip = notes.strip()
+            note_val = nstrip[:500] if nstrip else None
+        n = 0
+        for d in candidates:
+            if d["scheduled_at"] == target_ts:
+                d["taken_at"] = now
+                if note_val:
+                    d["notes"] = note_val
+                n += 1
+        return n
 
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]:
         await asyncio.sleep(0)

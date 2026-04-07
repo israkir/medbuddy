@@ -51,3 +51,42 @@ async def enqueue_reminder_jobs_now(redis_url: str, dose_event_ids: list[str]) -
             await redis.enqueue_job("send_reminder_for_dose", dose_id)
     finally:
         await redis.close()
+
+
+async def enqueue_reminder_nudge_job(
+    redis_url: str,
+    dose_event_id: str,
+    expected_nudge_count: int,
+    defer_until: datetime,
+) -> None:
+    """Schedule ``send_reminder_nudge`` for a follow-up push after the primary reminder."""
+    if not redis_url:
+        return
+    try:
+        from arq import create_pool
+        from arq.connections import RedisSettings
+    except ImportError:
+        log.warning(
+            "arq is not installed; cannot enqueue reminder nudges. "
+            "Install with: pip install 'medbuddy-api[reminders]'"
+        )
+        return
+
+    redis = await create_pool(RedisSettings.from_dsn(redis_url))
+    try:
+        dt = defer_until if defer_until.tzinfo else defer_until.replace(tzinfo=UTC)
+        if dt <= datetime.now(UTC):
+            await redis.enqueue_job(
+                "send_reminder_nudge",
+                dose_event_id,
+                expected_nudge_count,
+            )
+        else:
+            await redis.enqueue_job(
+                "send_reminder_nudge",
+                dose_event_id,
+                expected_nudge_count,
+                _defer_until=dt,
+            )
+    finally:
+        await redis.close()

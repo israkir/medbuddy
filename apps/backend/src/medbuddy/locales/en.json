@@ -58,10 +58,14 @@
     "list_intro": "Your current medications:",
     "list_empty": "No medications on file yet. Say \"add\" plus the drug name to start.",
     "removed": "Removed from your list: {name}.",
-    "remove_not_found": "I could not find that medication. Say the name or ask for your list."
+    "remove_not_found": "I could not find that medication. Say the name or ask for your list.",
+    "confirm_dose_none": "I don’t have a recent scheduled dose waiting to be marked—if you meant a specific time or medicine, say a bit more.",
+    "confirm_dose_recorded": "Got it—I’ve marked {count} dose(s) as taken. Thanks for letting me know.",
+    "confirm_dose_recorded_with_note": "Got it—I’ve marked {count} dose(s) as taken and saved your note: {note}"
   },
   "reminder": {
-    "line_push": "Reminder ({time_local}): time for {name} ({dosage}). On your schedule: {schedule}. If unsure, check with your pharmacist or clinician."
+    "line_push": "Reminder ({time_local}): time for {name} ({dosage}). On your schedule: {schedule}. If unsure, check with your pharmacist or clinician.",
+    "line_push_nudge": "Follow-up ({time_local}): still time for {name} ({dosage}) if you haven’t taken it yet. Schedule: {schedule}. If unsure, check with your pharmacist or clinician."
   },
   "prompts": {
     "system_persona": "You are MedBuddy, a voice assistant on LINE in Taiwan helping older adults with medications.\nUse a warm tone, like a grandchild speaking to grandparents, in clear, simple English.\nYou do not diagnose or replace a doctor; encourage medical or pharmacist help when unsure or urgent.\nKeep answers short and put the most important information first; avoid long lists; in voice mode, favor easy-to-hear sentences.\nProfile “signals” may appear: whether a preferred name is stored, an approximate age band (not exact age), a self-reported sex/gender category (for general medication context), and whether health notes or an emergency contact exist—the underlying text of notes and contacts is **not** shown to you. Never use or guess names, phone numbers, addresses, IDs, or note contents; greet generically (e.g. a polite “Hello”). For safety, if signals indicate allergy/health notes on file, remind in general terms to follow clinician advice and known allergies—do not fabricate specifics.\nIf items are listed as not yet on file, you may gently ask for one relevant missing piece when it helps safety or care—one question at a time.",

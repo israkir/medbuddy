@@ -95,7 +95,7 @@ async def test_get_or_create_user_uses_existing_row() -> None:
     ud = SupabaseUserData(client, Settings())
     out = await ud.get_or_create_user("ext-1")
     assert out["id"] == "00000000-0000-0000-0000-000000000001"
-    client.table.assert_called_with("users")
+    client.table.assert_called_with("patients")
     builder.insert.assert_not_called()
 
 
@@ -148,7 +148,7 @@ async def test_append_turn_inserts_with_resolved_user_id() -> None:
     turn_builder.execute.return_value = MagicMock(data=[{"id": 1}])
 
     def table(name: str) -> MagicMock:
-        if name == "users":
+        if name == "patients":
             return user_builder
         if name == "conversation_turns":
             return turn_builder
@@ -163,7 +163,7 @@ async def test_append_turn_inserts_with_resolved_user_id() -> None:
     await store.append_turn("ext-3", ConversationTurn(role="user", content="hi", at=at))
     turn_builder.insert.assert_called_once()
     call_kw = turn_builder.insert.call_args[0][0]
-    assert call_kw["user_id"] == "00000000-0000-0000-0000-000000000003"
+    assert call_kw["patient_id"] == "00000000-0000-0000-0000-000000000003"
     assert call_kw["role"] == "user"
     assert call_kw["content"] == "hi"
     assert call_kw["created_at"] == at.isoformat()
@@ -193,14 +193,14 @@ async def test_add_medication_inserts_row() -> None:
                 "name": "Aspirin",
                 "dosage": "100mg",
                 "schedule": "after meal",
-                "instructions_zh": None,
+                "instructions": None,
                 "raw_metadata": {},
             }
         ]
     )
 
     def table(name: str) -> MagicMock:
-        if name == "users":
+        if name == "patients":
             return user_builder
         if name == "medications":
             return med_builder
@@ -357,7 +357,7 @@ async def test_delete_medication_deletes_when_match() -> None:
     )
 
     def table(name: str) -> MagicMock:
-        if name == "users":
+        if name == "patients":
             return user_builder
         if name == "medications":
             return med_builder

@@ -1,82 +1,83 @@
--- Run in Supabase SQL Editor (or migrate via Supabase CLI) before enabling real-mode persistence.
--- Backend uses the publishable API key (or legacy anon JWT): PostgREST uses the ``anon`` role,
--- so RLS policies below must allow the operations MedBuddy needs. Do not use the service_role
--- key in clients; see https://supabase.com/docs/guides/api/api-keys
+-- MedBuddy Postgres schema for a new Supabase project (greenfield).
+-- PostgREST uses the ``anon`` role with the publishable key; RLS policies below allow
+-- what the backend needs. Do not use the service_role key in clients;
+-- see https://supabase.com/docs/guides/api/api-keys
+--
+-- ``patients`` holds end-user profile rows (LINE or app ``external_user_id``). Other
+-- actor types (e.g. staff) can use separate tables later without overloading ``users``.
+--
+-- This file is not an incremental migration path. Existing deployments should use
+-- explicit migrations (or ALTER) to reconcile drift.
 
 create extension if not exists "pgcrypto";
 
-create table if not exists public.users (
+create table if not exists public.patients (
     id uuid primary key default gen_random_uuid(),
     external_user_id text not null unique,
     preferred_name text,
     age_years integer,
     emergency_contact text,
     health_notes text,
-    onboarding_completed_at timestamptz
+    onboarding_completed_at timestamptz,
+    gender text,
+    timezone text default 'Asia/Taipei',
+    locale text default 'zh-TW'
 );
 
--- Existing projects: add profile columns if the table was created before onboarding.
-alter table public.users add column if not exists preferred_name text;
-alter table public.users add column if not exists age_years integer;
-alter table public.users add column if not exists emergency_contact text;
-alter table public.users add column if not exists health_notes text;
-alter table public.users add column if not exists onboarding_completed_at timestamptz;
-alter table public.users add column if not exists gender text;
-alter table public.users add column if not exists timezone text;
-alter table public.users add column if not exists locale text;
-
-alter table public.users
-    alter column timezone set default 'Asia/Taipei';
-
-update public.users set timezone = 'Asia/Taipei' where timezone is null;
-
-alter table public.users
-    alter column locale set default 'zh-TW';
-
-update public.users set locale = 'zh-TW' where locale is null;
-
-comment on column public.users.timezone is
+comment on column public.patients.timezone is
     'IANA timezone name; default Asia/Taipei; used for medication reminder local times and push copy.';
-
-comment on column public.users.locale is
+comment on column public.patients.locale is
     'App UI language: en or zh-TW (standalone app); default zh-TW.';
 
 create table if not exists public.medications (
     id uuid primary key default gen_random_uuid(),
-    user_id uuid not null references public.users (id) on delete cascade,
+    patient_id uuid not null references public.patients (id) on delete cascade,
     name text not null,
     dosage text not null,
     schedule text not null,
-    instructions_zh text,
+    instructions text,
     raw_metadata jsonb not null default '{}'::jsonb
 );
 
-create index if not exists medications_user_id_idx on public.medications (user_id);
+comment on column public.medications.instructions is
+    'Optional free-text notes from the user message (LLM extraction); not a substitute for prescriber directions.';
+comment on column public.medications.raw_metadata is
+    'App-defined JSON (e.g. raw_metadata.reminder for dose scheduling preferences).';
+
+create index if not exists medications_patient_id_idx on public.medications (patient_id);
 
 create table if not exists public.conversation_turns (
     id bigserial primary key,
-    user_id uuid not null references public.users (id) on delete cascade,
+    patient_id uuid not null references public.patients (id) on delete cascade,
     role text not null,
     content text not null,
     created_at timestamptz not null default now()
 );
 
-create index if not exists conversation_turns_user_created_at_idx
-    on public.conversation_turns (user_id, created_at);
+create index if not exists conversation_turns_patient_created_at_idx
+    on public.conversation_turns (patient_id, created_at);
 
 create table if not exists public.dose_events (
     id uuid primary key default gen_random_uuid(),
-    user_id uuid not null references public.users (id) on delete cascade,
+    patient_id uuid not null references public.patients (id) on delete cascade,
     medication_id uuid not null references public.medications (id) on delete cascade,
     scheduled_at timestamptz not null,
     taken_at timestamptz,
-    reminder_sent_at timestamptz
+    reminder_sent_at timestamptz,
+    reminder_nudge_count integer not null default 0,
+    last_nudge_at timestamptz,
+    notes text
 );
 
-alter table public.dose_events add column if not exists reminder_sent_at timestamptz;
+comment on column public.dose_events.notes is
+    'Optional patient note (e.g. side effect) attached when marking this dose taken.';
+comment on column public.dose_events.reminder_nudge_count is
+    'Number of follow-up nudge pushes sent after reminder_sent_at; primary push does not increment this.';
+comment on column public.dose_events.last_nudge_at is
+    'UTC time of the last nudge push (not the primary reminder).';
 
-create index if not exists dose_events_user_id_scheduled_at_idx
-    on public.dose_events (user_id, scheduled_at);
+create index if not exists dose_events_patient_id_scheduled_at_idx
+    on public.dose_events (patient_id, scheduled_at);
 
 -- Global cache for drug usage / label snippets (OpenFDA, future TFDA scrape, etc.).
 -- Lookup: normalize user search text to ``query_key`` (e.g. lower(trim(query))) and match ``source``.
@@ -102,14 +103,14 @@ create index if not exists drug_reference_cache_query_key_idx
 create index if not exists drug_reference_cache_fetched_at_idx
     on public.drug_reference_cache (fetched_at desc);
 
--- Per-user cache of LLM-personalized drug explanations (ties reference data to this user’s list,
+-- Per-patient cache of LLM-personalized drug explanations (ties reference data to this patient’s list,
 -- schedule, and questions). ``query_fingerprint`` is an app-defined stable key, e.g.
 -- ``explain:med:<medication_uuid>``, ``explain:drug:metformin``, ``interaction:sorted+names``.
--- Upsert on (user_id, query_fingerprint); optional ``reference_cache_id`` links the global
+-- Upsert on (patient_id, query_fingerprint); optional ``reference_cache_id`` links the global
 -- ``drug_reference_cache`` row used when the text was generated.
 create table if not exists public.drug_personalization_cache (
     id uuid primary key default gen_random_uuid(),
-    user_id uuid not null references public.users (id) on delete cascade,
+    patient_id uuid not null references public.patients (id) on delete cascade,
     medication_id uuid references public.medications (id) on delete set null,
     reference_cache_id uuid references public.drug_reference_cache (id) on delete set null,
     query_fingerprint text not null,
@@ -120,20 +121,20 @@ create table if not exists public.drug_personalization_cache (
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     expires_at timestamptz,
-    constraint drug_personalization_cache_user_fingerprint unique (user_id, query_fingerprint)
+    constraint drug_personalization_cache_patient_fingerprint unique (patient_id, query_fingerprint)
 );
 
-create index if not exists drug_personalization_cache_user_id_idx
-    on public.drug_personalization_cache (user_id);
+create index if not exists drug_personalization_cache_patient_id_idx
+    on public.drug_personalization_cache (patient_id);
 
-create index if not exists drug_personalization_cache_user_updated_idx
-    on public.drug_personalization_cache (user_id, updated_at desc);
+create index if not exists drug_personalization_cache_patient_updated_idx
+    on public.drug_personalization_cache (patient_id, updated_at desc);
 
 create index if not exists drug_personalization_cache_medication_id_idx
     on public.drug_personalization_cache (medication_id)
     where medication_id is not null;
 
-alter table public.users enable row level security;
+alter table public.patients enable row level security;
 alter table public.medications enable row level security;
 alter table public.conversation_turns enable row level security;
 alter table public.dose_events enable row level security;
@@ -142,9 +143,9 @@ alter table public.drug_personalization_cache enable row level security;
 
 -- Permissive policies for ``anon`` (publishable / legacy anon key). Tighten when you attach
 -- Supabase Auth and can scope rows (e.g. ``auth.uid()``).
-drop policy if exists "medbuddy_users_anon_rw" on public.users;
-create policy "medbuddy_users_anon_rw"
-    on public.users
+drop policy if exists "medbuddy_patients_anon_rw" on public.patients;
+create policy "medbuddy_patients_anon_rw"
+    on public.patients
     for all
     to anon
     using (true)

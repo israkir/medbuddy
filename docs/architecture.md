@@ -245,7 +245,7 @@ HTTP client
     │ Body: {"text": "..."}
     ▼
 channels/mobile/routes.py
-    │ require_mobile_auth()        # verify Bearer + extract user_id
+    │ require_mobile_auth()        # verify Bearer + extract app_user_id
     ▼
 application/assistant_turn.py
     │ run_assistant_text_turn(user_key=app_user_id, user_text)
@@ -282,8 +282,8 @@ medication add/remove intent
     │ try_medication_intents() success
     ▼
 reminders/lifecycle.py
-    │ sync_upcoming_dose_events(user_id, medications)
-    │   DELETE future dose_events for user
+    │ sync_upcoming_dose_events(line_user_id)
+    │   DELETE future dose_events for patient
     │   INSERT new rows (one per med per day in horizon)
     ▼
 reminders/enqueue.py
@@ -360,12 +360,12 @@ Intent enum value
 
 ## 6. Data model
 
-Schema is in `apps/backend/supabase/schema.sql`. All tables use UUIDs, Supabase RLS for the `anon` role, and UTC timestamps.
+Schema is in `apps/backend/supabase/schema.sql` (greenfield DDL for new databases; existing deployments need explicit migrations to match). All tables use UUIDs, Supabase RLS for the `anon` role, and UTC timestamps.
 
 ### 6.1 Entity-relationship overview
 
 ```
-users (1) ─────────────── (many) medications
+patients (1) ─────────────── (many) medications
   │                                │
   │ (many)                         │ (many)
   ▼                                ▼
@@ -378,7 +378,9 @@ conversation_turns             dose_events
 
 ### 6.2 Table definitions
 
-#### `users`
+#### `patients`
+
+End-user profile rows (LINE or app). Reserved table name `users` is avoided so other actor types (e.g. staff) can be modeled separately later.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -391,17 +393,18 @@ conversation_turns             dose_events
 | `health_notes` | `text` | Patient-entered notes (not sent to LLM) |
 | `timezone` | `text` | IANA timezone for medication reminder local times and LINE push clock text (DB default `Asia/Taipei`; standalone app sets it on **`POST /v1/app/onboarding`**; **`patch_user_profile`** may update it) |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
+| `locale` | `text` | `en` or `zh-TW` (DB default `zh-TW`) |
 
 #### `medications`
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | `uuid` PK | |
-| `user_id` | `uuid` FK → `users` | |
+| `patient_id` | `uuid` FK → `patients` | |
 | `name` | `text` | Drug name (as user entered / LLM extracted) |
 | `dosage` | `text` | e.g. "100mg" |
 | `schedule` | `text` | Free-text schedule (e.g. "after meals daily") |
-| `instructions_zh` | `text` | Optional Chinese instructions from LLM grounding |
+| `instructions` | `text` | Optional user instructions from LLM extraction |
 | `raw_metadata` | `jsonb` | Full structured LLM extraction output (e.g. reminder prefs) |
 
 #### `conversation_turns`
@@ -409,7 +412,7 @@ conversation_turns             dose_events
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | `bigserial` PK | |
-| `user_id` | `uuid` FK → `users` | |
+| `patient_id` | `uuid` FK → `patients` | |
 | `role` | `text` | `user` or `assistant` |
 | `content` | `text` | Original (un-redacted) message text |
 | `created_at` | `timestamptz` | Used for ordering |
@@ -421,12 +424,14 @@ conversation_turns             dose_events
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | `uuid` PK | |
-| `user_id` | `uuid` FK → `users` | |
+| `patient_id` | `uuid` FK → `patients` | |
 | `medication_id` | `uuid` FK → `medications` | |
 | `scheduled_at` | `timestamptz` | When the dose is due (UTC) |
 | `taken_at` | `timestamptz` | Optional adherence tracking (not required by reminder job) |
 | `reminder_sent_at` | `timestamptz` | Set after successful LINE push (idempotency) |
-| `created_at` | `timestamptz` | |
+| `reminder_nudge_count` | `integer` | Follow-up nudge pushes after the primary reminder |
+| `last_nudge_at` | `timestamptz` | Last nudge push time (UTC) |
+| `notes` | `text` | Optional note when marking taken |
 
 #### `drug_reference_cache`
 
@@ -448,12 +453,12 @@ Shared across all users. Caches drug label data fetched from OpenFDA / TFDA.
 
 #### `drug_personalization_cache`
 
-Per-user, per-query cached LLM reply for explain/interaction intents.
+Per-patient, per-query cached LLM reply for explain/interaction intents.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | `uuid` PK | |
-| `user_id` | `uuid` FK → `users` | |
+| `patient_id` | `uuid` FK → `patients` | |
 | `medication_id` | `uuid` FK → `medications` | Optional — when reply relates to one med |
 | `reference_cache_id` | `uuid` FK → `drug_reference_cache` | Optional — the grounding source |
 | `query_fingerprint` | `text` | SHA hash of (redacted query + de-identified med list context) |
@@ -465,7 +470,7 @@ Per-user, per-query cached LLM reply for explain/interaction intents.
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
 
-Unique constraint: `(user_id, query_fingerprint)`.
+Unique constraint: `(patient_id, query_fingerprint)`.
 
 ---
 
@@ -663,7 +668,7 @@ For extraction tasks, the active LLM adapter calls structured output where suppo
 | Schema | Used for |
 |--------|---------|
 | `IntentClassification` | `classify_intent` — returns `Intent` enum value |
-| `MedicationDraftOutput` | `extract_medication_draft` — name, dosage, schedule, instructions_zh |
+| `MedicationDraftOutput` | `extract_medication_draft` — name, dosage, schedule, instructions |
 | `MedicationRemovalOutput` | `resolve_medication_removal_id` — which med ID to delete |
 | `HealthSummaryOutput` | `GenerateHealthSummaryTool` — structured doctor summary |
 
@@ -696,7 +701,7 @@ This enables running the full stack and all tests without external LLM API keys.
 
 **Purpose:** Avoid repeated LLM compose calls for the same patient context + query.
 
-**Scope:** Per user.
+**Scope:** Per patient.
 
 **Key:** `query_fingerprint` = SHA-256 hash of:
 - Redacted user query text
@@ -907,18 +912,18 @@ All settings are in `config.py` (Pydantic `BaseSettings`). Sources, in priority 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `REDIS_URL` | — | DSN for arq; enables worker when set |
-| `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` | `09:00` | `HH:MM` **local** time for daily reminders — interpreted in **`users.timezone`** (per-user IANA in Postgres, not a global env) |
+| `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` | `09:00` | `HH:MM` **local** time for daily reminders — interpreted in **`patients.timezone`** (per-user IANA in Postgres, not a global env) |
 | `MEDBUDDY_REMINDER_HORIZON_DAYS` | `14` | Days ahead to materialize dose events (max 90) |
 | `MEDBUDDY_CRON_SECRET` | — | Header secret for reconcile endpoint |
 
-Per-user **calendar timezone** for scheduling and LINE push copy is stored in **`users.timezone`** (default **`Asia/Taipei`**). The standalone app sets it during **`POST /v1/app/onboarding`**; **`patch_user_profile`** can change it later.
+Per-user **calendar timezone** for scheduling and LINE push copy is stored in **`patients.timezone`** (default **`Asia/Taipei`**). The standalone app sets it during **`POST /v1/app/onboarding`**; **`patch_user_profile`** can change it later.
 
 ### 13.7 Caching
 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS` | `168` | 7 days; shared drug label cache |
-| `MEDBUDDY_DRUG_PERSONALIZATION_CACHE_TTL_HOURS` | `72` | 3 days; per-user LLM reply cache |
+| `MEDBUDDY_DRUG_PERSONALIZATION_CACHE_TTL_HOURS` | `72` | 3 days; per-patient LLM reply cache |
 
 ### 13.8 General
 
@@ -971,7 +976,7 @@ Useful for:
 |------|--------|
 | **Clinical diagnosis** | Explicitly out of scope. Prompts instruct the model to defer to clinicians. |
 | **Full TFDA API** | `HttpDrugData.fetch_tfda_snippet()` returns `None` until a live TFDA client is implemented. `source=tfda` rows are not created from placeholder data. |
-| **NLP on free-text schedule** | Reminder v1 uses a single daily time per user. Free-text schedule is echoed in copy but does not drive multiple reminders per day. |
+| **NLP on free-text schedule** | Reminder v1 uses a single daily time per patient. Free-text schedule is echoed in copy but does not drive multiple reminders per day. |
 | **Local notifications (standalone app)** | Dose reminders are LINE push only. No local notification pipeline for HTTP-app users in this slice. |
 | **Rich LINE Flex messages** | Reminder messages are plain text. No "mark taken" postback in v1. |
 | **Per-user bearer tokens** | The mobile API uses a single shared bearer token. Per-user auth would require a user identity system. |
