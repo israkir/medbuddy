@@ -55,6 +55,10 @@ class MockLLM(LLMPort):
         self._locale_intent = locale_intent
         self.last_interpret_user_turn_input: str | None = None
 
+    @property
+    def drug_cache_provenance_id(self) -> str:
+        return "mock_llm"
+
     async def interpret_user_turn(
         self, user_text: str, *, recent_context: str | None = None
     ) -> TurnInterpretation:

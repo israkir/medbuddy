@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -32,23 +32,14 @@ async def test_openfda_grounding_fills_sections_and_raw() -> None:
     mock_resp.status_code = 200
     mock_resp.json = MagicMock(return_value=payload)
 
-    class FakeClient:
-        def __init__(self, *a, **k) -> None:
-            pass
+    http_client = MagicMock()
+    http_client.get = AsyncMock(return_value=mock_resp)
 
-        async def __aenter__(self) -> FakeClient:
-            return self
+    g = await HttpDrugData(locale="en", http_client=http_client).fetch_openfda_label_snippet(
+        "metformin"
+    )
 
-        async def __aexit__(self, *args: object) -> None:
-            return None
-
-        async def get(self, url: str) -> MagicMock:
-            _ = url
-            return mock_resp
-
-    with patch("medbuddy.integrations.drugs_http.httpx.AsyncClient", FakeClient):
-        g = await HttpDrugData(locale="en").fetch_openfda_label_snippet("metformin")
-
+    http_client.get.assert_awaited_once()
     assert g is not None
     assert g.indications_and_usage == "Diabetes type 2."
     assert g.dosage_and_administration == "500 mg BID."

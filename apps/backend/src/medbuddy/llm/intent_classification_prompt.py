@@ -40,6 +40,7 @@ Return one intent, your reasoning, and two adherence fields used mechanically by
 - Prefer **interaction_check** over **explain_medication** when the question is about taking two or more substances together.
 - Do **not** choose **confirm_dose** from symptoms alone. If they report headache/pain/feeling unwell **without** clearly having taken the dose or logging a note for a dose already taken, use **general_question** and set **record_pending_dose_as_taken** false and **dose_adherence_note** null.
 - **Short follow-ups** that answer the assistant’s prior question about dosing, reminders, or scheduling (e.g. “一次”, “三天”, “7”, “once”, “yes”, “ok”, “每天”) must **not** be **off_topic** — use **general_question** or the clinical intent that fits the prior turn; set adherence fields only when that prior turn was about **taking** a specific dose.
+- If the user request is ambiguous, under-specified, or could refer to multiple medicines/times/records, prefer **general_question** so the assistant asks a clarification question before any irreversible action.
 
 ## off_topic
 

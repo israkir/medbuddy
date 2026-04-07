@@ -7,7 +7,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from medbuddy.models.domain import (
     ConversationTurn,
+    DoseClarificationPending,
     DoseEventReminderPayload,
+    DoseEventPendingCandidate,
     DrugGrounding,
     HealthSummary,
     InteractionResult,
@@ -49,6 +51,13 @@ class TextToSpeechPort(Protocol):
 
 @runtime_checkable
 class LLMPort(Protocol):
+    """LLM adapters must expose a stable id for drug-cache provenance (mock vs real model id)."""
+
+    @property
+    def drug_cache_provenance_id(self) -> str:
+        """Model or adapter id stored with personalized drug-cache rows (e.g. ``mock_llm``, ``gpt-4.1-mini``)."""
+        ...
+
     async def interpret_user_turn(
         self, user_text: str, *, recent_context: str | None = None
     ) -> TurnInterpretation:
@@ -142,6 +151,13 @@ class ObjectStoragePort(Protocol):
 
 
 @runtime_checkable
+class InternalMediaPort(Protocol):
+    """Serves bytes for ``GET /internal-media/{id}`` (local in-process storage only)."""
+
+    async def get_blob(self, file_id: str) -> bytes | None: ...
+
+
+@runtime_checkable
 class UserDataPort(Protocol):
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]: ...
 
@@ -194,6 +210,40 @@ class UserDataPort(Protocol):
 
     async def mark_pending_doses_taken(
         self, line_user_id: str, *, notes: str | None = None
+    ) -> int: ...
+
+    async def list_pending_dose_candidates(
+        self, line_user_id: str, *, max_items: int = 5
+    ) -> list[DoseEventPendingCandidate]:
+        """Pending doses scheduled at or before now, newest first."""
+
+    async def list_recent_taken_dose_candidates(
+        self, line_user_id: str, *, max_items: int = 5
+    ) -> list[DoseEventPendingCandidate]:
+        """Recently taken doses for note attachment disambiguation, newest first."""
+
+    async def get_dose_clarification_pending(
+        self, line_user_id: str
+    ) -> DoseClarificationPending | None: ...
+
+    async def set_dose_clarification_pending(
+        self, line_user_id: str, pending: DoseClarificationPending | None
+    ) -> None: ...
+
+    async def mark_dose_events_taken(
+        self,
+        line_user_id: str,
+        dose_event_ids: list[str],
+        *,
+        notes: str | None = None,
+    ) -> int: ...
+
+    async def append_note_to_dose_events(
+        self,
+        line_user_id: str,
+        dose_event_ids: list[str],
+        *,
+        notes: str,
     ) -> int: ...
 
     async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:

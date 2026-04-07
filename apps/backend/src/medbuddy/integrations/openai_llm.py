@@ -80,6 +80,10 @@ class OpenAILLM(LLMPort):
         self._model = model
         self._locale = locale
 
+    @property
+    def drug_cache_provenance_id(self) -> str:
+        return self._model
+
     def _generate_sync(self, model: str, prompt: str) -> str:
         resp = self._client.chat.completions.create(
             model=model,

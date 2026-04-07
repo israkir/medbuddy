@@ -14,7 +14,6 @@ from medbuddy.drug_cache_keys import (
     resolve_medication_id_for_personalization,
 )
 from medbuddy.engine.types import AppServices
-from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
@@ -93,9 +92,7 @@ class ExplainMedicationTool:
                 user_text,
                 extra_query_text=safe_text if safe_text != user_text else None,
             )
-            prov_source = grounding_source or (
-                "mock_llm" if isinstance(svc.llm, MockLLM) else svc.settings.active_llm_model_id
-            )
+            prov_source = grounding_source or svc.llm.drug_cache_provenance_id
             await svc.drug_caches.save_personalized_reply(
                 user_uuid=user_row["id"],
                 query_fingerprint=fp,
@@ -122,12 +119,12 @@ async def _fetch_grounding(
     try:
         tfda = await svc.drugs.fetch_tfda_snippet(q)
     except Exception:
-        log.debug("drug_lookup: TFDA fetch failed for %r", q)
+        log.debug("drug_lookup: TFDA fetch failed query_len=%d", len(q))
         tfda = None
     try:
         ofda = await svc.drugs.fetch_openfda_label_snippet(q)
     except Exception:
-        log.debug("drug_lookup: OpenFDA fetch failed for %r", q)
+        log.debug("drug_lookup: OpenFDA fetch failed query_len=%d", len(q))
         ofda = None
 
     if tfda:

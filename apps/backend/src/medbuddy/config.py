@@ -133,6 +133,16 @@ class Settings(BaseSettings):
     whisper_service_url: str = ""
 
     conversation_history_turns: int = 5
+    dose_clarification_ttl_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=86400,
+        description="How long a pending dose disambiguation choice remains valid (seconds).",
+        validation_alias=AliasChoices(
+            "MEDBUDDY_DOSE_CLARIFICATION_TTL_SECONDS",
+            "dose_clarification_ttl_seconds",
+        ),
+    )
     audio_temp_ttl_seconds: int = 60
 
     drug_reference_cache_ttl_hours: int = Field(
@@ -246,13 +256,6 @@ class Settings(BaseSettings):
         if self.medbuddy_integration == "mock":
             object.__setattr__(self, "medbuddy_integration", "real")
         return self
-
-    @property
-    def active_llm_model_id(self) -> str:
-        """Model id used for cache provenance when the configured LLM generates text."""
-        if self.llm_provider == "openai":
-            return self.openai_model
-        return self.gemini_model
 
 
 @lru_cache

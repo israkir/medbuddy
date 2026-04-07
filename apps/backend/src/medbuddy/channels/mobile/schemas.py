@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class ProfileGender(str, Enum):
@@ -54,7 +54,7 @@ class OnboardingSubmit(BaseModel):
             return None
         try:
             ZoneInfo(s)
-        except Exception as e:
+        except (ZoneInfoNotFoundError, OSError) as e:
             raise ValueError("timezone must be a valid IANA timezone name") from e
         return s
 

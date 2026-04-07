@@ -84,7 +84,14 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
     line_user_id = source.get("userId") or ""
 
     if not line_user_id:
-        log.warning("LINE event without userId: %s", event)
+        raw_msg = event.get("message")
+        msg_type = raw_msg.get("type") if isinstance(raw_msg, dict) else None
+        log.warning(
+            "LINE event without userId: type=%s webhook_event_id=%s message.type=%s",
+            etype,
+            event.get("webhookEventId"),
+            msg_type,
+        )
         return
 
     log.info(
@@ -108,7 +115,11 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
         data = event.get("postback", {}).get("data") or ""
         qs = parse_qs(data)
         action = (qs.get("action") or [""])[0]
-        log.info("LINE flow: user_id=%s unhandled postback action=%r", line_user_id, action)
+        log.info(
+            "LINE flow: user_id=%s unhandled postback action_len=%d",
+            line_user_id,
+            len(action),
+        )
         return
 
     if etype != "message":

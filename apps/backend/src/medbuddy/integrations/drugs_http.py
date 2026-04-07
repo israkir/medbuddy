@@ -38,9 +38,16 @@ def _openfda_display_title(first: dict[str, Any], fallback: str) -> str:
 
 
 class HttpDrugData(DrugDataPort):
-    def __init__(self, *, timeout: float = 20.0, locale: str = "zh-TW") -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = 20.0,
+        locale: str = "zh-TW",
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
         self._timeout = timeout
         self._locale = locale
+        self._http = http_client
 
     async def fetch_openfda_label_snippet(self, query: str) -> DrugGrounding | None:
         q = urllib.parse.quote(query)
@@ -48,11 +55,14 @@ class HttpDrugData(DrugDataPort):
             "https://api.fda.gov/drug/label.json?"
             f"search=openfda.brand_name:{q}+OR+openfda.generic_name:{q}&limit=1"
         )
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            r = await client.get(url)
-            if r.status_code != 200:
-                return None
-            data = r.json()
+        if self._http is not None:
+            r = await self._http.get(url, timeout=self._timeout)
+        else:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                r = await client.get(url)
+        if r.status_code != 200:
+            return None
+        data = r.json()
         results = data.get("results") or []
         if not results:
             return None
