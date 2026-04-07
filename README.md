@@ -1,168 +1,75 @@
-# MedBuddy
+<p align="center">
+  <a href="https://github.com/israkir/medbuddy">
+    <img src="assets/medbuddy-logo.png" alt="MedBuddy logo" height="60">
+  </a>
+</p>
 
-MedBuddy is a **patient-facing medication companion** built around a **FastAPI** backend. **Primary product:** **LINE Messaging** (chat, voice, dose reminder push) plus shared assistant logic, persistence, and drug lookup. **Secondary:** an **HTTP API** (`/v1/app/*`) for the same core without LINE.
+<h1 align="center">MedBuddy</h1>
+<h3 align="center">Patient-facing medication companion — LINE messaging, voice, dose reminders, and HTTP API</h3>
 
-The monorepo also includes an **Expo (React Native)** app under `apps/frontend/` as a **reference and future mobile client** — documented separately so it is not mixed with LINE/backend features: **[`docs/frontend-expo.md`](docs/frontend-expo.md)**.
-
-See the per-app READMEs for day-to-day development details.
-
-> **Disclaimer:** MedBuddy is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
+  <a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black"></a>
+  <a href="https://github.com/israkir/medbuddy/actions/workflows/ci.yml"><img src="https://github.com/israkir/medbuddy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
 ---
 
-## Architecture at a glance
+**MedBuddy** is a medication companion monorepo: a **FastAPI** backend (LINE + HTTP API) and an optional **Expo** app for future mobile work.
 
-```
-┌──────────────────┐   ┌────────────────────────────┐
-│  LINE Messaging  │   │  HTTP clients (optional    │
-│  (webhook, push) │   │  reference mobile app)     │
-└────────┬─────────┘   └─────────────┬──────────────┘
-         │                           │
-         ▼                           ▼
-┌──────────────────────────────────────────────┐
-│             FastAPI backend                  │
-│  /v1/line/...        /v1/app/...             │
-│                                              │
-│   channels/line    channels/mobile           │
-│           ↓               ↓                  │
-│      application/assistant_turn()            │
-│              ↓                               │
-│         agents/MedicationAgent               │
-│    (interpret turn → tools)                  │
-│              ↓                               │
-│   protocols/ports (hexagonal boundary)       │
-│      ↓           ↓          ↓                │
-│  integrations/  integrations/ integrations/  |
-│  gemini_llm    supabase_stores drugs_http    │
-└──────────────────────────────────────────────┘
-         ↓              ↓
-    Supabase (Postgres)  Gemini or OpenAI (LLM)
-    Redis + arq          OpenFDA / TFDA
-```
-
-The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern. See [`docs/tdd.md`](docs/tdd.md) for the full technical design.
+> **Disclaimer:** This is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
 
 ---
 
 ## Prerequisites
 
-- **[GNU Make](https://www.gnu.org/software/make/)** — task runner (`make` / `make help`).
-- **Backend:** Python **3.11+** (virtualenv created automatically by `make be-install`).
-- **Frontend:** [Node.js](https://nodejs.org/) 18+ and npm.
+- [GNU Make](https://www.gnu.org/software/make/) — `make` / `make help` at the repo root
+- **Backend:** Python **3.11+**
+- **Frontend (optional):** Node.js 18+ and npm
 
 ---
 
 ## Quick start
 
-**Backend** (mock integrations — no external API keys needed):
+**Backend** (mock mode — no API keys):
 
 ```bash
-make be-install       # create .venv + install all backend extras
-make be-dev-mock      # API with hot-reload, all external calls mocked
-make be-test          # pytest suite
+make be-install
+make be-dev-mock
+make be-test
 ```
 
-**Frontend:**
+**Frontend** (Expo):
 
 ```bash
-make fe-install       # npm install in apps/frontend
-make fe-dev           # Expo dev server (mock data, no backend needed)
-make fe-check         # ESLint + TypeScript
+make fe-install
+make fe-dev
 ```
 
-Run **`make`** or **`make help`** for all targets (`be-*` = backend, `fe-*` = frontend).
+**Docker** (mock API): `make be-compose` → http://localhost:8000
 
-**Docker (mock, no secrets needed):**
-
-```bash
-make be-compose       # podman/docker compose up --build
-# API at http://localhost:8000
-```
-
-**Switch to real integrations:** see [Mock vs real](apps/backend/README.md#mock-vs-real-integrations) and copy [`.env.example`](apps/backend/.env.example).
+For real LINE, LLM, Supabase, and other services, use [`apps/backend/.env.example`](apps/backend/.env.example) and **[`apps/backend/README.md`](apps/backend/README.md#mock-vs-real-integrations)**.
 
 ---
 
-## Repository layout
+## Where to read next
 
-| Path | Role |
-|------|------|
-| [`apps/backend/`](apps/backend/) | FastAPI service — LINE webhooks, mobile REST API, agent core |
-| [`apps/frontend/`](apps/frontend/) | Expo (iOS & Android) — **reference / future** client; see [`docs/frontend-expo.md`](docs/frontend-expo.md) |
-| [`Dockerfile`](Dockerfile) | Repo-root image (API + optional arq worker) |
-| [`compose.yaml`](compose.yaml) | Local container orchestration |
-| [`render.yaml`](render.yaml) | [Render](https://render.com/) blueprint — see [Deploy on Render](apps/backend/README.md#deploy-on-render) |
-| [`Makefile`](Makefile) | Root task runner |
+Start with **[`docs/index.md`](docs/index.md)** — it lists every major doc, **reading paths by role** (backend, product, security, ops, mobile), and a **quick lookup** (API, env vars, reminders, privacy, and more).
 
----
-
-## API endpoints (overview)
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Plain-text liveness (load balancers) |
-| `POST /v1/line/webhook` | LINE Messaging API webhook |
-| `GET /v1/app/health` | JSON health for mobile clients |
-| `GET /v1/app/info` | Public service metadata |
-| `GET /v1/app/me` | User profile (incl. IANA **`timezone`**) |
-| `POST /v1/app/onboarding` | First-run profile save (optional **`timezone`**) |
-| `POST /v1/app/messages` | Chat turn (returns `{"reply":"…"}`) |
-| `GET /v1/app/summary` | Doctor-ready health summary |
-| `POST /internal/reminders/reconcile` | Cron safety net for dose reminders |
-
-Full API reference: [`docs/tdd.md#api-reference`](docs/tdd.md#api-reference).
+| If you want… | Open |
+|--------------|------|
+| System design, API reference, deployment | [`docs/tdd.md`](docs/tdd.md) |
+| Backend env, package layout, deploy | [`apps/backend/README.md`](apps/backend/README.md) |
+| Expo app (reference / future client) | [`docs/frontend-expo.md`](docs/frontend-expo.md) → [`apps/frontend/README.md`](apps/frontend/README.md) |
+| Production checklist | [`TODO.md`](TODO.md) |
+| Change history | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---
 
-## Documentation
+## Contributing
 
-See **[`docs/index.md`](docs/index.md)** for the full documentation index, reading paths by audience, and a quick-lookup table.
-
-| Resource | Audience | What you'll find |
-|----------|----------|-----------------|
-| [`docs/tdd.md`](docs/tdd.md) | Engineers, security | Technical design — components, data model, API reference, LLM, caching, deployment |
-| [`docs/prd.md`](docs/prd.md) | Product, engineers | Vision, goals, personas, functional/non-functional requirements |
-| [`docs/features.md`](docs/features.md) | Product, engineers | Feature catalog — LINE, HTTP API, agent intents, reminders |
-| [`docs/use-cases.md`](docs/use-cases.md) | Engineers, product | Narrated flows, example utterances, assistant pipeline steps |
-| [`docs/reminders.md`](docs/reminders.md) | Engineers, operators | LINE dose reminders: schema, arq/Redis, Compose, Render, reconcile |
-| [`docs/privacy.md`](docs/privacy.md) | Engineers, compliance | PII boundaries, LLM redaction, compliance notes |
-| [`docs/llm-context.md`](docs/llm-context.md) | Developers, compliance | Per-call LLM input map — every `LLMPort` method with data sent and redaction applied |
-| [`docs/frontend-expo.md`](docs/frontend-expo.md) | Mobile engineers | **Reference / future:** Expo app — separate from primary LINE + backend docs |
-| [`apps/backend/README.md`](apps/backend/README.md) | Backend engineers | Package layout, env vars, mock vs real, LINE testing, deploy |
-| [`apps/frontend/README.md`](apps/frontend/README.md) | Frontend engineers | Expo screens, scripts, mock vs API, i18n, simulator targets |
-| [`TODO.md`](TODO.md) | Engineers, operators | Production readiness checklist (backend and frontend hardening) |
-| [`CHANGELOG.md`](CHANGELOG.md) | All | [Keep a Changelog](https://keepachangelog.com/) history |
-
----
-
-## Integrations (summary)
-
-| Service | Role | Required for real mode |
-|---------|------|----------------------|
-| **LINE Messaging API** | Webhook + push reminders | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` |
-| **LLM** (Gemini or OpenAI) | Intent classification, reply composition, extraction | `LLM_PROVIDER=gemini` → `GEMINI_API_KEY`; `LLM_PROVIDER=openai` → `OPENAI_API_KEY` (defaults: `gemini-2.5-flash`, `gpt-4.1-mini`) |
-| **Supabase (Postgres)** | Users, medications, conversations, drug caches, dose events | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
-| **Redis + arq** | Deferred dose reminder jobs | `REDIS_URL` |
-| **OpenFDA HTTP** | Drug label grounding | automatic (HTTP) |
-| **Google Speech-to-Text** | Speech-to-text for LINE voice | `GOOGLE_SPEECH_PROJECT_ID`; `GOOGLE_APPLICATION_CREDENTIALS` (or other ADC); optional `GOOGLE_SPEECH_LOCATION` |
-| **edge-tts** | Text-to-speech for LINE voice replies | installed via `[tts]` extra |
-
-All integrations have **mock adapters** — run the full stack locally with `MEDBUDDY_INTEGRATION=mock`.
-
----
-
-## Localization
-
-- **Backend:** `apps/backend/src/medbuddy/locales/` — `zh-TW.json` (primary) and `en.json`; server locale via `MEDBUDDY_LOCALE` (default `zh-TW`).
-- **Frontend:** `apps/frontend/locales/` — same language pair; user overrides saved in AsyncStorage.
-
----
-
-## Contributing and quality
-
-1. Install hooks after backend setup: **`make pre-commit-install`**.
-2. Backend: **`make be-check`** (lint + format + tests). Frontend: **`make fe-check`** (ESLint + TypeScript).
-3. Behavior changes → add an entry in [`CHANGELOG.md`](CHANGELOG.md).
-4. Keep secrets in `.env` files (see each app's `.env.example`).
+1. **`make pre-commit-install`** after backend setup
+2. **`make be-check`** (backend) or **`make fe-check`** (frontend)
+3. Document behavior changes in [`CHANGELOG.md`](CHANGELOG.md) and keep secrets in `.env` (see each app’s `.env.example`)
 
 Pull requests are welcome.

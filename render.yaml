@@ -46,11 +46,23 @@ services:
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
-      - key: GOOGLE_SPEECH_API_KEY
+      # Google Cloud (Speech-to-Text + Text-to-Speech): set in Render dashboard (Secret where needed).
+      # Optional GOOGLE_TTS_APPLICATION_CREDENTIALS — dedicated TTS key file; else TTS uses GOOGLE_APPLICATION_CREDENTIALS.
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
+      - key: GOOGLE_TTS_APPLICATION_CREDENTIALS
         sync: false
       - key: GOOGLE_SPEECH_PROJECT_ID
         sync: false
       - key: GOOGLE_SPEECH_LOCATION
+        value: global
+      - key: MEDBUDDY_TTS_PROVIDER
+        sync: false
+      - key: GOOGLE_TTS_LANGUAGE_CODE
+        sync: false
+      - key: GOOGLE_TTS_VOICE_NAME
+        sync: false
+      - key: MEDBUDDY_LINE_VOICE_REPLY_FOR_TEXT
         sync: false
       - key: MEDBUDDY_MOBILE_BEARER_TOKEN
         sync: false

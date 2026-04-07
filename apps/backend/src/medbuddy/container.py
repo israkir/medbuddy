@@ -8,7 +8,7 @@ import httpx
 
 from medbuddy.config import Settings
 from medbuddy.engine.types import AppServices
-from medbuddy.protocols.ports import LLMPort
+from medbuddy.protocols.ports import LLMPort, ObjectStoragePort
 from medbuddy.integrations.mocks import (
     InMemoryConversationStore,
     MockDrugData,
@@ -22,6 +22,7 @@ from medbuddy.integrations.mocks import (
 from medbuddy.integrations.caching_drugs import CachingDrugData
 from medbuddy.integrations.drugs_http import HttpDrugData
 from medbuddy.integrations.edge_tts_service import EdgeTtsService
+from medbuddy.integrations.tts.tts_google import GoogleTextToSpeech
 from medbuddy.integrations.llm.gemini_llm import GeminiLLM
 from medbuddy.integrations.llm.openai_llm import OpenAILLM
 from medbuddy.integrations.line_client import LineHttpClient
@@ -29,6 +30,38 @@ from medbuddy.integrations.local_public_storage import LocalPublicObjectStorage
 from medbuddy.integrations.stt.stt_google import GoogleSpeechToText
 
 log = logging.getLogger(__name__)
+
+
+def _build_tts(settings: Settings, storage: ObjectStoragePort):
+    if settings.tts_provider == "google":
+        try:
+            import google.cloud.texttospeech_v1  # noqa: F401
+        except ImportError:
+            log.warning(
+                "TTS_PROVIDER=google but google-cloud-texttospeech is not installed; "
+                "falling back to Edge TTS or mock"
+            )
+        else:
+            pin = settings.google_tts_language_code.strip() or None
+            voice_raw = settings.google_tts_voice_name.strip()
+            voice_name = voice_raw or None
+            tts_creds = settings.google_tts_application_credentials.strip() or None
+            return GoogleTextToSpeech(
+                storage=storage,
+                pinned_language_code=pin,
+                fallback_locale=settings.locale,
+                voice_name=voice_name,
+                credentials_path=tts_creds,
+            )
+    try:
+        ev = settings.locale.replace("_", "-").strip().lower()
+        default_voice = (
+            "en-US-JennyNeural" if ev == "en" or ev.startswith("en-") else "zh-TW-HsiaoChenNeural"
+        )
+        return EdgeTtsService(storage=storage, voice=default_voice)
+    except ImportError:
+        log.warning("edge-tts not installed; using MockTextToSpeech for TTS")
+        return MockTextToSpeech(storage=storage)
 
 
 def _build_llm(settings: Settings) -> LLMPort:
@@ -87,11 +120,7 @@ def build_app_services(
         log.warning("public_base_url empty; using mock storage (LINE audio URLs may be invalid)")
         storage = MockObjectStorage()
 
-    try:
-        tts = EdgeTtsService(storage=storage)
-    except ImportError:
-        log.warning("edge-tts not installed; using MockTextToSpeech for TTS")
-        tts = MockTextToSpeech(storage=storage)
+    tts = _build_tts(settings, storage)
 
     llm = _build_llm(settings)
 

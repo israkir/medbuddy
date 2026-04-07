@@ -53,7 +53,8 @@ gemini_llm    supabase_stores  drugs_http
 | | `integrations/drugs_http.py` | OpenFDA HTTP + TFDA stub |
 | | `integrations/caching_drugs.py` | `CachingDrugData` wrapper with TTL |
 | | `integrations/persistence/supabase_drug_caches.py` | `SupabaseDrugCaches` (personalization cache) |
-| | `integrations/edge_tts_service.py` | edge-tts TTS for LINE voice replies |
+| | `integrations/edge_tts_service.py` | edge-tts TTS for LINE voice replies (`MEDBUDDY_TTS_PROVIDER=edge`, optional `[tts]` extra) |
+| | `integrations/tts/tts_google.py` | Google Cloud Text-to-Speech (`MEDBUDDY_TTS_PROVIDER=google`) |
 | | `integrations/stt/stt_google.py` | Google Cloud Speech-to-Text V2 |
 | | `integrations/local_public_storage.py` | Short-lived audio URLs for LINE |
 | | `integrations/mocks/` | In-memory mock adapters for all ports |
@@ -139,7 +140,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | **LINE** | `integrations/mocks/line.py` | `integrations/line_client.py` — needs `LINE_CHANNEL_ACCESS_TOKEN` |
 | **LLM** | `integrations/mocks/llm.py` | `integrations/llm/gemini_llm.py` or `integrations/llm/openai_llm.py` — set `LLM_PROVIDER` and `GEMINI_API_KEY` or `OPENAI_API_KEY`; install `[llm]` extra |
 | **STT** | `integrations/mocks/stt.py` | `integrations/stt/stt_google.py` — needs `GOOGLE_SPEECH_PROJECT_ID` and Application Default Credentials |
-| **TTS** | `integrations/mocks/tts.py` | `integrations/edge_tts_service.py` — install `[tts]` extra |
+| **TTS** | `integrations/mocks/tts.py` | `integrations/edge_tts_service.py` (default) or `integrations/tts/tts_google.py` when `MEDBUDDY_TTS_PROVIDER=google` — `[tts]` extra only required for Edge |
 | **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
 | **Object storage** | In-memory mock | `integrations/local_public_storage.py` when `PUBLIC_BASE_URL` is set |
 | **Users / turns** | In-memory mocks | `integrations/persistence/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are set; install `[supabase]` extra, apply `supabase/schema.sql` |
@@ -156,6 +157,11 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `GOOGLE_SPEECH_PROJECT_ID` | Google Cloud project id for Speech-to-Text V2 endpoint |
 | `GOOGLE_SPEECH_LOCATION` | Speech-to-Text V2 location (`global` default) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service-account JSON for Google client libraries (or use workload identity/metadata credentials) |
+| `GOOGLE_TTS_APPLICATION_CREDENTIALS` | Optional path to a **TTS-only** service-account JSON (e.g. `gcp-tts.json`); empty means TTS uses `GOOGLE_APPLICATION_CREDENTIALS` / ADC |
+| `MEDBUDDY_TTS_PROVIDER` | `edge` (default) or `google` — Cloud Text-to-Speech uses the same credentials as other Google client libraries |
+| `GOOGLE_TTS_LANGUAGE_CODE` | Optional **pin**: same TTS language for all users; empty = **per-user** profile locale on LINE (then `MEDBUDDY_LOCALE`) |
+| `GOOGLE_TTS_VOICE_NAME` | Optional voice id; empty = API default for the resolved language (recommended when both `en` and `zh-TW` users exist) |
+| `MEDBUDDY_LINE_VOICE_REPLY_FOR_TEXT` | `true` to send TTS audio for text chats too (default `false`: voice reply only after the user sends a voice message) |
 | `PUBLIC_BASE_URL` | HTTPS origin for audio URLs LINE fetches |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Postgres persistence (use anon key, never service role) |
 | `REDIS_URL` | arq job queue for dose reminders |
@@ -163,6 +169,20 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` |
 | `MEDBUDDY_LOCALE` | Server locale (`zh-TW` default) |
 | `LOG_LEVEL` | `INFO` (default) or `DEBUG` |
+
+---
+
+## Google Cloud (Speech-to-Text and Text-to-Speech)
+
+Use one GCP project for both APIs if you rely on Google for STT and/or TTS.
+
+1. **Project** — In the [Google Cloud console](https://console.cloud.google.com/), select or create a project. Note the **project id** (set `GOOGLE_SPEECH_PROJECT_ID` for Speech-to-Text V2).
+2. **Enable APIs** — **APIs & Services → Library**, enable **Cloud Speech-to-Text API** (STT) and **Cloud Text-to-Speech API** (TTS when `MEDBUDDY_TTS_PROVIDER=google`).
+3. **Service account** — **IAM & Admin → Service Accounts → Create**. Grant roles that allow calling those APIs, for example **Speech Client** (`roles/speech.client`) and **Cloud Text-to-Speech User** (`roles/cloudtexttospeech.user`). Tighten further with custom roles if your org requires it.
+4. **Key for local/dev** — On the service account, **Keys → Add key → JSON**. Set `GOOGLE_APPLICATION_CREDENTIALS` to the downloaded file path. On **Render** or GCE, prefer **workload identity** / instance metadata instead of a JSON key.
+5. **Voices (TTS)** — Pick a voice in **APIs & Services** documentation or run `gcloud text-to-speech voices list` (with `gcloud` authenticated to the project). Put the voice **name** in `GOOGLE_TTS_VOICE_NAME` if you do not want the default for your language.
+
+Billing must be enabled on the project for production use of these APIs.
 
 ---
 
@@ -225,7 +245,7 @@ Health checks:
 
 1. **Blueprint** — Dashboard → New → Blueprint → connect repo → apply [`render.yaml`](../../render.yaml). Defines `medbuddy-api` (web, repo-root `Dockerfile`).
 2. **Redis** — Create Render Key Value (or Upstash) → set `REDIS_URL` on `medbuddy-api`.
-3. **Environment** — Set secrets on `medbuddy-api`: `PUBLIC_BASE_URL`, `LINE_CHANNEL_*`, LLM keys (`OPENAI_API_KEY` with blueprint `LLM_PROVIDER=openai`, or set `LLM_PROVIDER=gemini` and use `GEMINI_API_KEY`), Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `REDIS_URL`, optional `MEDBUDDY_CRON_SECRET`.
+3. **Environment** — Add the keys from [`render.yaml`](../../render.yaml); use Render’s **Secret** type for tokens and credential paths. **Google Cloud (STT + TTS):** set `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_SPEECH_PROJECT_ID`, optional `GOOGLE_TTS_APPLICATION_CREDENTIALS` for a dedicated TTS key file, and the TTS variables (`MEDBUDDY_TTS_PROVIDER`, optional `GOOGLE_TTS_*`, `MEDBUDDY_LINE_VOICE_REPLY_FOR_TEXT`). Also set `PUBLIC_BASE_URL`, `LINE_CHANNEL_*`, LLM and Supabase keys, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `REDIS_URL`, and optional `MEDBUDDY_CRON_SECRET`.
 4. **LINE** — Webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
 5. **Mobile clients** — Point API calls at `PUBLIC_BASE_URL`.
 
