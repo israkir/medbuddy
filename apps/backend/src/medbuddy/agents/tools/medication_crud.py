@@ -260,14 +260,17 @@ class UpdateMedicationTool:
             ",".join(sorted(fields.keys())),
         )
         un = t("medication.unspecified", locale=locale)
+        reply = t(
+            "medication.updated",
+            locale=locale,
+            name=updated.name,
+            dosage=dose_or_schedule_display(updated.dosage, unspecified_label=un),
+            schedule=dose_or_schedule_display(updated.schedule, unspecified_label=un),
+            instructions=(updated.instructions or "-"),
+        )
+        if "dosage" in fields or "schedule" in fields:
+            reply = f"{reply}\n{t('medication.update_reminder_followup', locale=locale)}"
         return ToolResult(
-            reply=t(
-                "medication.updated",
-                locale=locale,
-                name=updated.name,
-                dosage=dose_or_schedule_display(updated.dosage, unspecified_label=un),
-                schedule=dose_or_schedule_display(updated.schedule, unspecified_label=un),
-                instructions=(updated.instructions or "-"),
-            ),
+            reply=reply,
             structured=updated,
         )

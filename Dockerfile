@@ -8,6 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY apps/backend/pyproject.toml apps/backend/README.md /app/
 COPY apps/backend/src/medbuddy /app/src/medbuddy
 COPY docker-entrypoint-web.sh /app/docker-entrypoint-web.sh

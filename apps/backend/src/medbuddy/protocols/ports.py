@@ -49,6 +49,26 @@ class SpeechToTextPort(Protocol):
 
 
 @runtime_checkable
+class TextToSpeechPort(Protocol):
+    """Synthesize assistant reply audio for LINE (m4a AAC in an MP4 container)."""
+
+    async def synthesize_m4a(self, text: str, *, language_code: str) -> tuple[bytes, int]:
+        """Return ``(m4a_bytes, duration_ms)`` for use in LINE audio messages."""
+        ...
+
+
+@runtime_checkable
+class LineAudioBlobStorePort(Protocol):
+    """Short-lived publicly URL-addressable audio payloads for LINE ``originalContentUrl``."""
+
+    def put(self, data: bytes) -> str: ...
+
+    def get(self, audio_id: str) -> bytes | None: ...
+
+    def public_url(self, audio_id: str) -> str: ...
+
+
+@runtime_checkable
 class LLMPort(Protocol):
     """LLM adapters must expose a stable id for drug-cache provenance (mock vs real model id)."""
 

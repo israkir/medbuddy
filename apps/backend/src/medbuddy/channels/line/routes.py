@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from linebot.v3 import WebhookParser
 from linebot.v3.exceptions import InvalidSignatureError
@@ -18,6 +18,22 @@ from medbuddy.engine.types import AppServices
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/line", tags=["line"])
+
+
+@router.get("/media/audio/{audio_id}")
+async def line_tts_audio_asset(
+    audio_id: str,
+    svc: AppServices = Depends(get_services),
+) -> Response:
+    """Public HTTPS URL for LINE ``audio`` messages (ephemeral; see ``LineAudioBlobStore``)."""
+    data = svc.line_audio_blobs.get(audio_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return Response(
+        content=data,
+        media_type="audio/mp4",
+        headers={"Cache-Control": "public, max-age=60"},
+    )
 
 
 def _skip_line_signature_verification(settings: Settings) -> bool:

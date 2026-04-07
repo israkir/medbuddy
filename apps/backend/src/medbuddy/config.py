@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -86,8 +86,35 @@ class Settings(BaseSettings):
 
     public_base_url: str = Field(
         default="http://localhost:8000",
-        description="Public base URL of this API (logging, links, future outbound media)",
+        description="Public base URL of this API (logging, links, LINE TTS audio URLs must be reachable here)",
     )
+
+    line_voice_replies: Literal["off", "audio_inbound", "always"] = Field(
+        default="audio_inbound",
+        description=(
+            "LINE assistant replies: off=text only; audio_inbound=text+m4a when user sent voice; "
+            "always=text+m4a for every assistant reply. Requires HTTPS public_base_url, ffmpeg, "
+            "and Google TTS when not in mock mode."
+        ),
+        validation_alias=AliasChoices("MEDBUDDY_LINE_VOICE_REPLIES", "line_voice_replies"),
+    )
+
+    @field_validator("line_voice_replies", mode="before")
+    @classmethod
+    def _normalize_line_voice_replies(cls, v: object) -> str:
+        if v is None or v == "":
+            return "audio_inbound"
+        s = str(v).lower().strip()
+        if s in ("off", "false", "0", "no"):
+            return "off"
+        if s in ("always", "all", "true", "1", "yes"):
+            return "always"
+        if s in ("audio_inbound", "voice_in", "inbound", "inbound_audio"):
+            return "audio_inbound"
+        if s in ("off", "audio_inbound", "always"):
+            return s
+        msg = f"Invalid line_voice_replies {v!r}; use off, audio_inbound, or always"
+        raise ValueError(msg)
 
     # Real integrations (optional when mock_external_services is False)
     gemini_api_key: str = ""

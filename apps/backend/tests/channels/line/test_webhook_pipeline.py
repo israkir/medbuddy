@@ -99,7 +99,7 @@ async def test_orchestrator_text_message_runs_assistant(mock_settings):
 
 @pytest.mark.asyncio
 async def test_orchestrator_audio_message_replies_text_after_stt(mock_settings):
-    """Voice inbound: STT transcript → same assistant path → text reply only."""
+    """Voice inbound: STT transcript → same assistant path → text + m4a (default audio_inbound)."""
     mock_settings.mock_external_services = True
     svc: AppServices = __import__(
         "medbuddy.container",
@@ -123,9 +123,84 @@ async def test_orchestrator_audio_message_replies_text_after_stt(mock_settings):
     line = svc.line
     assert len(line.replies) == 1
     msgs = line.replies[0]["messages"]  # type: ignore[index]
-    assert len(msgs) == 1
+    assert len(msgs) == 2
     assert msgs[0]["type"] == "text"
     assert msgs[0]["text"]  # type: ignore[index]
+    assert msgs[1]["type"] == "audio"
+    assert "/v1/line/media/audio/" in str(msgs[1]["originalContentUrl"])  # type: ignore[index]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_audio_inbound_voice_off_sends_text_only(mock_settings):
+    mock_settings.mock_external_services = True
+    mock_settings.line_voice_replies = "off"  # type: ignore[misc]
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    svc.line.seed_voice_message("m-audio", b"fake-m4a")  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "message",
+            "replyToken": "rtoken",
+            "source": {"userId": "Uabc", "type": "user"},
+            "message": {"id": "m-audio", "type": "audio"},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    msgs = svc.line.replies[0]["messages"]  # type: ignore[index]
+    assert len(msgs) == 1
+    assert msgs[0]["type"] == "text"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_text_always_voice_sends_text_and_audio(mock_settings):
+    mock_settings.mock_external_services = True
+    mock_settings.line_voice_replies = "always"  # type: ignore[misc]
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+
+    await handle_line_event(
+        {
+            "type": "message",
+            "replyToken": "rtoken",
+            "source": {"userId": "Uabc", "type": "user"},
+            "message": {"id": "m1", "type": "text", "text": "你好"},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    msgs = svc.line.replies[0]["messages"]  # type: ignore[index]
+    assert len(msgs) == 2
+    assert msgs[0]["type"] == "text"
+    assert msgs[1]["type"] == "audio"
+
+
+@pytest.mark.asyncio
+async def test_line_tts_audio_route_serves_blob(mock_settings):
+    mock_settings.mock_external_services = True
+    app.state.services = __import__(  # type: ignore[attr-defined]
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    svc: AppServices = app.state.services  # type: ignore[attr-defined]
+    aid = svc.line_audio_blobs.put(b"test-bytes")
+    transport = ASGITransport(app=app)
+    with patch("medbuddy.channels.line.routes.get_settings", return_value=mock_settings):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            r = await client.get(f"/v1/line/media/audio/{aid}")
+    assert r.status_code == 200
+    assert r.content == b"test-bytes"
 
 
 @pytest.mark.asyncio

@@ -67,6 +67,7 @@
     "list_empty": "You don’t have any medications saved yet. When you’re ready, tell me a drug name and I’ll help you add it.",
     "removed": "Removed from your list: {name}.",
     "updated": "Updated {name}. Dose: {dosage}. Schedule: {schedule}. Notes: {instructions}",
+    "update_reminder_followup": "Do you want me to set reminders based on this update? If yes, tell me how long (for example: upcoming 3 days) and preferred times.",
     "update_not_found": "I’m not sure which medication to update. Please include the medication name.",
     "update_incomplete": "I found {name}, but I need what to change (name, dose, schedule, or note).",
     "remove_not_found": "I couldn’t find that one on your list — try the drug name again, or ask to see your medications.",

@@ -21,8 +21,6 @@
 
 > **Disclaimer:** This is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
 
----
-
 ## Prerequisites
 
 - [GNU Make](https://www.gnu.org/software/make/) — `make` / `make help` at the repo root
@@ -65,6 +63,28 @@ Start with **[`docs/index.md`](docs/index.md)** — it lists every major doc, **
 | Expo app (reference / future client) | [`docs/frontend-expo.md`](docs/frontend-expo.md) → [`apps/frontend/README.md`](apps/frontend/README.md) |
 | Production checklist | [`TODO.md`](TODO.md) |
 | Change history | [`CHANGELOG.md`](CHANGELOG.md) |
+
+---
+
+### LINE messaging
+
+Today’s patient-facing experience is built around **LINE**: chat with the medication helper, voice notes, and dose reminders delivered on the channel. The image below is a view of that flow.
+
+<p align="center">
+  <img src="assets/line.jpg" alt="Illustration: MedBuddy medication helper chat in LINE" width="320">
+</p>
+
+### Standalone mobile app (concept)
+
+The repo today centers on LINE and the HTTP API; a **dedicated mobile client** is a product direction, not a shipped guarantee. The screens below are **concept-only** mockups to illustrate that idea—not screenshots of a production app.
+
+<p align="center">
+  <img src="assets/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">
+  &nbsp;
+  <img src="assets/mobile-2.png" alt="Concept: standalone app secondary flow" width="260">
+  &nbsp;
+  <img src="assets/mobile-3.png" alt="Concept: standalone app detail or settings" width="260">
+</p>
 
 ---
 

@@ -21,8 +21,12 @@ from medbuddy.integrations.caching_drugs import CachingDrugData
 from medbuddy.integrations.drugs_http import HttpDrugData
 from medbuddy.integrations.llm.gemini_llm import GeminiLLM
 from medbuddy.integrations.llm.openai_llm import OpenAILLM
+from medbuddy.integrations.line_audio_blob_store import LineAudioBlobStore
 from medbuddy.integrations.line_client import LineHttpClient
+from medbuddy.integrations.mocks.tts import MockTextToSpeech
 from medbuddy.integrations.stt.stt_google import GoogleSpeechToText
+from medbuddy.integrations.tts.tts_google import GoogleTextToSpeech
+from medbuddy.protocols.ports import TextToSpeechPort
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +57,7 @@ def build_app_services(
     *,
     outbound_http: httpx.AsyncClient | None = None,
 ) -> AppServices:
+    line_audio_blobs = LineAudioBlobStore(public_base_url=settings.public_base_url)
     if settings.mock_external_services:
         loc = settings.locale
         return AppServices(
@@ -63,6 +68,8 @@ def build_app_services(
             users=MockUserData(settings),
             conversations=InMemoryConversationStore(),
             settings=settings,
+            line_audio_blobs=line_audio_blobs,
+            tts=MockTextToSpeech(),
             drug_caches=None,
         )
 
@@ -80,9 +87,17 @@ def build_app_services(
             location=settings.google_speech_location,
             language_code=settings.locale,
         )
+        tts: TextToSpeechPort | None = GoogleTextToSpeech()
     else:
         log.warning("GOOGLE_SPEECH_PROJECT_ID missing; using MockSpeechToText for STT")
         stt = MockSpeechToText(locale=settings.locale)
+        tts = None
+        if settings.line_voice_replies != "off":
+            log.warning(
+                "LINE voice replies are enabled (%s) but Google TTS is unavailable "
+                "(set GOOGLE_SPEECH_PROJECT_ID); assistant will send text only",
+                settings.line_voice_replies,
+            )
 
     drug_caches = None
     drugs_backend: HttpDrugData | CachingDrugData = HttpDrugData(
@@ -132,5 +147,7 @@ def build_app_services(
         users=user_data,
         conversations=conversations_store,
         settings=settings,
+        line_audio_blobs=line_audio_blobs,
+        tts=tts,
         drug_caches=drug_caches,
     )

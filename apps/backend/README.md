@@ -81,7 +81,8 @@ Add new **LINE** behavior in `channels/line/`; extend **app-only** REST in `chan
 
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `POST /v1/line/webhook` | `X-Line-Signature` HMAC | Receives text, voice, and follow events |
+| `POST /v1/line/webhook` | `X-Line-Signature` HMAC | Text, voice (audio), and follow events |
+| `GET /v1/line/media/audio/{id}` | None | Short-lived **m4a** blob for LINE **audio** messages (used when voice replies are enabled); **HTTPS** `PUBLIC_BASE_URL` required in production |
 
 ### Mobile app (`/v1/app`)
 
@@ -139,6 +140,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | **LINE** | `integrations/mocks/line.py` | `integrations/line_client.py` — needs `LINE_CHANNEL_ACCESS_TOKEN` |
 | **LLM** | `integrations/mocks/llm.py` | `integrations/llm/gemini_llm.py` or `integrations/llm/openai_llm.py` — set `LLM_PROVIDER` and `GEMINI_API_KEY` or `OPENAI_API_KEY`; install `[llm]` extra |
 | **STT** | `integrations/mocks/stt.py` | `integrations/stt/stt_google.py` — needs `GOOGLE_SPEECH_PROJECT_ID` and Application Default Credentials |
+| **TTS (LINE m4a replies)** | `integrations/mocks/tts.py` | `integrations/tts/tts_google.py` — same ADC/project as STT; server needs **ffmpeg** (`Dockerfile` installs it) |
 | **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
 | **Users / turns** | In-memory mocks | `integrations/persistence/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are set; install `[supabase]` extra, apply `supabase/schema.sql` |
 | **Drug caches** | No-op | `integrations/persistence/supabase_drug_caches.py` + `integrations/caching_drugs.py` (Supabase required) |
@@ -154,7 +156,8 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `GOOGLE_SPEECH_PROJECT_ID` | Google Cloud project id for Speech-to-Text V2 endpoint |
 | `GOOGLE_SPEECH_LOCATION` | Speech-to-Text V2 location (`global` default) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service-account JSON for Google client libraries (or use workload identity/metadata credentials) |
-| `PUBLIC_BASE_URL` | Public origin of this API (metadata, webhooks; see `config.py`) |
+| `PUBLIC_BASE_URL` | Public **HTTPS** origin (LINE webhooks, LINE **audio** URLs for TTS; see `config.py`) |
+| `MEDBUDDY_LINE_VOICE_REPLIES` | `audio_inbound` (default), `always`, or `off` — text+m4a LINE replies when TTS is available |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Postgres persistence (use anon key, never service role) |
 | `REDIS_URL` | arq job queue for dose reminders |
 | `MEDBUDDY_MOBILE_BEARER_TOKEN` | Auth token for `/v1/app` protected routes |
@@ -164,16 +167,16 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 
 ---
 
-## Google Cloud (Speech-to-Text)
+## Google Cloud (Speech-to-Text and Text-to-Speech)
 
-For LINE voice messages, the backend can transcribe audio with **Cloud Speech-to-Text API** (V2).
+For LINE voice messages, the backend can transcribe audio with **Cloud Speech-to-Text API** (V2). For **LINE voice replies** (`MEDBUDDY_LINE_VOICE_REPLIES`), it uses **Cloud Text-to-Speech** in the same project (same service account / ADC).
 
 1. **Project** — In the [Google Cloud console](https://console.cloud.google.com/), select or create a project. Note the **project id** (set `GOOGLE_SPEECH_PROJECT_ID` for Speech-to-Text V2).
-2. **Enable API** — **APIs & Services → Library**, enable **Cloud Speech-to-Text API**.
-3. **Service account** — **IAM & Admin → Service Accounts → Create**. Grant a role that allows Speech-to-Text, for example **Speech Client** (`roles/speech.client`). Tighten further with custom roles if your org requires it.
+2. **Enable APIs** — **APIs & Services → Library**, enable **Cloud Speech-to-Text API**. If you use voice replies, also enable **Cloud Text-to-Speech API**.
+3. **Service account** — **IAM & Admin → Service Accounts → Create**. Grant roles that allow Speech-to-Text (for example **Speech Client** `roles/speech.client`) and Text-to-Speech (**Cloud Text-to-Speech User** `roles/texttospeech.user`) when needed.
 4. **Key for local/dev** — On the service account, **Keys → Add key → JSON**. Set `GOOGLE_APPLICATION_CREDENTIALS` to the downloaded file path. On **Render** or GCE, prefer **workload identity** / instance metadata instead of a JSON key.
 
-Billing must be enabled on the project for production use of this API.
+Billing must be enabled on the project for production use of these APIs.
 
 ---
 

@@ -28,10 +28,11 @@ def iter_scheduled_dose_times_utc(
     horizon_days: int,
     now_utc: datetime | None = None,
 ) -> list[datetime]:
-    """One local time per calendar day for ``horizon_days`` days starting today in ``tz_name``.
+    """One local time per future dose day in ``tz_name``.
 
-    Skips instants that are not strictly after ``now_utc`` so syncing does not enqueue floods
-    of overdue jobs.
+    Returns the next ``horizon_days`` future instants (strictly after ``now_utc``), so
+    explicit requests like "remind me for 3 days" produce 3 upcoming doses even when
+    today's scheduled time has already passed.
     """
     if horizon_days < 1:
         return []
@@ -43,10 +44,14 @@ def iter_scheduled_dose_times_utc(
     local_now = now.astimezone(tz)
     base_date: date = local_now.date()
     out: list[datetime] = []
-    for i in range(horizon_days):
+    # Scan a small extra local-date window so we can still collect N future instants
+    # when today's slot is already in the past.
+    for i in range(horizon_days + 2):
         d = base_date + timedelta(days=i)
         dt_local = datetime(d.year, d.month, d.day, hh, mm, tzinfo=tz)
         dt_utc = dt_local.astimezone(UTC)
         if dt_utc > now:
             out.append(dt_utc)
+            if len(out) >= horizon_days:
+                break
     return out
