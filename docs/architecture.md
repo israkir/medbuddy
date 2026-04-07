@@ -135,8 +135,8 @@ apps/backend/src/medbuddy/
 │
 ├── application/
 │   ├── assistant_turn.py       # run_assistant_text_turn() — main entry point
-│   ├── medication_intents.py   # try_medication_intents() — list/add/remove
-│   └── profile_intents.py      # try_profile_intent_reply() — local update
+│   ├── locale_intents.py       # try_locale_change_reply() — update_locale + extract_locale_intent
+│   └── profile_intents.py      # try_profile_intent_reply() — update_profile + extract_profile_patch (LLM)
 │
 ├── agents/
 │   ├── medication_agent.py     # MedicationAgent — intent→tool dispatch
@@ -171,14 +171,14 @@ apps/backend/src/medbuddy/
 │   └── mocks/                  # MockLLM, MockLineClient, MockUserData, etc.
 │
 ├── privacy/
-│   ├── redact.py               # redact_pii_text(), redact_conversation_turns_for_llm()
-│   └── profile_parse.py        # parse_profile_patch_from_text() (local, no LLM)
+│   └── redact.py               # redact_pii_text(), redact_conversation_turns_for_llm()
 │
 ├── prompts/
 │   └── persona.py              # get_system_persona(), build_patient_context_for_llm()
 │
 ├── llm/
-│   └── schemas.py              # Pydantic models for structured LLM outputs
+│   ├── schemas.py              # Pydantic models for structured LLM outputs
+│   └── intent_classification_prompt.py  # Shared classify_intent instructions (OpenAI + Gemini)
 │
 ├── reminders/
 │   ├── worker.py               # arq WorkerSettings
@@ -218,14 +218,10 @@ channels/line/orchestrator.py
     ▼
 application/assistant_turn.py
     │ run_assistant_text_turn(user_key=line_user_id, user_text)
-    │   1. get_or_create_user()
-    │   2. redact_pii_text(user_text)           # privacy boundary
-    │   3. llm.classify_intent(redacted_text)
-    │   4. try_intent_hooks()                   # extensibility
-    │   5. try_profile_intent_reply()           # if UPDATE_PROFILE
-    │   6. try_medication_intents()             # if list/add/remove
-    │   7. MedicationAgent.run()                # explain/interaction/summary/general
-    │   8. store_conversation_turn(user, reply)
+    │   delegates to agents/medication_agent.py — MedicationAgent.run()
+    │   (load profile + meds + history → classify_intent on redacted text + recent context
+    │    → persist user turn → locale / hooks / off_topic / profile / tool dispatch
+    │    or compose_reply fallback → persist assistant turn)
     ▼
 channels/line/orchestrator.py
     │ line_client.reply_message(reply_token, reply_text)
@@ -249,7 +245,7 @@ channels/mobile/routes.py
     ▼
 application/assistant_turn.py
     │ run_assistant_text_turn(user_key=app_user_id, user_text)
-    │   (same 8-step pipeline as LINE text)
+    │   (same MedicationAgent pipeline as LINE text)
     ▼
 channels/mobile/routes.py
     │ return {"reply": reply_text}
@@ -278,8 +274,8 @@ LINE platform (batch reply)
 ### 4.4 Dose reminder delivery (background)
 
 ```
-medication add/remove intent
-    │ try_medication_intents() success
+AddMedicationTool / RemoveMedicationTool success
+    │ sync_and_enqueue_reminders() (from tools via lifecycle)
     ▼
 reminders/lifecycle.py
     │ sync_upcoming_dose_events(line_user_id)
@@ -319,41 +315,49 @@ reminders/deliver.py
 | `ExplainMedicationTool` | `explain_medication` | Personalization cache check → `DrugDataPort` reference fetch → `compose_reply()` → cache save |
 | `InteractionCheckTool` | `interaction_check` | Same as explain with interaction-focused system prompt |
 | `GenerateHealthSummaryTool` | `request_summary` | Aggregate patient context + history → structured LLM output |
+| `ConfirmDoseTool` | `confirm_dose` | Mark `taken_at` on eligible `dose_events` → i18n confirmation |
 
 ### 5.2 Tool interface
 
 ```python
-class AgentTool:
-    async def execute(self, context: AgentContext) -> ToolResult:
-        ...
+class AgentTool(Protocol):
+    name: str
+    description: str
+    async def run(self, **kwargs: Any) -> ToolResult: ...
 
 @dataclass
 class ToolResult:
     reply: str
-    metadata: dict = field(default_factory=dict)
+    structured: Any = None
+    ...
 ```
 
-`AgentContext` carries `AppServices`, the user record, medication list, conversation history, classified intent, and the (redacted) user message.
+Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`, `history`, `locale`, etc. (see each tool’s `run()` signature).
 
 ### 5.3 Intent classification flow
+
+Structured **`IntentClassification`** (shared prompt in `llm/intent_classification_prompt.py`) drives routing. After **`classify_intent`**, **`MedicationAgent`** applies locale change first, then hooks, fixed off-topic copy, profile update, tool dispatch, or **`compose_reply`** fallback.
 
 ```
 user_text
     │
-    ▼ redact_pii_text()
-redacted_text
+    ▼ redact_pii_text(); load user + medications + recent turns
     │
-    ▼ LLMPort.classify_intent(redacted_text)
+    ▼ LLMPort.classify_intent(redacted_text, recent_context=…)
 Intent enum value
     │
-    ├── UPDATE_PROFILE    → profile_intents.try_profile_intent_reply()
+    ├── update_locale     → try_locale_change_reply() → extract_locale_intent (LLM) → patch locale
+    ├── (else) try_intent_hooks → optional short-circuit
+    ├── off_topic         → fixed i18n string (no compose)
+    ├── update_profile    → try_profile_intent_reply() → extract_profile_patch (LLM) → patch profile
     ├── list_medications  → ListMedicationsTool
     ├── add_medication    → AddMedicationTool
     ├── remove_medication → RemoveMedicationTool
+    ├── confirm_dose      → ConfirmDoseTool
     ├── explain_medication → ExplainMedicationTool
     ├── interaction_check → InteractionCheckTool
     ├── request_summary   → GenerateHealthSummaryTool
-    └── confirm_dose / log_vital / general_question → compose_reply() generic
+    └── log_vital / general_question / unmapped → compose_reply() fallback
 ```
 
 ---
@@ -668,16 +672,13 @@ For extraction tasks, the active LLM adapter calls structured output where suppo
 | Schema | Used for |
 |--------|---------|
 | `IntentClassification` | `classify_intent` — returns `Intent` enum value |
-| `MedicationDraftOutput` | `extract_medication_draft` — name, dosage, schedule, instructions |
-| `MedicationRemovalOutput` | `resolve_medication_removal_id` — which med ID to delete |
-| `HealthSummaryOutput` | `GenerateHealthSummaryTool` — structured doctor summary |
+| `MedicationExtraction` | `extract_medication_draft` — name, dosage, schedule, reminder prefs |
+| `RemovalResolution` | `resolve_medication_removal_id` — which med ID to delete |
+| `HealthSummaryResult` | `GenerateHealthSummaryTool` — structured doctor summary |
 
 ### 8.5 Mock LLM
 
-`integrations/mocks/llm.py` implements `LLMPort` with deterministic rule-based responses:
-- Intent classification based on keyword matching.
-- `compose_reply` returns fixed i18n strings.
-- `extract_medication_draft` parses simple patterns.
+`integrations/mocks/llm.py` implements `LLMPort` for CI and local runs **without** inferring intents from keywords. By default, **`classify_intent`** returns **`general_question`**; tests pass explicit **`intent=`** and optional **`medication_draft`**, **`locale_intent`**, **`removal_medication_id`**, etc., to mirror structured outputs from real adapters. **`compose_reply`** returns templated i18n strings.
 
 This enables running the full stack and all tests without external LLM API keys.
 
@@ -732,7 +733,7 @@ This means the cache invalidates naturally when the patient's medication list ch
 | User message (current turn) | `redact_pii_text()` applied before `classify_intent`, `compose_reply`, and extraction calls |
 | Conversation history | `redact_conversation_turns_for_llm()` applied — same patterns |
 | Profile fields | Sent as coarse signals only (`build_patient_context_for_llm`): no raw name, exact age, health notes, or emergency contact |
-| Profile extraction from chat | `parse_profile_patch_from_text()` — local heuristics, **no LLM call** for profile fields |
+| Profile extraction from chat | **`LLMPort.extract_profile_patch`** (structured output) on the user message; persisted fields then go to storage via **`patch_user_profile`** |
 
 **Redaction patterns** (`privacy/redact.py`):
 - Email addresses (standard RFC 5322-ish pattern)

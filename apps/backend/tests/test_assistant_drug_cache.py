@@ -9,6 +9,8 @@ import pytest
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.container import build_app_services
 from medbuddy.engine.types import AppServices
+from medbuddy.integrations.mocks.llm import MockLLM
+from medbuddy.models.domain import Intent
 
 
 @pytest.mark.asyncio
@@ -23,7 +25,7 @@ async def test_personalization_cache_hit_short_circuits(mock_settings) -> None:
         line=base.line,
         stt=base.stt,
         tts=base.tts,
-        llm=base.llm,
+        llm=MockLLM(intent=Intent.EXPLAIN_MEDICATION),
         drugs=base.drugs,
         storage=base.storage,
         users=base.users,
@@ -49,7 +51,7 @@ async def test_personalization_cache_miss_saves_after_compose(mock_settings) -> 
         line=base.line,
         stt=base.stt,
         tts=base.tts,
-        llm=base.llm,
+        llm=MockLLM(intent=Intent.EXPLAIN_MEDICATION),
         drugs=base.drugs,
         storage=base.storage,
         users=base.users,
@@ -82,7 +84,7 @@ async def test_personalization_llm_meta_source_is_model_when_no_reference_data(
         line=base.line,
         stt=base.stt,
         tts=base.tts,
-        llm=base.llm,
+        llm=MockLLM(intent=Intent.EXPLAIN_MEDICATION),
         drugs=drugs,
         storage=base.storage,
         users=base.users,

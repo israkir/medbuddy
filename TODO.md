@@ -12,6 +12,8 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 - [x] **`channels/mobile/`** REST for the standalone app; **`channels/line/`** for LINE; shared **`application/assistant_turn`**.
 
+- [ ] **Documentation:** Expand [`docs/architecture.md`](docs/architecture.md) (agent layer) with why **tool execution is server-driven** — the backend classifies intent and dispatches `AgentTool`s; clients only send user text (and channel envelopes). Cover trust boundaries, a single place for side effects and auditability, and parity across LINE and **`/v1/app`**.
+
 - [ ] If the mobile client needs different **CORS** or **gateway** rules than the LINE webhook, configure at the edge or in FastAPI middleware scoped to **`/v1/app`**.
 
 - [ ] Optional: **JWT / session** or platform attestation instead of static Bearer when product requirements solidify.

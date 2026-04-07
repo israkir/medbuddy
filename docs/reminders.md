@@ -4,7 +4,7 @@ This document describes **proactive LINE push** reminders for scheduled medicati
 
 ## What it does
 
-- After a user **adds** or **removes** a medication via the assistant (LINE or any channel using `try_medication_intents`), the backend **rebuilds** upcoming rows in **`dose_events`** and, when **`REDIS_URL`** is set, **enqueues** [arq](https://arq-docs.helpmanual.io/) jobs so each row triggers a **LINE Messaging API push** near **`scheduled_at`** (UTC).
+- After a user **adds** or **removes** a medication via the assistant (**`AddMedicationTool`** / **`RemoveMedicationTool`** through **`MedicationAgent`** — LINE or **`POST /v1/app/messages`**), the backend **rebuilds** upcoming rows in **`dose_events`** and, when **`REDIS_URL`** is set, **enqueues** [arq](https://arq-docs.helpmanual.io/) jobs so each row triggers a **LINE Messaging API push** near **`scheduled_at`** (UTC).
 - The push text is localized under **`reminder.line_push`** in `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`).
 
 ## What it does *not* do (v1)
@@ -18,7 +18,7 @@ This document describes **proactive LINE push** reminders for scheduled medicati
 ```mermaid
 flowchart LR
     subgraph api [FastAPI]
-        MI[medication_intents]
+        MA[MedicationAgent tools]
         LC[lifecycle.sync_and_enqueue_reminders]
         EQ[enqueue_reminder_jobs]
     end
@@ -35,7 +35,7 @@ flowchart LR
         DV[deliver_dose_reminder]
     end
     LINE[LINE push API]
-    MI --> LC
+    MA --> LC
     LC --> D
     LC --> EQ
     EQ --> ARQ
@@ -116,7 +116,7 @@ If Redis or the **arq** process restarts, some due rows may never get a job. A l
 | Enqueue / immediate jobs | `apps/backend/src/medbuddy/reminders/enqueue.py` |
 | Push + mark sent | `apps/backend/src/medbuddy/reminders/deliver.py` |
 | Worker entry | `apps/backend/src/medbuddy/reminders/worker.py` |
-| Hook after add/remove med | `apps/backend/src/medbuddy/reminders/lifecycle.py` · `medication_intents.py` |
+| Hook after add/remove med | `apps/backend/src/medbuddy/reminders/lifecycle.py` (called from medication CRUD tools after successful add/remove) |
 | Supabase persistence | `apps/backend/src/medbuddy/integrations/supabase_stores.py` |
 | User IANA zone helpers | `apps/backend/src/medbuddy/user_timezone.py` |
 | LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `protocols/ports.py` |

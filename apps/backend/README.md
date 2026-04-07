@@ -35,8 +35,8 @@ gemini_llm    supabase_stores  drugs_http
 | **Channels** | `channels/line/` | LINE webhook, HMAC signature verification, event pipeline |
 | | `channels/mobile/` | Mobile REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
-| | `application/medication_intents.py` | Medication add / list / remove handlers |
-| | `application/profile_intents.py` | Profile update handler (local parsing, no LLM) |
+| | `application/profile_intents.py` | Profile updates when intent is `update_profile` (`extract_profile_patch`) |
+| | `application/locale_intents.py` | Locale changes when intent is `update_locale` (`extract_locale_intent`) |
 | **Agents** | `agents/medication_agent.py` | `MedicationAgent` — maps intents to tools and executes them |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
 | | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `RemoveMedicationTool` |
@@ -59,7 +59,6 @@ gemini_llm    supabase_stores  drugs_http
 | | `integrations/local_public_storage.py` | Short-lived audio URLs for LINE |
 | | `integrations/mocks/` | In-memory mock adapters for all ports |
 | **Privacy** | `privacy/redact.py` | `redact_pii_text()` — emails, phone patterns, digit runs |
-| | `privacy/profile_parse.py` | Local profile field extraction (no LLM) |
 | **Prompts** | `prompts/persona.py` | `get_system_persona()`, LLM-safe vs display patient context |
 | **Reminders** | `reminders/` | arq worker, dose scheduling, LINE push delivery, reconcile |
 | **Shared routes** | `http/shared_routes.py` | `/health`, `/internal-media/{id}`, `/internal/reminders/reconcile` |

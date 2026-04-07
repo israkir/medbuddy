@@ -137,7 +137,7 @@ class MedicationAgent:
         if reply is None and intent == Intent.OFF_TOPIC:
             reply = t("agent.off_topic", locale=locale)
 
-        # 3. Profile update intent (regex-based, no LLM needed)
+        # 3. Profile update intent (structured LLM extraction)
         if reply is None and intent == Intent.UPDATE_PROFILE:
             reply = await try_profile_intent_reply(
                 svc,

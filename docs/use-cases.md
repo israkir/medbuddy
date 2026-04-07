@@ -167,7 +167,7 @@ Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) de
 |--|--|
 | **Scenario** | User updates profile fields **in chat** (name, age, emergency contact, health notes, gender). |
 | **Examples** | Same one-line replies as after LINE welcome; “叫我老王”; “我對青霉素过敏”. |
-| **Outcome** | **`parse_profile_patch_from_text`** (heuristics) → **`patch_user_profile`**. No LLM JSON extraction for stored PII. Empty parse → **`profile.update_unclear`**. |
+| **Outcome** | **`LLMPort.extract_profile_patch`** (structured output) → **`patch_user_profile`**. Empty parse → **`profile.update_unclear`**. |
 | **Contrast** | Standalone **onboarding** uses **`POST /onboarding`** with typed JSON — not this intent. |
 
 ---
@@ -177,9 +177,9 @@ Below, **“Examples”** are illustrative; the **LLM classifier** (or mocks) de
 | | |
 |--|--|
 | **Scenario** | User asks to switch **UI/reply language** (`en` or `zh-TW`). |
-| **Examples** | “switch to English” · 「請用中文」 · “I prefer English replies from now on” (classifier + LLM extract if regex misses). |
-| **Outcome** | **`parse_locale_request_from_text`** first; if missing but intent is **`update_locale`**, **`extract_locale_intent`**. **`patch_user_profile`** with **`locale`**. Already on target → **`locale.unchanged`**; invalid → **`locale.unclear`**. |
-| **Note** | Phrases like “explain this in English” (content language only) are **excluded** from switching UI locale — see [`user_locale.py`](../apps/backend/src/medbuddy/user_locale.py). |
+| **Examples** | “switch to English” · 「請用中文」 · “I prefer English replies from now on”. |
+| **Outcome** | Classifier returns **`update_locale`** → **`extract_locale_intent`** (structured LLM) → **`patch_user_profile`** with **`locale`**. Already on target → **`locale.unchanged`**; invalid → **`locale.unclear`**. |
+| **Note** | **`extract_locale_intent`** is instructed to treat “explain this in English” (content only) as **not** a UI locale switch. Normalization helpers live in [`user_locale.py`](../apps/backend/src/medbuddy/user_locale.py). |
 
 ---
 

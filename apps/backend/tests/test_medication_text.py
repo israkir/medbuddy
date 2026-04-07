@@ -13,7 +13,7 @@ from medbuddy.deps import get_services
 from medbuddy.i18n import t
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.main import app
-from medbuddy.models.domain import Intent, MedicationRecord
+from medbuddy.models.domain import Intent, MedicationDraft, MedicationRecord
 
 
 def _headers(*, user: str = "u-med-text") -> dict[str, str]:
@@ -27,6 +27,14 @@ async def test_messages_add_medication(mock_settings) -> None:
     uid = "user-add-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(
+        intent=Intent.ADD_MEDICATION,
+        medication_draft=MedicationDraft(
+            name="阿斯匹靈",
+            dosage="100mg",
+            schedule="每天飯後",
+        ),
+    )
     app.dependency_overrides[get_services] = lambda: svc
     try:
         with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
@@ -48,12 +56,50 @@ async def test_messages_add_medication(mock_settings) -> None:
 
 
 @pytest.mark.asyncio
+async def test_messages_add_medication_when_classifier_returns_add_intent(mock_settings) -> None:
+    """Production uses LLM structured output for intent; tests pin ADD_MEDICATION + extraction."""
+    mock_settings.mock_external_services = True
+    mock_settings.mobile_bearer_token = ""
+    uid = "user-add-intent-1"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(
+        intent=Intent.ADD_MEDICATION,
+        medication_draft=MedicationDraft(
+            name="majezik",
+            dosage="100mg",
+            schedule="after meal",
+            first_reminder_in_minutes=2,
+            materialize_daily_reminders=False,
+        ),
+    )
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "add majezik 100mg after meal, in 2 mins"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    reply = r.json()["reply"]
+    assert "majezik" in reply.lower()
+    meds = await svc.users.list_medications(uid)
+    assert len(meds) == 1
+    assert meds[0].name.lower() == "majezik"
+
+
+@pytest.mark.asyncio
 async def test_messages_list_medications(mock_settings) -> None:
     mock_settings.mock_external_services = True
     mock_settings.mobile_bearer_token = ""
     uid = "user-list-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(intent=Intent.LIST_MEDICATIONS)
     svc.users.seed_medication(
         uid,
         MedicationRecord(
@@ -88,6 +134,7 @@ async def test_messages_remove_medication(mock_settings) -> None:
     mid = str(uuid.uuid4())
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(intent=Intent.REMOVE_MEDICATION, removal_medication_id=mid)
     svc.users.seed_medication(
         uid,
         MedicationRecord(id=mid, name="普拿疼", dosage="1顆", schedule="痛時"),
@@ -148,6 +195,7 @@ async def test_messages_explain_medication_replies(mock_settings) -> None:
     uid = "user-explain-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(intent=Intent.EXPLAIN_MEDICATION)
     app.dependency_overrides[get_services] = lambda: svc
     try:
         with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):

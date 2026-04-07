@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 
 from medbuddy.exceptions import LLMParseError
 from medbuddy.i18n import t
+from medbuddy.llm.intent_classification_prompt import format_intent_classification_prompt
 from medbuddy.llm.intent_map import map_intent_label
 from medbuddy.llm.medication_draft_build import medication_draft_from_extraction
 from medbuddy.llm.schemas import (
@@ -110,42 +111,9 @@ class OpenAILLM(LLMPort):
             ) from exc
 
     def _classify_sync(self, user_text: str, *, recent_context: str | None = None) -> Intent:
-        followup_rule = (
-            "Never use off_topic for very short replies that answer the assistant about "
-            "medications, adherence, reminders, or scheduling — even if the text alone looks vague "
-            '(e.g. "一次", "三天", "7", "once", "yes", "ok", "每天"). '
-            "Those are general_question (or a matching clinical intent), not off_topic. "
+        prompt = format_intent_classification_prompt(
+            user_text=user_text, recent_context=recent_context
         )
-        base = (
-            "Classify the user message into exactly one intent: "
-            "add_medication, list_medications, remove_medication, confirm_dose, "
-            "explain_medication, interaction_check, log_vital, request_summary, "
-            "update_profile, update_locale, off_topic, general_question. "
-            "Use update_profile only when the user is sharing or correcting stored profile "
-            "information (how to address them, age, emergency contact, allergies or persistent "
-            "health notes on file). "
-            "Do not use update_profile for medication side effects, symptoms, or one-off notes "
-            "for a doctor about a specific drug or dose — use general_question or confirm_dose "
-            "(if they took the medication) instead. "
-            "Use update_locale when they want to change the assistant reply language "
-            "(English vs Traditional Chinese), including paraphrases like "
-            '"I\'d prefer English" or "請用中文回覆". '
-            "Do not use update_locale when they only want a drug explanation translated. "
-            + followup_rule
-            + "Use off_topic only when the user is clearly changing topic to something unrelated "
-            "to care — e.g. weather, sports scores, politics, coding homework, random chit-chat "
-            "with no medication or health angle. If there is any health or medication angle, "
-            "prefer general_question or the best matching clinical intent, not off_topic."
-        )
-        if recent_context:
-            prompt = (
-                f"{base}\n\n"
-                "Recent conversation (for context only; classify only the latest user line below):\n"
-                f"{recent_context}\n\n"
-                f"Latest user message to classify:\n{user_text}"
-            )
-        else:
-            prompt = f"{base}\n\nUser: {user_text}"
         try:
             parsed: IntentClassification = self._generate_structured_sync(
                 self._model, prompt, IntentClassification

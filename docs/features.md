@@ -191,7 +191,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 |-------|---------|
 | **Summary** | Update profile fields from conversational text. |
 | **User value** | Correct name, emergency contact, or notes without a separate settings API for every field. |
-| **Capabilities** | `UserDataPort.patch_user_profile` via `parse_profile_patch_from_text`—local heuristics, **no** LLM JSON extraction for stored PII fields. |
+| **Capabilities** | `UserDataPort.patch_user_profile` after **`LLMPort.extract_profile_patch`** (structured LLM) when intent is **`update_profile`**. |
 
 ### 4.7 `confirm_dose`
 
@@ -221,7 +221,7 @@ Identifiers match `Intent` in `medbuddy.models.domain`.
 
 | Concern | Behavior |
 |---------|----------|
-| Redaction | Before `classify_intent` (user line only), `compose_reply`, and medication extract/remove LLM calls: `redact_pii_text` / `redact_conversation_turns_for_llm` (emails, typical phone shapes, long digit runs). **Recent-turn context** passed into `classify_intent` is redacted the same way. Pattern-based, not full PHI scrubbing. |
+| Redaction | Before `classify_intent` (user line only), `compose_reply`, medication extract/remove, and profile/locale structured extractions: `redact_pii_text` / `redact_conversation_turns_for_llm` (emails, typical phone shapes, long digit runs). **Recent-turn context** passed into `classify_intent` is redacted the same way. Pattern-based, not full PHI scrubbing. |
 | Patient context for LLM | `build_patient_context_for_llm` — coarse signals (e.g. “preferred name on file” without the name), age band, medication lines; not raw `preferred_name`, `health_notes`, `emergency_contact`, exact `age_years`. |
 | Patient context for display | `build_patient_context_for_chat_display` — full snippet for user-facing list replies only. |
 | Storage | Conversation rows may store original user text; copies sent to the LLM adapter are redacted. |
@@ -293,7 +293,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 | Topic | Behavior |
 |-------|----------|
-| Trigger | Successful `add_medication` or `remove_medication` via `try_medication_intents` (any channel using that handler). |
+| Trigger | Successful **`add_medication`** or **`remove_medication`** via **`MedicationAgent`** tools (LINE webhook or **`POST /v1/app/messages`**). |
 | Extraction | On add, the LLM can return structured **reminder preferences** (e.g. first reminder in N minutes, daily horizon days, whether to fan daily rows, optional local time). Stored under **`medications.raw_metadata.reminder`** and consumed when building `dose_events` (e.g. “in 5 minutes” → a single upcoming instant without fanning the full horizon). Env defaults `MEDBUDDY_REMINDER_*` apply when fields are unset. |
 | Scheduling | `UserDataPort.sync_upcoming_dose_events` replaces future `dose_events` per prefs + defaults: typically one local time per day (`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME`, default `09:00`) in `patients.timezone` (IANA), horizon `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, cap 90). Free-text `schedule` on the med does **not** expand to multiple daily times in v1 (may still appear in copy). |
 | Delivery | With Redis, `enqueue_reminder_jobs` schedules arq `send_reminder_for_dose` with `_defer_until = scheduled_at`. Worker runs `deliver_dose_reminder` → LINE `push_message`, then `reminder_sent_at`. |
