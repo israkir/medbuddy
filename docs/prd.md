@@ -24,7 +24,7 @@ This PRD treats the **product prototype** as **text in, text out** for all **con
 
 **Why text-only for the prototype:** lower cost to test, easier logging and review for safety copy, and a clear ceiling for what “works” before adding STT/TTS latency, failure modes, and accessibility expectations.
 
-**Engineering note:** Repository code paths for LINE audio (e.g. Whisper / TTS) may exist for experimentation; **product acceptance** for the prototype is defined on **text** paths only until a later phase explicitly adds voice (see **§10 Growth**).
+**Engineering note:** Repository code paths for LINE audio (e.g. Google Speech-to-Text / TTS) may exist for experimentation; **product acceptance** for the prototype is defined on **text** paths only until a later phase explicitly adds voice (see **§10 Growth**).
 
 ---
 
@@ -184,7 +184,7 @@ Requirements are **themes**; detailed acceptance-style bullets live in **`docs/f
 | Supabase Postgres | Persistence | **Yes** for real pilot |
 | Redis + arq | Reminder workers | **Yes** if reminders in pilot |
 | OpenFDA HTTP | Label grounding | **Yes** (explain/interaction grounding) |
-| Whisper HTTP | LINE STT | **No** for prototype product acceptance |
+| Google Speech-to-Text | LINE STT | **No** for prototype product acceptance |
 | edge-tts | LINE TTS | **No** for prototype product acceptance |
 
 **Full matrix:** root `README.md`, `apps/backend/README.md`

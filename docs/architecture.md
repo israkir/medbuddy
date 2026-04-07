@@ -165,7 +165,7 @@ apps/backend/src/medbuddy/
 │   ├── supabase_drug_caches.py # SupabaseDrugCaches
 │   ├── drugs_http.py           # HttpDrugData (OpenFDA + TFDA stub)
 │   ├── caching_drugs.py        # CachingDrugData (reference cache wrapper)
-│   ├── stt_whisper.py          # WhisperHttpSTT
+│   ├── stt_google.py           # GoogleSpeechToText
 │   ├── edge_tts_service.py     # EdgeTtsService
 │   ├── local_public_storage.py # LocalPublicObjectStorage (temp audio)
 │   └── mocks/                  # MockLLM, MockLineClient, MockUserData, etc.
@@ -262,7 +262,7 @@ LINE platform
     ▼
 channels/line/orchestrator.py
     │ download_message_content(message_id)     # LINE blob API
-    │ stt.transcribe(audio_bytes)              # Whisper HTTP or mock
+    │ stt.transcribe(audio_bytes)              # Google Speech-to-Text or mock
     │ run_assistant_text_turn(user_key, transcript)
     │ [if voice reply requested]
     │   tts.synthesize(reply_text) → audio_bytes
@@ -907,7 +907,9 @@ All settings are in `config.py` (Pydantic `BaseSettings`). Sources, in priority 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `PUBLIC_BASE_URL` | `http://localhost:8000` | HTTPS base URL for LINE-accessible audio |
-| `WHISPER_SERVICE_URL` | — | HTTP endpoint for external Whisper STT |
+| `GOOGLE_SPEECH_API_KEY` | — | API key for Google Speech-to-Text (send via `x-goog-api-key` header) |
+| `GOOGLE_SPEECH_PROJECT_ID` | — | Google Cloud project id used in Speech-to-Text V2 recognize endpoint |
+| `GOOGLE_SPEECH_LOCATION` | `global` | Speech-to-Text V2 location for recognizer calls |
 
 ### 13.5 Supabase
 
@@ -989,7 +991,7 @@ Useful for:
 | **Local notifications (standalone app)** | Dose reminders are LINE push only. No local notification pipeline for HTTP-app users in this slice. |
 | **Rich LINE Flex messages** | Reminder messages are plain text. No "mark taken" postback in v1. |
 | **Per-user bearer tokens** | The mobile API uses a single shared bearer token. Per-user auth would require a user identity system. |
-| **Reference Expo hold-to-talk → backend STT** | Not wired to backend. See [`frontend-expo.md`](frontend-expo.md). LINE voice + Whisper HTTP and keyboard dictation are the supported paths for the primary product. |
+| **Reference Expo hold-to-talk → backend STT** | Not wired to backend. See [`frontend-expo.md`](frontend-expo.md). LINE voice + Google Speech-to-Text and keyboard dictation are the supported paths for the primary product. |
 | **`dose_events.taken_at`** | Column exists for future adherence tracking but is not populated by the current assistant flows. |
 | **Full PHI scrubbing** | Redaction is pattern-based (emails, phone numbers, digit runs). Names, addresses, and free-form clinical text in user messages are not masked. |
 | **Distributed tracing / metrics** | Not implemented. Recommended for production observability hardening. |

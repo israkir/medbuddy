@@ -46,7 +46,11 @@ services:
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
-      - key: WHISPER_SERVICE_URL
+      - key: GOOGLE_SPEECH_API_KEY
+        sync: false
+      - key: GOOGLE_SPEECH_PROJECT_ID
+        sync: false
+      - key: GOOGLE_SPEECH_LOCATION
         sync: false
       - key: MEDBUDDY_MOBILE_BEARER_TOKEN
         sync: false

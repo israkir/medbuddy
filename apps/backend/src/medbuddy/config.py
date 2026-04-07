@@ -130,7 +130,18 @@ class Settings(BaseSettings):
             "supabase_anon_key",
         ),
     )
-    whisper_service_url: str = ""
+    google_speech_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_SPEECH_API_KEY", "google_speech_api_key"),
+    )
+    google_speech_project_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_SPEECH_PROJECT_ID", "google_speech_project_id"),
+    )
+    google_speech_location: str = Field(
+        default="global",
+        validation_alias=AliasChoices("GOOGLE_SPEECH_LOCATION", "google_speech_location"),
+    )
 
     conversation_history_turns: int = 5
     dose_clarification_ttl_seconds: int = Field(

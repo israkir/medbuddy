@@ -26,7 +26,7 @@ from medbuddy.integrations.gemini_llm import GeminiLLM
 from medbuddy.integrations.openai_llm import OpenAILLM
 from medbuddy.integrations.line_client import LineHttpClient
 from medbuddy.integrations.local_public_storage import LocalPublicObjectStorage
-from medbuddy.integrations.stt_whisper import WhisperHttpSTT
+from medbuddy.integrations.stt_google import GoogleSpeechToText
 
 log = logging.getLogger(__name__)
 
@@ -96,13 +96,18 @@ def build_app_services(
 
     llm = _build_llm(settings)
 
-    if settings.whisper_service_url:
-        stt = WhisperHttpSTT(
-            base_url=settings.whisper_service_url,
+    if settings.google_speech_api_key and settings.google_speech_project_id:
+        stt = GoogleSpeechToText(
+            api_key=settings.google_speech_api_key,
+            project_id=settings.google_speech_project_id,
+            location=settings.google_speech_location,
+            language_code=settings.locale,
             http_client=stt_http,
         )
     else:
-        log.warning("WHISPER_SERVICE_URL missing; using MockSpeechToText for STT")
+        log.warning(
+            "GOOGLE_SPEECH_API_KEY / GOOGLE_SPEECH_PROJECT_ID missing; using MockSpeechToText for STT"
+        )
         stt = MockSpeechToText(locale=settings.locale)
 
     drug_caches = None

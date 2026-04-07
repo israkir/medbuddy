@@ -63,7 +63,7 @@ The app is positioned as a **potential standalone medication companion**: first-
 
 | Topic | Detail |
 |-------|--------|
-| **Hold-to-talk prototype** | May use **expo-av**; baseline shows an alert after recording — **not** wired to backend STT. **LINE voice** + Whisper HTTP is the supported voice path in the primary product docs. |
+| **Hold-to-talk prototype** | May use **expo-av**; baseline shows an alert after recording — **not** wired to backend STT. **LINE voice** + Google Speech-to-Text is the supported voice path in the primary product docs. |
 | **Dose reminders** | Backend sends **LINE push** only for LINE `userId` users. **No** Expo local notifications in this codebase slice. |
 | **Keyboard / dictation** | Users can still dictate into the chat field via OS keyboard; that text follows the normal **`/v1/app/messages`** path. |
 
