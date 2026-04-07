@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from medbuddy.config import Settings, get_settings
@@ -16,6 +16,19 @@ from medbuddy.protocols.ports import UserDataPort
 from medbuddy.reminders.nudge_policy import nudge_window_allows
 from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
 from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
+
+_RECENT_TAKEN_DOSE_NOTE_HOURS = 48
+
+
+def _merge_dose_event_notes(existing: str | None, addition: str) -> str:
+    e = (existing or "").strip()
+    a = addition.strip()
+    if not a:
+        return e[:500] if e else ""
+    if not e:
+        return a[:500]
+    combined = f"{e} | {a}"
+    return combined[:500]
 
 
 def _default_profile_fields() -> dict[str, Any]:
@@ -311,6 +324,45 @@ class MockUserData(UserDataPort):
                     d["notes"] = note_val
                 n += 1
         return n
+
+    async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:
+        await asyncio.sleep(0)
+        addition = notes.strip()
+        if not addition:
+            return 0
+        if len(addition) > 500:
+            addition = addition[:500]
+        row = await self.get_or_create_user(line_user_id)
+        uid = row["id"]
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(hours=_RECENT_TAKEN_DOSE_NOTE_HOURS)
+        taken = [
+            d
+            for d in self._doses.values()
+            if d["line_user_id"] == line_user_id
+            and d["user_internal_id"] == uid
+            and d.get("taken_at") is not None
+            and d["taken_at"] >= cutoff
+        ]
+        if not taken:
+            return 0
+        taken.sort(key=lambda d: (d["taken_at"], d["scheduled_at"]), reverse=True)
+        target_ts = taken[0]["scheduled_at"]
+        to_update = [d for d in taken if d["scheduled_at"] == target_ts]
+        if not to_update:
+            return 0
+        first_existing: str | None = None
+        for d in to_update:
+            n = d.get("notes")
+            if isinstance(n, str) and n.strip():
+                first_existing = n.strip()
+                break
+        merged = _merge_dose_event_notes(first_existing, addition)
+        if not merged:
+            return 0
+        for d in to_update:
+            d["notes"] = merged
+        return len(to_update)
 
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]:
         await asyncio.sleep(0)

@@ -63,3 +63,36 @@ async def test_confirm_dose_saves_note_on_dose_event() -> None:
     )
     assert "headache" in r.reply.lower()
     assert svc.users._doses[dose_id].get("notes") == "Headache after dose"  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_confirm_dose_appends_note_when_already_taken() -> None:
+    """Follow-up side-effect text must persist on the dose row after pending was cleared."""
+    settings = Settings(mock_external_services=True)
+    svc = build_app_services(settings)
+    svc.llm = MockLLM(locale="en", dose_note=None)
+    key = "U-confirm-dose-followup-note"
+    await svc.users.get_or_create_user(key)
+    await svc.users.add_medication(
+        key,
+        MedicationDraft(name="Majesik", dosage="100mg", schedule="QD"),
+    )
+    jobs = await svc.users.sync_upcoming_dose_events(key)
+    assert jobs
+    dose_id, _ = jobs[0]
+    past = datetime.now(UTC) - timedelta(hours=2)
+    svc.users._doses[dose_id]["scheduled_at"] = past  # noqa: SLF001
+
+    tool = ConfirmDoseTool()
+    r1 = await tool.run(svc=svc, user_key=key, user_text="I took it", locale="en")
+    assert "marked" in r1.reply.lower() or "1" in r1.reply
+
+    svc.llm = MockLLM(locale="en", dose_note="Headache after dose")
+    r2 = await tool.run(
+        svc=svc,
+        user_key=key,
+        user_text="btw when I took it I had a headache, note it for my doctor",
+        locale="en",
+    )
+    assert "headache" in r2.reply.lower()
+    assert svc.users._doses[dose_id].get("notes") == "Headache after dose"  # noqa: SLF001

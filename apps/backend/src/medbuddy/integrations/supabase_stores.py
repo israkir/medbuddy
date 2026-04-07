@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from medbuddy.config import Settings
@@ -25,6 +25,19 @@ from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
 from medbuddy.user_timezone import effective_user_timezone, normalize_timezone_patch
 
 log = logging.getLogger(__name__)
+
+_RECENT_TAKEN_DOSE_NOTE_HOURS = 48
+
+
+def _merge_dose_event_notes(existing: str | None, addition: str) -> str:
+    e = (existing or "").strip()
+    a = addition.strip()
+    if not a:
+        return e[:500] if e else ""
+    if not e:
+        return a[:500]
+    combined = f"{e} | {a}"
+    return combined[:500]
 
 
 def _parse_ts(value: object) -> datetime:
@@ -122,7 +135,9 @@ class SupabaseUserData(UserDataPort):
             return _user_row_to_dict(row)
 
         def insert() -> Any:
-            return self._client.table("patients").insert({"external_user_id": line_user_id}).execute()
+            return (
+                self._client.table("patients").insert({"external_user_id": line_user_id}).execute()
+            )
 
         try:
             resp = await _run_q(insert)
@@ -580,6 +595,75 @@ class SupabaseUserData(UserDataPort):
                 .eq("patient_id", uid)
                 .eq("scheduled_at", target_ts)
                 .is_("taken_at", "null")
+                .execute()
+            )
+
+        uresp = await _run_q(q_update)
+        updated = uresp.data or []
+        return len(updated)
+
+    async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:
+        """Attach ``notes`` to the dose instant with the latest ``taken_at`` (within 48h)."""
+        addition = notes.strip()
+        if not addition:
+            return 0
+        if len(addition) > 500:
+            addition = addition[:500]
+
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(hours=_RECENT_TAKEN_DOSE_NOTE_HOURS)
+        cutoff_iso = cutoff.isoformat()
+
+        def q_latest() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("scheduled_at")
+                .eq("patient_id", uid)
+                .not_.is_("taken_at", "null")
+                .gte("taken_at", cutoff_iso)
+                .order("taken_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(q_latest)
+        rows = resp.data or []
+        if not rows:
+            return 0
+        target_ts = rows[0]["scheduled_at"]
+
+        def q_existing() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("notes")
+                .eq("patient_id", uid)
+                .eq("scheduled_at", target_ts)
+                .not_.is_("taken_at", "null")
+                .limit(1)
+                .execute()
+            )
+
+        eresp = await _run_q(q_existing)
+        erows = eresp.data or []
+        existing_notes: str | None = None
+        if erows:
+            raw = erows[0].get("notes")
+            if isinstance(raw, str) and raw.strip():
+                existing_notes = raw.strip()
+
+        merged = _merge_dose_event_notes(existing_notes, addition)
+        if not merged:
+            return 0
+
+        def q_update() -> Any:
+            return (
+                self._client.table("dose_events")
+                .update({"notes": merged})
+                .eq("patient_id", uid)
+                .eq("scheduled_at", target_ts)
+                .not_.is_("taken_at", "null")
                 .execute()
             )
 

@@ -197,6 +197,9 @@ class UserDataPort(Protocol):
         self, line_user_id: str, *, notes: str | None = None
     ) -> int: ...
 
+    async def append_note_to_recent_taken_dose(self, line_user_id: str, *, notes: str) -> int:
+        """Merge ``notes`` into ``dose_events.notes`` for the most recent taken dose (see impl)."""
+
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]: ...
 
 
