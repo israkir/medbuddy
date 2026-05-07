@@ -194,17 +194,23 @@ function mockReply(userText: string): string {
   return t('companion.mockGeneric');
 }
 
+/** Response from POST /v1/app/messages (reply text + optional UI flags). */
+export type CompanionMessageResult = {
+  reply: string;
+  metadata: Record<string, unknown>;
+};
+
 /**
  * One assistant turn for medication comprehension (backend assistant or offline mock).
  */
-export async function sendCompanionMessage(text: string): Promise<string> {
+export async function sendCompanionMessage(text: string): Promise<CompanionMessageResult> {
   const trimmed = text.trim();
   if (!trimmed) {
-    return '';
+    return { reply: '', metadata: {} };
   }
   if (useMockData) {
     await Promise.resolve();
-    return mockReply(trimmed);
+    return { reply: mockReply(trimmed), metadata: {} };
   }
 
   const r = await fetch(`${apiBaseUrl}/v1/app/messages`, {
@@ -218,13 +224,14 @@ export async function sendCompanionMessage(text: string): Promise<string> {
     throw new Error(body || `${r.status} ${r.statusText}`);
   }
 
-  const data = (await r.json()) as { reply: string };
-  return data.reply ?? '';
+  const data = (await r.json()) as { reply: string; metadata?: Record<string, unknown> };
+  return { reply: data.reply ?? '', metadata: data.metadata ?? {} };
 }
 
 export type CompanionVoiceResult = {
   reply: string;
   transcript: string;
+  metadata: Record<string, unknown>;
 };
 
 /** Upload a local recording (m4a from expo-av); STT + same assistant pipeline as text. */
@@ -236,7 +243,7 @@ export async function sendCompanionVoiceMessage(fileUri: string): Promise<Compan
     await Promise.resolve();
     const transcript = i18next.language.startsWith('zh') ? '（示範語音）' : '(voice sample)';
     const reply = mockReply(transcript);
-    return { reply, transcript };
+    return { reply, transcript, metadata: {} };
   }
 
   const form = new FormData();
@@ -258,9 +265,14 @@ export async function sendCompanionVoiceMessage(fileUri: string): Promise<Compan
     throw new Error(body || `${r.status} ${r.statusText}`);
   }
 
-  const data = (await r.json()) as CompanionVoiceResult;
+  const data = (await r.json()) as {
+    reply?: string;
+    transcript?: string;
+    metadata?: Record<string, unknown>;
+  };
   return {
     reply: data.reply ?? '',
     transcript: data.transcript ?? '',
+    metadata: data.metadata ?? {},
   };
 }

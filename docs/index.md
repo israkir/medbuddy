@@ -60,7 +60,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | Question | Go to |
 |----------|-------|
 | What data does each LLM call send? | [`llm-context.md`](llm-context.md) |
-| What is the Intent enum / tool list? | [`features.md`](features.md) §2 Agent layer |
+| What tools does the orchestrator expose? | [`features.md`](features.md) §2 Agent layer · [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How is a LINE voice message handled? | [`use-cases.md`](use-cases.md) §1.1 |
 | How are dose events scheduled? | [`reminders.md`](reminders.md) |
 | What env vars do I need? | [`../apps/backend/README.md`](../apps/backend/README.md) — Key environment variables |
@@ -70,5 +70,5 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | What do OD-1/OD-5/T1/T2/T3 codes mean? | [`prd-extended.md` §13 Open decisions](prd-extended.md#13-open-decisions) — codes &amp; abbreviations |
 | What's left before production? | [`../TODO.md`](../TODO.md) |
 | How do I add a new LLM adapter? | [`tdd-extended.md`](tdd-extended.md) §16 Extension points |
-| How do I add a new intent / tool? | [`tdd-extended.md`](tdd-extended.md) §16, [`../apps/backend/README.md`](../apps/backend/README.md) |
+| How do I add a new orchestrator tool? | [`tdd-extended.md`](tdd-extended.md) §16.4, [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How does Python map to Go/Fiber modules? | [`go-port-mapping.md`](go-port-mapping.md) |

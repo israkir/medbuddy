@@ -98,6 +98,7 @@
       "mandarinVoice": "How do I use Mandarin voice with MedBuddy?",
       "familyView": "How can my family follow my medication plan?"
     },
+    "simulatedEmergencyBanner": "Emergency contact notification (simulated — no SMS or call was sent).",
     "disclaimer": "Information may be incomplete. For new symptoms, dosing changes, or emergencies, contact your care team right away.",
     "errorPrefix": "Could not reach the server.",
     "errorAssistant": "Something went wrong reaching MedBuddy. Check your network and API settings, then try again.",

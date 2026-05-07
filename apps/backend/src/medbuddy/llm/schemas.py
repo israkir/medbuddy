@@ -8,7 +8,7 @@ clear field hints in the JSON schema it sends to the model.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -335,4 +335,29 @@ class HealthSummaryResult(BaseModel):
     )
     recommended_questions: list[str] = Field(
         description="Suggested questions the patient might want to ask the doctor"
+    )
+
+
+class AgentOrchestratorToolCall(BaseModel):
+    """One tool invocation emitted by the Gemini (structured) orchestrator step."""
+
+    name: str = Field(description="Exact tool name from the MedBuddy agent registry")
+    arguments: dict[str, Any] = Field(
+        default_factory=dict,
+        description="JSON-serializable arguments for that tool",
+    )
+
+
+class AgentOrchestratorStep(BaseModel):
+    """Either a final reply OR one batch of tool calls — never both empty when acting."""
+
+    reply_text: str | None = Field(
+        default=None,
+        description=(
+            "Complete assistant reply to show the user when no tool calls are needed for this step."
+        ),
+    )
+    tool_calls: list[AgentOrchestratorToolCall] | None = Field(
+        default=None,
+        description="Non-empty when the server should execute tools before the next model step.",
     )

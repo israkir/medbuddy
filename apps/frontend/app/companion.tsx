@@ -28,7 +28,12 @@ import {
   sendCompanionVoiceMessage,
 } from '@/lib/companionApi';
 
-type Bubble = { role: 'user' | 'assistant'; text: string };
+type Bubble = {
+  role: 'user' | 'assistant';
+  text: string;
+  /** Backend flag: emergency contact notification was simulated (not a real SMS/call). */
+  simulatedEmergencyNotify?: boolean;
+};
 
 const SCROLL_PAD = 120;
 
@@ -153,8 +158,15 @@ export default function CompanionScreen() {
     setMessages((prev) => [...prev, { role: 'user', text }]);
     setSending(true);
     try {
-      const reply = await sendCompanionMessage(text);
-      setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
+      const { reply, metadata } = await sendCompanionMessage(text);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: reply,
+          simulatedEmergencyNotify: Boolean(metadata.simulated_emergency_notification),
+        },
+      ]);
       if (Math.random() < PEEK_ROLL) {
         const pool = ENGAGEMENT_KEYS;
         setPeekKey(pool[Math.floor(Math.random() * pool.length)]!);
@@ -181,11 +193,15 @@ export default function CompanionScreen() {
       setPeekKey(null);
       setSending(true);
       try {
-        const { reply, transcript } = await sendCompanionVoiceMessage(trimmed);
+        const { reply, transcript, metadata } = await sendCompanionVoiceMessage(trimmed);
         setMessages((prev) => [
           ...prev,
           { role: 'user', text: transcript },
-          { role: 'assistant', text: reply },
+          {
+            role: 'assistant',
+            text: reply,
+            simulatedEmergencyNotify: Boolean(metadata.simulated_emergency_notification),
+          },
         ]);
         speak(reply);
         if (Math.random() < PEEK_ROLL) {
@@ -312,6 +328,13 @@ export default function CompanionScreen() {
                       {t('companion.readAloud')}
                     </Text>
                   </Pressable>
+                ) : null}
+                {m.role === 'assistant' && m.simulatedEmergencyNotify ? (
+                  <Text
+                    style={[styles.simBanner, { color: palette.textSecondary }]}
+                    maxFontSizeMultiplier={1.45}>
+                    {t('companion.simulatedEmergencyBanner')}
+                  </Text>
                 ) : null}
               </View>
             </View>
@@ -528,6 +551,12 @@ const styles = StyleSheet.create({
   speakLabel: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  simBanner: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+    fontStyle: 'italic',
   },
   error: {
     fontSize: 14,

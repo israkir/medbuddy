@@ -21,7 +21,7 @@ async def test_assistant_updates_locale_on_request() -> None:
     row = await svc.users.get_or_create_user(key)
     assert row.get("locale") == "zh-TW"
 
-    reply = await run_assistant_text_turn(svc, user_key=key, user_text="switch to English")
+    reply = (await run_assistant_text_turn(svc, user_key=key, user_text="switch to English")).reply
     assert "English" in reply or "english" in reply.lower()
     row2 = await svc.users.get_or_create_user(key)
     assert row2.get("locale") == "en"
@@ -37,9 +37,11 @@ async def test_assistant_locale_llm_fallback_paraphrase() -> None:
     svc.llm = MockLLM(intent=Intent.UPDATE_PROFILE, profile_patch={"locale": "en"})
     key = "U-locale-paraphrase"
     await svc.users.get_or_create_user(key)
-    reply = await run_assistant_text_turn(
-        svc, user_key=key, user_text="I prefer English replies from now on"
-    )
+    reply = (
+        await run_assistant_text_turn(
+            svc, user_key=key, user_text="I prefer English replies from now on"
+        )
+    ).reply
     assert "English" in reply or "english" in reply.lower()
     row = await svc.users.get_or_create_user(key)
     assert row.get("locale") == "en"
@@ -54,9 +56,9 @@ async def test_assistant_updates_locale_even_when_classifier_misses() -> None:
     svc.llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale_intent="en")
     key = "U-locale-classifier-miss"
     await svc.users.get_or_create_user(key)
-    reply = await run_assistant_text_turn(
-        svc, user_key=key, user_text="can you talk to me in english"
-    )
+    reply = (
+        await run_assistant_text_turn(svc, user_key=key, user_text="can you talk to me in english")
+    ).reply
     assert "English" in reply or "english" in reply.lower()
     row = await svc.users.get_or_create_user(key)
     assert row.get("locale") == "en"
@@ -71,7 +73,7 @@ async def test_assistant_unchanged_when_already_english() -> None:
     svc.llm = MockLLM(intent=Intent.UPDATE_PROFILE, profile_patch={"locale": "en"})
     key = "U-locale-en"
     await svc.users.patch_user_profile(key, {"locale": "en"})
-    reply = await run_assistant_text_turn(svc, user_key=key, user_text="use English")
+    reply = (await run_assistant_text_turn(svc, user_key=key, user_text="use English")).reply
     assert "already" in reply.lower() or "English" in reply
 
 
@@ -84,9 +86,9 @@ async def test_assistant_updates_timezone_via_profile_intent() -> None:
     svc.llm = MockLLM(intent=Intent.UPDATE_PROFILE, profile_patch={"timezone": "America/New_York"})
     key = "U-timezone-switch"
     await svc.users.get_or_create_user(key)
-    reply = await run_assistant_text_turn(
-        svc, user_key=key, user_text="my timezone is New York now"
-    )
+    reply = (
+        await run_assistant_text_turn(svc, user_key=key, user_text="my timezone is New York now")
+    ).reply
     assert "America/New_York" in reply
     row = await svc.users.get_or_create_user(key)
     assert row.get("timezone") == "America/New_York"

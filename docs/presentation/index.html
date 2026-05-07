@@ -1413,7 +1413,7 @@
     .sys-context-wrap .sc-box-obs      { fill: #fff7ed; stroke: #ea580c; stroke-width: 1.25; }
     .sys-context-wrap .sc-box-new      { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 1.35; stroke-dasharray: 5 3; }
     .sys-context-wrap .sc-box-ingress  { fill: #e0f2fe; stroke: #0369a1; stroke-width: 1.5; }
-    /* Legacy aliases kept for MVP slide classes */
+    /* Remark slide class aliases */
     .sys-context-wrap .sc-box-inner    { fill: #f1f5f9; stroke: #64748b; stroke-width: 1.25; }
     /* Typography */
     .sys-context-wrap .sc-label        { fill: #0f172a; font-size: 12px; font-weight: 700; }
@@ -1554,7 +1554,7 @@ Press **A** or click *Full deck*. Adds product detail (PM) and architecture &amp
 |---|---|
 | [PRD — short](https://github.com/israkir/medbuddy/blob/main/docs/prd.md) · [PRD — full](https://github.com/israkir/medbuddy/blob/main/docs/prd-extended.md) | Vision, goals, scope, open decisions, roadmap |
 | [TDD — short](https://github.com/israkir/medbuddy/blob/main/docs/tdd.md) · [TDD — full](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md) | Architecture, API reference, schema, ops |
-| [features.md](https://github.com/israkir/medbuddy/blob/main/docs/features.md) | Intent &amp; tool catalog, LINE + API capabilities |
+| [features.md](https://github.com/israkir/medbuddy/blob/main/docs/features.md) | Agent orchestration &amp; tool catalog, LINE + API capabilities |
 | [privacy.md](https://github.com/israkir/medbuddy/blob/main/docs/privacy.md) | PII redaction, LLM data boundaries, compliance |
 | [reminders.md](https://github.com/israkir/medbuddy/blob/main/docs/reminders.md) | Dose reminder queue, arq/Redis, deploy ops |
 
@@ -1565,6 +1565,8 @@ Press **A** or click *Full deck*. Adds product detail (PM) and architecture &amp
 <div class="track-tag vc">VC</div>
 
 # Codes you'll see in this deck
+
+.small[**Prefix key:** **OD** = Open Decision · **NG** = not a pilot pass/fail criterion (PRD §9 *Out of scope*) · **Ch** = revenue channel · **T1–T3** = gated future product tiers.]
 
 | Code | What it means |
 |---|---|
@@ -2234,7 +2236,7 @@ A live, runnable prototype — every layer of the architecture working end-to-en
 .cols[
 .col[
 <ul class="checklist">
-<li>All <b>16 user intents</b> covered end-to-end — list, add, update, remove, explain, interactions, side-effects, confirm, miss, log vital, summary, profile, and more · cohort-validated quality is an MVP gate</li>
+<li><b>Registered tool-backed flows</b> covered end-to-end — list, add, update, remove, bulk clear, reminders off, explain, interactions, side-effects, confirm, miss, log vital, summary, profile, journal, and more · cohort-validated quality is an MVP gate</li>
 <li><b>Voice in &amp; out</b> — <a href="https://cloud.google.com/speech-to-text" target="_blank" rel="noopener noreferrer">Google STT v2</a> + <a href="https://cloud.google.com/text-to-speech" target="_blank" rel="noopener noreferrer">Cloud TTS</a>, sharing the same understanding pipeline as typed chat. Formal accuracy and cost targets are deferred to the OD-3 milestone at Growth.</li>
 <li><b>Reminders</b> — scheduled delivery, follow-up nudges, and a catch-up path if queue or worker hiccups</li>
 <li><b>Data layer</b> — <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer">Supabase</a> (Postgres) for Prototype: patients, medications, dose events, drug reference cache, conversation turns; fast in-memory mock for development and CI. Migrates to RDS + DynamoDB + ElastiCache at MVP.</li>
@@ -2907,7 +2909,7 @@ These were considered and **deliberately rejected**. Listing them explicitly pre
 | ✗ | Why it's excluded |
 |---|---|
 | Generic chronic-care coaching | Dilutes into Livongo/Omada; deck positions explicitly against it |
-| Open-ended ReAct expansion | Architectural ceiling by design — closed intent set is a feature, not a constraint |
+| Ungoverned agent expansion | Tool surface is registered in code — not an arbitrary ReAct shell |
 ]
 ]
 
@@ -2993,11 +2995,11 @@ class: deep eng-proto
   <text class="sc-zone-label" x="44" y="182" text-anchor="start">PIPELINE</text>
   <rect class="sc-box-pipeline" x="295" y="172" width="490" height="36" rx="7"/>
   <text class="sc-label" x="540" y="188" text-anchor="middle">run_assistant_text_turn()</text>
-  <text class="sc-sublabel" x="540" y="202" text-anchor="middle">build redacted context  ·  classify intent</text>
+  <text class="sc-sublabel" x="540" y="202" text-anchor="middle">build redacted context  ·  routing hint</text>
   <path class="sc-arrow" d="M540,208 L540,218"/>
   <rect class="sc-box-pipeline" x="270" y="218" width="540" height="36" rx="7"/>
   <text class="sc-label" x="540" y="234" text-anchor="middle">MedicationAgent</text>
-  <text class="sc-sublabel" x="540" y="248" text-anchor="middle">intent → tool dispatch  (16 intents, 1 LLM call)</text>
+  <text class="sc-sublabel" x="540" y="248" text-anchor="middle">run_tool_agent_loop  ·  complete_chat_with_tools</text>
 
   <!-- Agent → tools -->
   <path class="sc-arrow" d="M540,254 L540,264"/>
@@ -3184,7 +3186,7 @@ class: deep eng-proto
   <!-- Simplified black-box annotation for MVP/Growth -->
   <text class="sc-label" x="450" y="196" text-anchor="middle">Assistant service</text>
   <text class="sc-sublabel" x="450" y="212" text-anchor="middle">Same domain logic as Prototype · routes + adapters differ for deployment</text>
-  <text class="sc-sublabel" x="450" y="228" text-anchor="middle">intent pipeline · tools · redaction · reminders orchestration</text>
+  <text class="sc-sublabel" x="450" y="228" text-anchor="middle">tool orchestration · redaction · reminders pipeline</text>
 
   <!-- ═══ ADAPTERS ═══ -->
   <rect class="sc-box-adapter"                          x="14"  y="268" width="196" height="48" rx="8"/>
@@ -3242,7 +3244,7 @@ class: deep eng-proto
 
 1. **Hexagonal (ports &amp; adapters)** — domain &amp; use-case code talks only to interfaces. Vendor swap (Gemini → OpenAI, Supabase → another DB) is one adapter file.
 2. **One conversation pipeline** — LINE text, LINE voice (after STT), HTTP text, HTTP voice — all share `run_assistant_text_turn`. No "special" channel can bypass redaction or emergency handling.
-3. **Tool-dispatch agent** — closed intent set, one LLM call to classify (`interpret_user_turn`), then one *typed* tool. No free-form ReAct loop.
+3. **Registered tool orchestrator** — `interpret_user_turn` for fast routing; **`complete_chat_with_tools`** selects named tools (multi-step when needed). No unconstrained ReAct shell.
 4. **Mock-first** — every external dependency has a mock adapter.
 5. **Reminders = materialised rows + queue** — chat turns stay fast; delivery + retries live in arq workers; reconcile endpoint catches outages.
 6. **Drug grounding vs generative language** — registry data **grounds** facts; the LLM does **language**. Reduces "confident hallucination" on dosing.
@@ -3295,7 +3297,7 @@ class: deep eng-proto single-conversation-slide
 
 # Single conversation pipeline
 
-<div class="sys-context-wrap proto-impl single-conversation" aria-label="Prototype single conversation pipeline: channel adapter through intent classification, safety checks, tool dispatch, and persist">
+<div class="sys-context-wrap proto-impl single-conversation" aria-label="Prototype single conversation pipeline: channel adapter through routing hints, safety checks, tool orchestration, and persist">
 <svg viewBox="0 0 1040 520" xmlns="http://www.w3.org/2000/svg" role="img">
   <defs>
     <marker id="pp-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
@@ -3333,7 +3335,7 @@ class: deep eng-proto single-conversation-slide
   <!-- Step 2: interpret -->
   <rect class="sc-box-pipeline" x="236" y="108" width="586" height="42" rx="7"/>
   <text class="sc-label" x="529" y="126" text-anchor="middle">interpret_user_turn()</text>
-  <text class="sc-sublabel" x="529" y="140" text-anchor="middle">single LLM call  →  Intent enum + adherence slots</text>
+  <text class="sc-sublabel" x="529" y="140" text-anchor="middle">interpret_user_turn  ·  gates + metrics only</text>
   <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 150 L529 164"/>
 
   <!-- Step 3: pending state? (decision) -->
@@ -3353,8 +3355,8 @@ class: deep eng-proto single-conversation-slide
 
   <!-- Step 5: locale / hooks / off-topic / profile / tools / fallback -->
   <rect class="sc-box-pipeline" x="236" y="276" width="586" height="56" rx="7"/>
-  <text class="sc-label" x="529" y="296" text-anchor="middle">locale/hook short-circuit → intent route → fallback compose_reply()</text>
-  <text class="sc-sublabel" x="529" y="311" text-anchor="middle">off-topic  ·  update-profile  ·  mapped tool intents  ·  general-question fallback</text>
+  <text class="sc-label" x="529" y="296" text-anchor="middle">locale/hook short-circuit → run_tool_agent_loop()</text>
+  <text class="sc-sublabel" x="529" y="311" text-anchor="middle">complete_chat_with_tools  ·  registered tools  ·  optional metadata</text>
   <text class="sc-sublabel" x="529" y="325" text-anchor="middle">locale-aware · drug-grounded response</text>
   <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 332 L529 346"/>
 
@@ -3504,9 +3506,9 @@ class: deep eng-proto
 |---|---|---|
 | Drug reference | &gt;90% (top-200 meds) | One OpenFDA call serves many users |
 | Drug personalisation | 30–60% | Repeat questions skip the LLM |
-| Intent prompt LRU | n/a | Keeps token footprint small |
+| System prompt + tool defs | reused each round | Grounding copy stable across turns |
 
-Per-turn budget: ~700 tokens to classify intent; ~1,500 to compose a registry-grounded reply. Provider swap behind one port — cost vs quality tunable without touching the pipeline.
+Per-turn budget: routing classify (~700 tokens) plus one or more orchestrator rounds (~1–3k+ tokens depending on tools). Provider swap behind one port — cost vs quality tunable without touching the pipeline.
 
 **Target:** &lt;US$0.05 / MAU / month at MVP · &lt;US$0.02 at Growth with caching maturity.
 
@@ -3611,7 +3613,7 @@ class: deep eng-proto
   <ul class="assump-list">
     <li><strong>Engagement:</strong> 5 messages / user / day + 3 reminders / user / day</li>
     <li><strong>Traffic shape:</strong> peak-to-average ratio = <strong>5x</strong></li>
-    <li><strong>LLM calls per turn:</strong> 1 intent-classify + ~0.6 compose (rest cache-hit or short-circuit)</li>
+    <li><strong>LLM calls per turn:</strong> 1 routing classify + ~1–2 orchestrator rounds (tools / compose inside tools; cache hits reduce drug/registry calls)</li>
     <li><strong>Reminder path:</strong> near-zero LLM usage (template copy)</li>
   </ul>
 </div>

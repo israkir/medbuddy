@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from medbuddy.services import AppServices
 from medbuddy.core.i18n import t
-from medbuddy.models.domain import Intent
-from medbuddy.protocols import LLMPort, ProfilePatch
+from medbuddy.protocols import ProfilePatch
 from medbuddy.llm.prompts.persona import gender_option_label, normalized_profile_gender
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 from medbuddy.core.timezone import normalize_timezone_patch
@@ -56,38 +55,39 @@ def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
     return sep.join(parts)
 
 
-async def try_profile_intent_reply(
+def _normalize_profile_patch(patch: ProfilePatch) -> ProfilePatch:
+    """Normalize locale/timezone fields; drop invalid entries."""
+    out = dict(patch)
+    if "locale" in out:
+        norm_locale = normalize_locale_patch(out["locale"])
+        if norm_locale is None:
+            out.pop("locale", None)
+        else:
+            out["locale"] = norm_locale
+    if "timezone" in out:
+        if out["timezone"] is None:
+            pass
+        else:
+            norm_tz = normalize_timezone_patch(out["timezone"])
+            if norm_tz is None:
+                out.pop("timezone", None)
+            else:
+                out["timezone"] = norm_tz
+    return out
+
+
+async def apply_profile_update_from_extracted_patch(
     svc: AppServices,
     *,
     user_key: str,
-    intent: Intent,
-    user_text: str,
-    locale: str,
-    llm: LLMPort,
-) -> str | None:
-    if intent != Intent.UPDATE_PROFILE:
-        return None
-    patch = await llm.extract_profile_patch(user_text, locale=locale)
+    patch: ProfilePatch,
+    baseline_locale: str,
+) -> str:
+    """Persist a profile patch (already extracted) and return the user-facing ack message."""
+    patch = _normalize_profile_patch(patch)
     if not patch:
-        return t("profile.update_unclear", locale=locale)
-    if "locale" in patch:
-        norm_locale = normalize_locale_patch(patch["locale"])
-        if norm_locale is None:
-            patch.pop("locale", None)
-        else:
-            patch["locale"] = norm_locale
-    if "timezone" in patch:
-        if patch["timezone"] is None:
-            pass
-        else:
-            norm_tz = normalize_timezone_patch(patch["timezone"])
-            if norm_tz is None:
-                patch.pop("timezone", None)
-            else:
-                patch["timezone"] = norm_tz
-    if not patch:
-        return t("profile.update_unclear", locale=locale)
+        return t("profile.update_unclear", locale=baseline_locale)
     await svc.users.patch_user_profile(user_key, patch)
-    message_locale = effective_user_locale(patch.get("locale", locale))
+    message_locale = effective_user_locale(patch.get("locale", baseline_locale))
     summary = _profile_ack_summary(patch, locale=message_locale)
     return t("profile.updated", locale=message_locale, summary=summary)

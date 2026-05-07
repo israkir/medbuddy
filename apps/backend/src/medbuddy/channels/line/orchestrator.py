@@ -41,11 +41,12 @@ async def _handle_user_message(
     locale: str,
     inbound_was_audio: bool,
 ) -> None:
-    reply_text = await run_assistant_text_turn(
+    turn = await run_assistant_text_turn(
         svc,
         user_key=line_user_id,
         user_text=user_text,
     )
+    reply_text = turn.reply
 
     mode = svc.settings.line_voice_replies
     want_voice = mode == "always" or (mode == "audio_inbound" and inbound_was_audio)

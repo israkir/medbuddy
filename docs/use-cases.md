@@ -16,7 +16,7 @@
 
 | Kind | Implemented today |
 |------|-------------------|
-| **Assistant chat** | **`run_assistant_text_turn`** — one user text in, one reply string out. Used by **LINE** (text + STT transcript from voice), **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** (after STT). Implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py). |
+| **Assistant chat** | **`run_assistant_text_turn`** → **`AgentTurnResult`** (`reply` + optional **`metadata`**). Used by **LINE** (text + STT transcript from voice), **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** (after STT). Core implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py) + [`run_tool_agent_loop`](../apps/backend/src/medbuddy/agents/orchestrator.py). |
 | **LINE-only (no full assistant turn)** | **`follow`** → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
 | **HTTP without chat pipeline** | **`GET /v1/app/health`**, **`GET /v1/app/info`**, **`GET /v1/app/me`**, **`POST /v1/app/onboarding`**, **`GET /v1/app/summary`** — auth + user store / LLM as documented below. |
 | **Infrastructure** | **`GET /health`**, **`POST /internal/reminders/reconcile`** (cron). |
@@ -65,8 +65,8 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 | **`GET /v1/app/info`** | No | Public API metadata (non-secret). |
 | **`GET /v1/app/me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. |
 | **`POST /v1/app/onboarding`** | No | **`UserDataPort.save_onboarding_profile`** — name, optional age, gender, contacts, notes, **IANA `timezone`**, **`locale`** (`en` \| `zh-TW`). |
-| **`POST /v1/app/messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn(user_key=app_user_id, user_text=…)`** → `{"reply":"…"}`. |
-| **`POST /v1/app/messages/voice`** | **Yes** | Multipart **`file`** → **STT** (`transcribe_m4a`, language from profile **`locale`**) → **`run_assistant_text_turn`** on transcript → `{"reply":"…","transcript":"…"}`. |
+| **`POST /v1/app/messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn`** → JSON **`{"reply":"…","metadata":{}}`** (metadata often empty; e.g. **`simulated_emergency_notification`** when the simulated caregiver-notify tool ran). |
+| **`POST /v1/app/messages/voice`** | **Yes** | Multipart **`file`** → **STT** (`transcribe_m4a`, language from profile **`locale`**) → same assistant pipeline → `{"reply":"…","transcript":"…","metadata":{}}`. |
 | **`GET /v1/app/summary`** | No (dedicated tool path) | **`GenerateHealthSummaryTool`** with full history/meds — structured **doctor summary** JSON (+ `plain_text`), not the same JSON shape as chat-only summary text. |
 
 **Reference UI:** Expo **`Medication helper`** calls **`POST /v1/app/messages`** and **`POST /v1/app/messages/voice`** when live API mode is on — see [`frontend-expo.md`](frontend-expo.md).
@@ -78,31 +78,28 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 All **chat** turns share this flow (LINE text/voice transcript, **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** after STT).
 
 1. **Redact** PII for LLM inputs (`redact_pii_text` on the current line).
-2. **Load** user row + medication list **and** recent conversation turns **in parallel**; call **`interpret_user_turn`** with **recent redacted dialogue** so short follow-ups stay on-topic (or `MockLLM` in tests).
+2. **Load** user row + medication list **and** recent conversation turns **in parallel**; call **`interpret_user_turn`** with **recent redacted dialogue** (`MockLLM` in tests). Result: **`TurnInterpretation`** — drives steps **6–8** below (**emergency** / **`off_topic`**); otherwise logged for observability.
 3. Resolve **effective locale** from `user_row`.
 4. **Append** the **user** turn to the conversation store (**raw** user text).
 5. **Early exits (pending / language)** — in order:
-   - **`try_locale_change_reply`** when the user asked to switch reply language (returns assistant message; no full intent pipeline).
+   - **`try_locale_change_reply`** when the user asked to switch reply language (returns assistant message; no orchestrator).
    - **`try_resolve_pending_medication_add_confirmation`** when an incomplete **add** is waiting for yes/no/corrected details.
    - **`try_resolve_pending_dose_clarification`** when **which dose** is ambiguous.
    - **`try_resolve_pending_reminder_horizon`** when **how many days** of daily reminders is still unanswered.
-6. **`emergency`** — if classified intent is **`emergency`**, return fixed **`agent.emergency`** (**§3.14**).
+6. **`emergency`** — if classified intent is **`emergency`**, return fixed **`agent.emergency`** (**§3.14**) (no LLM reply body).
 7. **Intent hooks** — optional pilot short-circuit (**§5**).
 8. **`off_topic`** — fixed **`agent.off_topic`** (**§3.9**).
-9. **`update_profile`** — **`extract_profile_patch`** + `patch_user_profile` (**§3.8**).
-10. **Tool dispatch** — mapped intents: `list_medications`, `upcoming_doses`, `add_medication`, `update_medication`, `remove_medication`, `confirm_dose` (only if adherence **slots** are set — **§3.10**), `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`.
-11. **Fallback** — `compose_reply` for **`general_question`** and any intent **without** a tool mapping, **or** when **`confirm_dose`** has **no** adherence slots (**§3.10**).
-12. **`_maybe_append_pending_reminder`** — if **add-confirm** or **reminder-horizon** is still pending, append a one-line nudge after the main reply.
-13. **Append** the **assistant** turn and return reply text.
+9. **Tool orchestrator** — **`run_tool_agent_loop`** ([`agents/orchestrator.py`](../apps/backend/src/medbuddy/agents/orchestrator.py)): the model receives **system context** (medication id/name catalog, **`patient_context_for_llm`**) plus the **redacted** user line and calls **`LLMPort.complete_chat_with_tools`** in a loop (OpenAI native function calling; Gemini structured **`AgentOrchestratorStep`**). The server executes **named tools** (list/add/update/remove meds, **`remove_all_medications`**, **`disable_reminders`**, upcoming doses, confirm/missed dose, explain, side effects, interactions, vitals, health summary, **`export_health_journal`**, **`update_profile`**, **`simulate_notify_emergency_contact`**, …) and feeds **tool results** back until the model returns a final natural-language reply. Multiple tools may run in one user turn. **`AgentTurnResult`** carries **`metadata`** (e.g. **`simulated_emergency_notification`**) for HTTP clients.
+10. **`_maybe_append_pending_reminder`** — if **add-confirm** or **reminder-horizon** is still pending, append a one-line nudge after the main reply.
+11. **Append** the **assistant** turn and return **`AgentTurnResult`**.
 
-**Routing** uses the **`Intent`** enum ([`models/domain.py`](../apps/backend/src/medbuddy/models/domain.py)):
-`add_medication`, `update_medication`, `list_medications`, `upcoming_doses`, `remove_medication`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `update_profile`, `emergency`, `off_topic`, `general_question`. Adherence effects depend on **`record_pending_dose_as_taken`** / **`dose_adherence_note`** (see **§3.10**).
+**`interpret_user_turn`** sets **`emergency`** and **`off_topic`** (after hooks). All other behavior is **`run_tool_agent_loop`** — tool names, arguments, and reply prose. Adherence is **`confirm_dose`** tool arguments only.
 
 ---
 
-## 3. Intents (chat) — behaviors and examples
+## 3. Chat scenarios (tool-backed) — behaviors and examples
 
-Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockLLM`) decides **`intent`** and adherence slots.
+Section titles follow **`Intent`** / tool names for readability. **`interpret_user_turn`** does **not** select tools for the main path. **Examples** are illustrative; the orchestrator picks **`complete_chat_with_tools`** steps from the user message.
 
 ### 3.1 `list_medications`
 
@@ -280,21 +277,21 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 ## 5. Extensibility (intent hooks)
 
-**Scenario:** Pilot intercepts a classified intent before fixed refusals, profile, tools, or fallback.
+**Scenario:** Pilot intercepts a classified intent before **`off_topic`** and **`run_tool_agent_loop`**.
 
-**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`** after pending resolvers and **`emergency`**: **hooks** → **`off_topic`** → **`update_profile`** → **tools** (including **`confirm_dose`** when adherence slots apply — **§3.10**) → **`compose_reply`** fallback.
+**Process:** [`try_intent_hooks`](../apps/backend/src/medbuddy/extensibility/intent_hooks.py) — if a hook returns a non-empty string, that reply is used. Order in **`MedicationAgent`** after pending resolvers and **`emergency`**: **hooks** → **`off_topic`** → **`run_tool_agent_loop`** (tools include profile patch via **`update_profile`**, adherence via **`confirm_dose`**, etc.).
 
 ---
 
 ## 6. LINE dose reminder pushes (prototype)
 
-**Trigger:** Successful **`add_medication`**, **`update_medication`**, or **`remove_medication`** via medication intents (any channel using the same handler).
+**Trigger:** Successful medication save/update/delete **`UserDataPort`** operations after orchestrator tools (**`add_medication`**, **`update_medication`**, **`remove_medication`**, **`remove_all_medications`**, **`disable_reminders`** follow-up sync, etc.) — same **`sync_and_enqueue_reminders`** path as before.
 
 **User-visible outcome:** **LINE push** near **`scheduled_at`** (not in-app local notifications). Optional **follow-up nudges** after the primary push when **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is configured — see [`reminders.md`](reminders.md) and [`features.md` §8](features.md#8-line-dose-reminders-prototype).
 
 **Behavior:** **`dose_events`** rebuild from structured **`raw_metadata.reminder`** (e.g. **`daily_local_hhmm_list`** for multiple instants per day) + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. The string **`schedule`** field is for **display** in pushes; clock times come from stored reminder prefs populated from add-time extraction, not from parsing **`schedule`** alone.
 
-**Adherence in chat:** When **`interpret_user_turn`** sets adherence slots (**§3.10**), **`taken_at`** can be set without LINE postback.
+**Adherence in chat:** When the user confirms intake via the **`confirm_dose`** tool (or related flows), **`dose_events.taken_at`** can be set without LINE postback (**§3.10**).
 
 **Full reference:** [`reminders.md`](reminders.md).
 

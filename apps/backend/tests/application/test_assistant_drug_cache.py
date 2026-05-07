@@ -32,7 +32,9 @@ async def test_personalization_cache_hit_short_circuits(mock_settings) -> None:
         tts=base.tts,
         drug_caches=caches,
     )
-    out = await run_assistant_text_turn(svc, user_key="cache-hit-user", user_text="解釋阿斯匹靈")
+    out = (
+        await run_assistant_text_turn(svc, user_key="cache-hit-user", user_text="解釋阿斯匹靈")
+    ).reply
     assert out == "（快取）個人化用藥說明"
     caches.get_personalized_reply.assert_awaited_once()
     caches.save_personalized_reply.assert_not_awaited()
@@ -57,7 +59,9 @@ async def test_personalization_cache_miss_saves_after_compose(mock_settings) -> 
         tts=base.tts,
         drug_caches=caches,
     )
-    out = await run_assistant_text_turn(svc, user_key="cache-miss-user", user_text="解釋阿斯匹靈")
+    out = (
+        await run_assistant_text_turn(svc, user_key="cache-miss-user", user_text="解釋阿斯匹靈")
+    ).reply
     assert "阿斯匹靈" in out
     caches.get_personalized_reply.assert_awaited_once()
     caches.save_personalized_reply.assert_awaited_once()
@@ -89,7 +93,9 @@ async def test_personalization_llm_meta_source_is_model_when_no_reference_data(
         tts=base.tts,
         drug_caches=caches,
     )
-    out = await run_assistant_text_turn(svc, user_key="no-ref-user", user_text="解釋阿斯匹靈")
+    out = (
+        await run_assistant_text_turn(svc, user_key="no-ref-user", user_text="解釋阿斯匹靈")
+    ).reply
     assert "阿斯匹靈" in out
     caches.save_personalized_reply.assert_awaited_once()
     assert caches.save_personalized_reply.await_args.kwargs["llm_meta"]["source"] == "mock_llm"

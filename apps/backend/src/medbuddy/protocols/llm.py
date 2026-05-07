@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.models.domain import (
     ConversationTurn,
     HealthSummary,
@@ -28,7 +29,20 @@ class LLMPort(Protocol):
     async def interpret_user_turn(
         self, user_text: str, *, recent_context: str | None = None
     ) -> TurnInterpretation:
-        """Structured intent + adherence slots; server dispatches tools using these fields."""
+        """Structured intent + adherence slots (routing hints for fast paths)."""
+        ...
+
+    async def complete_chat_with_tools(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, list[ChatToolCall] | None]:
+        """One chat completion step with optional function tools (OpenAI-compatible messages).
+
+        Returns ``(assistant_content, tool_calls)``. When ``tool_calls`` is non-empty,
+        ``assistant_content`` may be None.
+        """
         ...
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:

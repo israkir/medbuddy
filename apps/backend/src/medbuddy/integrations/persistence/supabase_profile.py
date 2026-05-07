@@ -264,6 +264,27 @@ class SupabaseProfileMixin:
         log.info("DB vital_logs.add: patient_id=%s inserted=1 kind=%s", uid, kind.strip())
         return _vital_row_to_record(rows[0])
 
+    async def list_recent_vital_logs(
+        self, line_user_id: str, *, limit: int = 20
+    ) -> list[VitalLogRecord]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        lim = max(1, min(limit, 100))
+
+        def q() -> Any:
+            return (
+                self._client.table("vital_logs")
+                .select("id, kind, display_summary, payload, notes, recorded_at")
+                .eq("patient_id", uid)
+                .order("recorded_at", desc=True)
+                .limit(lim)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return [_vital_row_to_record(r) for r in rows]
+
     async def get_dose_clarification_pending(
         self, line_user_id: str
     ) -> DoseClarificationPending | None:

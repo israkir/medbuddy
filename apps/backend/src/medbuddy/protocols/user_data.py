@@ -47,6 +47,30 @@ class UserDataPort(Protocol):
 
     async def delete_medication(self, line_user_id: str, medication_id: str) -> bool: ...
 
+    async def delete_all_medications(self, line_user_id: str) -> int:
+        """Remove every medication row for the patient; return count deleted."""
+
+    async def bulk_disable_reminders(
+        self,
+        line_user_id: str,
+        *,
+        medication_id: str | None = None,
+    ) -> int:
+        """Turn off daily reminder materialization for all meds or one medication; return rows patched."""
+
+    async def merge_medication_raw_metadata(
+        self,
+        line_user_id: str,
+        medication_id: str,
+        reminder_patch: dict[str, Any],
+    ) -> MedicationRecord | None:
+        """Deep-merge keys under ``raw_metadata['reminder']`` and persist."""
+
+    async def list_recent_vital_logs(
+        self, line_user_id: str, *, limit: int = 20
+    ) -> list[VitalLogRecord]:
+        """Most recent vital log rows (newest first)."""
+
     async def patch_medication(
         self, line_user_id: str, medication_id: str, fields: dict[str, Any]
     ) -> MedicationRecord | None: ...

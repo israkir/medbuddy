@@ -42,9 +42,11 @@ async def test_log_vital_end_to_end_blood_pressure() -> None:
         locale="en",
         vital_log=VitalLogExtraction(kind="blood_pressure", systolic=118, diastolic=76),
     )
-    reply = await run_assistant_text_turn(
-        svc, user_key=key, user_text="my blood pressure was 118 over 76"
-    )
+    reply = (
+        await run_assistant_text_turn(
+            svc, user_key=key, user_text="my blood pressure was 118 over 76"
+        )
+    ).reply
     assert "118" in reply and "76" in reply
     vitals = svc.users._vitals.get(key, [])  # noqa: SLF001 — mock store
     assert len(vitals) == 1
@@ -60,5 +62,5 @@ async def test_log_vital_extraction_failure_user_message() -> None:
     await svc.users.get_or_create_user(key)
     await svc.users.patch_user_profile(key, {"locale": "en"})
     svc.llm = MockLLM(intent=Intent.LOG_VITAL, locale="en", vital_log=None)
-    reply = await run_assistant_text_turn(svc, user_key=key, user_text="log something")
+    reply = (await run_assistant_text_turn(svc, user_key=key, user_text="log something")).reply
     assert "didn" in reply.lower() or "clear" in reply.lower()

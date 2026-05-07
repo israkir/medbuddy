@@ -4,7 +4,7 @@ This document describes **proactive LINE push** reminders for scheduled medicati
 
 ## What it does
 
-- After a user **adds**, **updates**, or **removes** a medication via the assistant tools, the backend **rebuilds** upcoming rows in **`dose_events`** and, when **`REDIS_URL`** is set, **enqueues** [arq](https://arq-docs.helpmanual.io/) jobs so each row triggers a **LINE Messaging API push** near **`scheduled_at`** (UTC).
+- After a user **adds**, **updates**, **removes**, **clears all medications**, or **disables reminders** (bulk) via the assistant orchestrator tools, the backend **rebuilds** upcoming rows in **`dose_events`** and, when **`REDIS_URL`** is set, **enqueues** [arq](https://arq-docs.helpmanual.io/) jobs so each row triggers a **LINE Messaging API push** near **`scheduled_at`** (UTC).
 - The push text is localized under **`reminder.line_push`** in `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`).
 
 ## What it does *not* do (v1)

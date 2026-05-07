@@ -44,14 +44,14 @@ async def test_assistant_resolves_pending_dose_with_choice_one() -> None:
     )  # noqa: SLF001
 
     svc.llm = MockLLM(intent=Intent.CONFIRM_DOSE, record_pending_dose_as_taken=True, locale="en")
-    r1 = await run_assistant_text_turn(svc, user_key=key, user_text="I took it")
+    r1 = (await run_assistant_text_turn(svc, user_key=key, user_text="I took it")).reply
     assert "which one" in r1.lower()
     assert await svc.users.get_dose_clarification_pending(key) is not None
 
     svc.llm = MockLLM(
         intent=Intent.GENERAL_QUESTION, record_pending_dose_as_taken=False, locale="en"
     )
-    r2 = await run_assistant_text_turn(svc, user_key=key, user_text="2")
+    r2 = (await run_assistant_text_turn(svc, user_key=key, user_text="2")).reply
     assert "marked" in r2.lower()
     assert await svc.users.get_dose_clarification_pending(key) is None
     assert svc.users._doses[met_id].get("taken_at") is not None  # noqa: SLF001
@@ -90,7 +90,7 @@ async def test_assistant_resolves_pending_dose_all() -> None:
     svc.llm = MockLLM(
         intent=Intent.GENERAL_QUESTION, record_pending_dose_as_taken=False, locale="en"
     )
-    r2 = await run_assistant_text_turn(svc, user_key=key, user_text="all")
+    r2 = (await run_assistant_text_turn(svc, user_key=key, user_text="all")).reply
     assert "marked" in r2.lower()
     for i in ids:
         assert svc.users._doses[i].get("taken_at") is not None  # noqa: SLF001
@@ -129,7 +129,7 @@ async def test_assistant_invalid_clarification_keeps_pending() -> None:
     svc.llm = MockLLM(
         intent=Intent.GENERAL_QUESTION, record_pending_dose_as_taken=False, locale="en"
     )
-    r2 = await run_assistant_text_turn(svc, user_key=key, user_text="99")
+    r2 = (await run_assistant_text_turn(svc, user_key=key, user_text="99")).reply
     assert "numbers" in r2.lower() or "1" in r2.lower()
     assert await svc.users.get_dose_clarification_pending(key) is not None
 

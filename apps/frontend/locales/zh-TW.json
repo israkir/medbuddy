@@ -98,6 +98,7 @@
       "mandarinVoice": "怎麼用中文語音跟 MedBuddy 互動？",
       "familyView": "家人怎麼一起了解我的用藥計畫？"
     },
+    "simulatedEmergencyBanner": "緊急聯絡通知（模擬）— 未實際發送簡訊或撥打電話。",
     "disclaimer": "資料可能不完整。若有新症狀、要改劑量或緊急狀況，請儘速聯絡醫療人員。",
     "errorPrefix": "無法連到伺服器。",
     "errorAssistant": "目前連不到 MedBuddy，請檢查網路與 API 設定後再試。",

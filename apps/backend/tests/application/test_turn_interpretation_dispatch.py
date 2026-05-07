@@ -23,8 +23,9 @@ async def test_confirm_dose_intent_without_adherence_slots_does_not_mark_dose() 
     key = "U-interpret-no-adherence"
     await svc.users.get_or_create_user(key)
     await svc.users.patch_user_profile(key, {"locale": "en"})
-    reply = await run_assistant_text_turn(
-        svc, user_key=key, user_text="yes headache is still bothering"
-    )
+    reply = (
+        await run_assistant_text_turn(
+            svc, user_key=key, user_text="yes headache is still bothering"
+        )
+    ).reply
     assert "marked" not in reply.lower()
-    assert "(test mode)" in reply.lower() or "Got it:" in reply

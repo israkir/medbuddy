@@ -21,6 +21,7 @@ from medbuddy.llm.turn_interpretation import (
     turn_interpretation_from_classification,
     turn_interpretation_on_parse_failure,
 )
+from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
     IntentClassification,
@@ -636,3 +637,47 @@ class OpenAILLM(LLMPort):
             medications=med_items,
             result=result,
         )
+
+    def _complete_chat_with_tools_sync(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, list[ChatToolCall] | None]:
+        try:
+            resp = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.2,
+            )
+        except Exception:
+            log.error(
+                "OpenAI chat.completions tools failed: model=%s messages=%d tools=%d",
+                self._model,
+                len(messages),
+                len(tools),
+                exc_info=True,
+            )
+            raise
+        msg = resp.choices[0].message
+        if msg.tool_calls:
+            calls = [
+                ChatToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=(tc.function.arguments or "").strip() or "{}",
+                )
+                for tc in msg.tool_calls
+            ]
+            return (msg.content, calls)
+        out = (msg.content or "").strip()
+        return (out or None, None)
+
+    async def complete_chat_with_tools(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, list[ChatToolCall] | None]:
+        return await asyncio.to_thread(self._complete_chat_with_tools_sync, messages, tools)

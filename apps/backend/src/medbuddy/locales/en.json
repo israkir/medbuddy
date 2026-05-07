@@ -31,7 +31,9 @@
   "agent": {
     "generic_error": "Something went wrong on our side. Please try again in a moment — or ask someone you trust to help if it keeps happening.",
     "off_topic": "I’m here for your medications, reminders, and everyday health questions about them. I’m not the best fit for that topic — how about your medicines, doses, or what you’d like a reminder for?",
-    "emergency": "🚨 This sounds like a medical emergency. Please call 119 (ambulance) or 110 (police) right away, or have someone nearby call for you. If you can, sit or lie down safely and stay on the phone with emergency services. Do not take extra medication without speaking to them first.\n\nIf you have a family or emergency contact, please call them too.\n\nI am not able to provide emergency medical care — please get help from emergency services immediately."
+    "emergency": "🚨 This sounds like a medical emergency. Please call 119 (ambulance) or 110 (police) right away, or have someone nearby call for you. If you can, sit or lie down safely and stay on the phone with emergency services. Do not take extra medication without speaking to them first.\n\nIf you have a family or emergency contact, please call them too.\n\nI am not able to provide emergency medical care — please get help from emergency services immediately.",
+    "simulated_emergency_notify": "(Simulation) Your emergency contact would be notified about: {reason}. Saved contact on file: {contact_hint}. This is not a real SMS or phone call — please reach out to them yourself if you need help.",
+    "simulated_emergency_no_contact": "(No emergency contact saved in your profile yet.)"
   },
   "mocks": {
     "drugs": {
@@ -72,6 +74,10 @@
     "update_not_found": "I’m not sure which medication to update. Please include the medication name.",
     "update_incomplete": "I found {name}, but I need what to change (name, dose, schedule, or note).",
     "remove_not_found": "I couldn’t find that one on your list — try the drug name again, or ask to see your medications.",
+    "removed_all": "Removed all medications from your list ({count} entries).",
+    "reminders_disabled_all": "Turned off dose reminders for your medications ({count} records updated). Your medication names and doses are still saved.",
+    "reminders_disabled_one": "Turned off reminders for {name}.",
+    "reminders_disable_need_id": "Tell me which medication to silence reminders for, or ask to turn off all reminders.",
     "confirm_dose_none": "I don’t see a recent dose waiting to be checked off. If you meant a certain time or medicine, tell me a little more and I’ll try again.",
     "confirm_dose_ambiguous": "I see more than one dose that could match. Which one did you take?\n{options}\nYou can reply with the medication name and time, or say \"all\" if you took all listed doses.",
     "confirm_dose_note_ambiguous": "I found more than one recent taken dose. Which dose should I attach this note to?\n{options}\nPlease reply with the medication name and time.",
@@ -102,6 +108,12 @@
     "summary_spo2": "oxygen saturation {value}%",
     "summary_other": "{label}: {value}",
     "other_unknown_label": "reading"
+  },
+  "journal": {
+    "vitals_header": "Recent vital logs:",
+    "chat_header": "Recent chat excerpts:",
+    "med_notes_header": "Medication instructions / notes:",
+    "empty": "No journal entries on file yet — vitals and medication notes will appear as you log them."
   },
   "reminder": {
     "line_push": "Reminder ({time_local}): time for {name} ({dosage}). On your schedule: {schedule}. If unsure, check with your pharmacist or clinician.",

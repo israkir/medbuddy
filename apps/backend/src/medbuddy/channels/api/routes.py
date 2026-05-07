@@ -126,12 +126,12 @@ async def app_post_message(
 ) -> MessageReply:
     """Run one assistant turn (same core logic as LINE text messages)."""
     await svc.users.get_or_create_user(ctx.app_user_id)
-    reply = await run_assistant_text_turn(
+    turn = await run_assistant_text_turn(
         svc,
         user_key=ctx.app_user_id,
         user_text=body.text,
     )
-    return MessageReply(reply=reply)
+    return MessageReply(reply=turn.reply, metadata=turn.metadata)
 
 
 @router.post("/messages/voice", response_model=MessageVoiceReply)
@@ -166,12 +166,12 @@ async def app_post_voice_message(
     if not user_text:
         raise HTTPException(status_code=422, detail="transcription_empty")
 
-    reply = await run_assistant_text_turn(
+    turn = await run_assistant_text_turn(
         svc,
         user_key=ctx.app_user_id,
         user_text=user_text,
     )
-    return MessageVoiceReply(reply=reply, transcript=user_text)
+    return MessageVoiceReply(reply=turn.reply, transcript=user_text, metadata=turn.metadata)
 
 
 @router.get("/summary", response_model=HealthSummaryResponse)
