@@ -595,6 +595,7 @@ class GeminiLLM(LLMPort):
         recent_conversation: list[ConversationTurn],
         patient_context: str,
         locale: str,
+        health_issue_events_block: str = "",
     ) -> HealthSummaryResult:
         loc = locale or self._locale
         lang_lock = language_lock(loc)
@@ -615,17 +616,27 @@ class GeminiLLM(LLMPort):
             or "No recent conversation."
         )
 
+        issues_section = (
+            health_issue_events_block.strip()
+            if health_issue_events_block.strip()
+            else "None logged."
+        )
+
         prompt = (
             f"{lang_lock}\n\n"
             f"{persona}\n\n"
             "You are generating a doctor-ready health summary for a patient.\n\n"
             f"Patient profile signals:\n{patient_context}\n\n"
             f"Current medications:\n{med_lines}\n\n"
+            "Logged health-related issues (saved app timeline: routing-intent messages and vital "
+            "readings; chronological):\n"
+            f"{issues_section}\n\n"
             f"Recent conversation history (last 20 turns):\n{convo_lines}\n\n"
             "Generate a structured summary that:\n"
             "1. Is concise enough for a doctor to read in 30 seconds\n"
             "2. Lists all current medications with their likely therapeutic purpose\n"
-            "3. Extracts any symptoms, side effects, or adherence issues mentioned recently\n"
+            "3. Uses the logged health-related issues and conversation to extract symptoms, side "
+            "effects, wellness concerns, emergencies, vitals, and adherence issues\n"
             "4. Flags the top 3-5 concerns the doctor should know\n"
             "5. Suggests questions the patient might want to ask\n"
             f"6. Is written ENTIRELY in the required language — {lang_lock}\n"
@@ -641,6 +652,7 @@ class GeminiLLM(LLMPort):
         recent_conversation: list[ConversationTurn],
         patient_context: str,
         locale: str,
+        health_issue_events_block: str = "",
     ) -> HealthSummary:
         loc = locale or self._locale
         result = await asyncio.to_thread(
@@ -650,6 +662,7 @@ class GeminiLLM(LLMPort):
             recent_conversation=recent_conversation,
             patient_context=patient_context,
             locale=loc,
+            health_issue_events_block=health_issue_events_block,
         )
         med_items = [
             MedicationSummaryItem(

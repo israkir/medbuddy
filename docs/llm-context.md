@@ -152,6 +152,7 @@ Used inside tools (**Explain medication**, **Interaction check** fallback, **`co
 |--------|-------------------|
 | `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
 | Medications | Name, dosage, schedule, and **per-med `instructions`** (user notes) in the adapter prompt. |
+| Logged health issues | Chronological lines built from **`health_issue_events`** (cap **`MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT`**); classifier intents plus structured vital rows. Same PHI considerations as chat. |
 | Recent conversation | **Last 20 turns** embedded as `[role] content` in Gemini/OpenAI adapters. **Not** run through `redact_conversation_turns_for_llm` today—treat as **more sensitive** than `compose_reply` history. |
 | Prompt | Instructs the model not to output PII in the structured summary; does not remove PII from the **input** conversation. |
 

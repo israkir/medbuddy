@@ -175,7 +175,8 @@ apps/backend/src/medbuddy/
 │   ├── medication_add_confirm_resolve.py  # pending yes/no after add-medication preview
 │   ├── dose_clarification_resolve.py      # pending dose / adherence clarification
 │   ├── reminder_horizon_resolve.py        # pending “how many days of reminders?” answer
-│   └── vital_log_build.py                  # parses BP/glucose/etc. into VitalLogRecord
+│   ├── health_issue_event_log.py          # classifier-intent logging policy + doctor-summary block formatting
+│   └── vital_log_build.py                  # parses BP/glucose/etc. into payloads for HealthIssueEventRecord
 │
 ├── agents/                      # ← Domain logic (Layer: Domain)
 │   ├── medication_agent.py      # MedicationAgent — routing gates + orchestrator entry
@@ -211,7 +212,7 @@ apps/backend/src/medbuddy/
 │   │   └── openai_llm.py        # OpenAILLM (Chat Completions)
 │   ├── persistence/
 │   │   ├── supabase_client.py       # create_supabase_client()
-│   │   ├── supabase_profile.py      # SupabaseProfileMixin — profile/vitals/pending state
+│   │   ├── supabase_profile.py      # SupabaseProfileMixin — profile/health_issue_events/pending state
 │   │   ├── supabase_medications.py  # SupabaseMedicationMixin — medication CRUD
 │   │   ├── supabase_dose_events.py  # SupabaseDoseEventMixin — dose events + nudges
 │   │   ├── supabase_conversations.py # SupabaseConversationStore
@@ -512,7 +513,7 @@ patients (1) ──────────────────────�
     │                                          │
     │ (many)                                   │ (many)
     ├── conversation_turns                     └── dose_events
-    └── vital_logs (many)
+    └── health_issue_events (many)
 
 drug_personalization_cache (per-patient)
     │
@@ -583,19 +584,22 @@ End-user profile rows. `users` is reserved in Supabase; `patients` allows other 
 | `notes` | `text` | Optional note when marking taken |
 | `created_at` | `timestamptz` | |
 
-#### `vital_logs`
+#### `health_issue_events`
 
-Patient-reported vitals (`LogVitalTool` persists via `UserDataPort.add_vital_log`). Index: `vital_logs_patient_recorded_at_idx` on `(patient_id, recorded_at desc)`.
+Classifier-routed health turns and structured vitals. **`routing_intent`** matches **`Intent`** values (e.g. `general_question`, `emergency`) or **`log_vital`** for `LogVitalTool` rows. **`user_message`** stores the user line for intent-logged rows; vitals fill **`kind`**, **`display_summary`**, **`payload`**. Index: `health_issue_events_patient_created_at_idx` on `(patient_id, created_at desc)`.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `uuid` PK | |
 | `patient_id` | `uuid` FK → `patients` | |
-| `kind` | `text` | e.g. BP, glucose, weight |
-| `display_summary` | `text` | Short locale summary at save time for list/display |
-| `payload` | `jsonb` | Structured fields (e.g. systolic, diastolic, weight kg) |
-| `notes` | `text` | Optional free-text note |
-| `recorded_at` | `timestamptz` | When the measurement applies (defaults to insert time) |
+| `routing_intent` | `text` | Intent string or `log_vital` for structured readings |
+| `user_message` | `text` | User line when logged from routing policy; optional for vital-only rows |
+| `locale` | `text` | Effective UI locale when recorded |
+| `kind` | `text` | Vital subtype when `log_vital`; null for intent-only rows |
+| `display_summary` | `text` | Locale summary for vitals; optional for intent rows |
+| `payload` | `jsonb` | Structured vital fields or `{}` |
+| `notes` | `text` | Optional note |
+| `created_at` | `timestamptz` | Row time (defaults to insert time) |
 
 #### `drug_reference_cache`
 

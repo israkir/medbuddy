@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Sequence
 
 from medbuddy.models.domain import (
+    HEALTH_ROUTING_INTENT_VITAL,
     DoseClarificationPending,
+    HealthIssueEventRecord,
     MedicationAddConfirmationPending,
     ReminderHorizonPending,
-    VitalLogRecord,
     parse_pending_agent_clarification,
 )
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
@@ -31,12 +32,12 @@ def _default_profile_fields() -> dict[str, Any]:
 
 
 class MockProfileMixin:
-    """Profile, vital-log and pending-state methods for MockUserData."""
+    """Profile, health-issue events, and pending-state methods for MockUserData."""
 
     # Provided by MockUserData.__init__
     _users: dict[str, dict[str, Any]]
     _meds: dict[str, list[Any]]
-    _vitals: dict[str, list[VitalLogRecord]]
+    _vitals: dict[str, list[HealthIssueEventRecord]]
     _dose_clarification: dict[str, dict[str, Any] | None]
 
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]:
@@ -125,6 +126,46 @@ class MockProfileMixin:
                 row["locale"] = norm_loc
         return row
 
+    async def record_health_issue_event(
+        self,
+        line_user_id: str,
+        *,
+        routing_intent: str,
+        user_message: str,
+        locale: str,
+    ) -> HealthIssueEventRecord:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        rec = HealthIssueEventRecord(
+            id=str(uuid.uuid4()),
+            routing_intent=routing_intent.strip(),
+            user_message=user_message.strip(),
+            locale=locale.strip(),
+            kind=None,
+            display_summary=None,
+            payload={},
+            notes=None,
+            created_at=datetime.now(UTC),
+        )
+        self._vitals.setdefault(line_user_id, []).append(rec)
+        return rec
+
+    async def list_recent_health_issue_events(
+        self,
+        line_user_id: str,
+        *,
+        limit: int = 20,
+        routing_intents: Sequence[str] | None = None,
+    ) -> list[HealthIssueEventRecord]:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        items = list(self._vitals.get(line_user_id, []))
+        if routing_intents:
+            allowed = frozenset(routing_intents)
+            items = [r for r in items if r.routing_intent in allowed]
+        items.sort(key=lambda r: r.created_at, reverse=True)
+        return items[: max(1, min(limit, 200))]
+
     async def add_vital_log(
         self,
         line_user_id: str,
@@ -133,29 +174,36 @@ class MockProfileMixin:
         display_summary: str,
         payload: dict[str, Any],
         notes: str | None = None,
-    ) -> VitalLogRecord:
+        user_message: str | None = None,
+        locale: str | None = None,
+    ) -> HealthIssueEventRecord:
         await asyncio.sleep(0)
         await self.get_or_create_user(line_user_id)
         n = (notes or "").strip() or None
-        rec = VitalLogRecord(
+        um = (user_message or "").strip() or None
+        loc = (locale or "").strip() or None
+        rec = HealthIssueEventRecord(
             id=str(uuid.uuid4()),
+            routing_intent=HEALTH_ROUTING_INTENT_VITAL,
+            user_message=um,
+            locale=loc,
             kind=kind.strip(),
             display_summary=display_summary.strip(),
             payload=dict(payload),
             notes=n,
-            recorded_at=datetime.now(UTC),
+            created_at=datetime.now(UTC),
         )
         self._vitals.setdefault(line_user_id, []).append(rec)
         return rec
 
     async def list_recent_vital_logs(
         self, line_user_id: str, *, limit: int = 20
-    ) -> list[VitalLogRecord]:
-        await asyncio.sleep(0)
-        await self.get_or_create_user(line_user_id)
-        items = list(self._vitals.get(line_user_id, []))
-        items.sort(key=lambda r: r.recorded_at, reverse=True)
-        return items[: max(1, min(limit, 100))]
+    ) -> list[HealthIssueEventRecord]:
+        return await self.list_recent_health_issue_events(
+            line_user_id,
+            limit=limit,
+            routing_intents=(HEALTH_ROUTING_INTENT_VITAL,),
+        )
 
     async def get_dose_clarification_pending(
         self, line_user_id: str

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from medbuddy.application.profile_completion_nudge import append_profile_completion_nudge_if_due
+from medbuddy.application.profile.profile_completion_nudge import (
+    append_profile_completion_nudge_if_due,
+)
 from medbuddy.container import build_app_services
 from tests.helpers import make_mock_settings
 

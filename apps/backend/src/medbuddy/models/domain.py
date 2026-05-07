@@ -29,7 +29,8 @@ __all__ = [
     "MedicationRecord",
     "MessageKind",
     "TurnInterpretation",
-    "VitalLogRecord",
+    "HEALTH_ROUTING_INTENT_VITAL",
+    "HealthIssueEventRecord",
 ]
 
 
@@ -111,16 +112,23 @@ class MedicationRecord:
     raw_metadata: dict[str, Any] = field(default_factory=dict)
 
 
+# Structured vital rows use ``routing_intent`` = ``Intent.LOG_VITAL.value``.
+HEALTH_ROUTING_INTENT_VITAL = Intent.LOG_VITAL.value
+
+
 @dataclass(frozen=True)
-class VitalLogRecord:
-    """One saved vital-sign row for a patient."""
+class HealthIssueEventRecord:
+    """One row in ``health_issue_events`` (classifier-logged turn or structured vital)."""
 
     id: str
-    kind: str
-    display_summary: str
+    routing_intent: str
+    user_message: str | None
+    locale: str | None
+    kind: str | None
+    display_summary: str | None
     payload: dict[str, Any]
     notes: str | None
-    recorded_at: datetime
+    created_at: datetime
 
 
 @dataclass(frozen=True)

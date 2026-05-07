@@ -167,6 +167,8 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `CONVERSATION_HISTORY_TURNS` | Max turns loaded from storage for routing context (default `5`) |
 | `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | Max **prior** user/assistant turns injected into the tool orchestrator LLM per message (default **12**; `0` disables prior-turn injection) |
 | `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | When profile gaps remain (name, age, gender, emergency contact, health notes), append a gentle footer every **N** user messages on the main assistant path (default **12**; **`0`** disables) |
+| `MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS` | Optional comma-separated **`Intent`** values to persist to **`health_issue_events`**; omit for built-in defaults; **`all_non_off_topic`** logs every non-**`off_topic`** classifier outcome |
+| `MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT` | Max **`health_issue_events`** rows formatted into the doctor health-summary prompt (default **60**, max **200**) |
 
 ---
 

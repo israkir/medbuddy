@@ -3,7 +3,7 @@
 This is the primary depth feature: a structured, bilingual summary that
 a patient can share with their physician.  It aggregates:
   - Current medication list with inferred therapeutic purposes
-  - Recent conversation history (symptoms, side-effects, adherence notes)
+  - Logged health issue timeline (classifier intents + structured vitals) and recent chat
   - Anonymised demographic signals (age band, gender — never PII)
   - Suggested questions for the next doctor visit
 
@@ -20,6 +20,9 @@ from typing import Any
 from medbuddy.agents.base import ToolResult
 from medbuddy.services import AppServices
 from medbuddy.models.domain import MedicationRecord
+from medbuddy.application.health_events.health_issue_events_format import (
+    format_health_issue_events_for_summary,
+)
 from medbuddy.application.patient_llm_context import patient_context_for_llm
 
 log = logging.getLogger(__name__)
@@ -52,12 +55,18 @@ class GenerateHealthSummaryTool:
         patient_ctx = await patient_context_for_llm(
             svc, user_key, user_row, medications, locale=locale
         )
+        health_events = await svc.users.list_recent_health_issue_events(
+            user_key,
+            limit=svc.settings.health_issue_summary_events_limit,
+        )
+        health_block = format_health_issue_events_for_summary(health_events)
 
         log.info(
-            "health_summary: generating user_key=%s med_count=%d history_turns=%d",
+            "health_summary: generating user_key=%s med_count=%d history_turns=%d health_events=%d",
             user_key,
             len(medications),
             len(history),
+            len(health_events),
         )
 
         summary = await svc.llm.generate_health_summary(
@@ -66,6 +75,7 @@ class GenerateHealthSummaryTool:
             recent_conversation=history,
             patient_context=patient_ctx,
             locale=locale,
+            health_issue_events_block=health_block,
         )
 
         log.info(

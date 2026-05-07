@@ -112,6 +112,7 @@
   },
   "journal": {
     "vitals_header": "Recent vital logs:",
+    "health_timeline_header": "Logged health-related timeline (issues & vitals):",
     "chat_header": "Recent chat excerpts:",
     "med_notes_header": "Medication instructions / notes:",
     "empty": "No journal entries on file yet — vitals and medication notes will appear as you log them."

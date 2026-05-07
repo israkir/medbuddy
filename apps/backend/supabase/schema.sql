@@ -79,25 +79,34 @@ comment on column public.dose_events.last_nudge_at is
 create index if not exists dose_events_patient_id_scheduled_at_idx
     on public.dose_events (patient_id, scheduled_at);
 
-create table if not exists public.vital_logs (
+create table if not exists public.health_issue_events (
     id uuid primary key default gen_random_uuid(),
     patient_id uuid not null references public.patients (id) on delete cascade,
-    kind text not null,
-    display_summary text not null,
+    routing_intent text not null,
+    user_message text,
+    locale text,
+    kind text,
+    display_summary text,
     payload jsonb not null default '{}'::jsonb,
     notes text,
-    recorded_at timestamptz not null default now()
+    created_at timestamptz not null default now()
 );
 
-comment on table public.vital_logs is
-    'Patient-reported vital signs and simple measurements (BP, glucose, weight, etc.).';
-comment on column public.vital_logs.display_summary is
-    'Short patient-locale summary at save time for list/display.';
-comment on column public.vital_logs.payload is
-    'Structured fields (e.g. systolic, diastolic, weight_kg) for analytics and export.';
+comment on table public.health_issue_events is
+    'Health-related events: routing classifier intents (symptoms, adherence, …) and structured vitals (log_vital).';
+comment on column public.health_issue_events.routing_intent is
+    'Intent string (see Intent enum) or log_vital for structured readings from LogVitalTool.';
+comment on column public.health_issue_events.user_message is
+    'User line when logged from classifier policy; optional for vital-only tool rows.';
+comment on column public.health_issue_events.kind is
+    'Subtype for log_vital (e.g. blood_pressure); null for routing-intent-only rows.';
+comment on column public.health_issue_events.display_summary is
+    'Locale summary at save time (vitals); optional for routing-intent rows.';
+comment on column public.health_issue_events.payload is
+    'Structured vital fields or {} for routing-intent rows.';
 
-create index if not exists vital_logs_patient_recorded_at_idx
-    on public.vital_logs (patient_id, recorded_at desc);
+create index if not exists health_issue_events_patient_created_at_idx
+    on public.health_issue_events (patient_id, created_at desc);
 
 -- Global cache for drug usage / label snippets (OpenFDA, future TFDA scrape, etc.).
 -- Lookup: normalize user search text to ``query_key`` (e.g. lower(trim(query))) and match ``source``.
@@ -158,7 +167,7 @@ alter table public.patients enable row level security;
 alter table public.medications enable row level security;
 alter table public.conversation_turns enable row level security;
 alter table public.dose_events enable row level security;
-alter table public.vital_logs enable row level security;
+alter table public.health_issue_events enable row level security;
 alter table public.drug_reference_cache enable row level security;
 alter table public.drug_personalization_cache enable row level security;
 
@@ -196,9 +205,9 @@ create policy "medbuddy_dose_events_anon_rw"
     using (true)
     with check (true);
 
-drop policy if exists "medbuddy_vital_logs_anon_rw" on public.vital_logs;
-create policy "medbuddy_vital_logs_anon_rw"
-    on public.vital_logs
+drop policy if exists "medbuddy_health_issue_events_anon_rw" on public.health_issue_events;
+create policy "medbuddy_health_issue_events_anon_rw"
+    on public.health_issue_events
     for all
     to anon
     using (true)

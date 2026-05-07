@@ -27,7 +27,10 @@ from medbuddy.agents.tools.medication_crud import (
 )
 from medbuddy.agents.tools.upcoming_doses import ListUpcomingDosesTool
 from medbuddy.application.patient_llm_context import patient_context_for_llm
-from medbuddy.application.profile_intents import apply_profile_update_from_extracted_patch
+from medbuddy.application.health_events.health_issue_events_format import (
+    format_health_issue_events_for_summary,
+)
+from medbuddy.application.profile.profile_intents import apply_profile_update_from_extracted_patch
 from medbuddy.core.errors import Error as MedBuddyError
 from medbuddy.core.errors import (
     MedicationExtractionError,
@@ -320,9 +323,13 @@ async def execute_agent_tool(
             lines.append(t("journal.vitals_header", locale=locale))
             for v in vitals:
                 lines.append(
-                    f"- {v.recorded_at.isoformat()} | {v.kind} | {v.display_summary}"
+                    f"- {v.created_at.isoformat()} | {v.kind or ''} | {v.display_summary or ''}"
                     + (f" | notes: {v.notes}" if v.notes else "")
                 )
+        timeline = await svc.users.list_recent_health_issue_events(user_key, limit=40)
+        if timeline:
+            lines.append(t("journal.health_timeline_header", locale=locale))
+            lines.append(format_health_issue_events_for_summary(timeline))
         hist_snip = redact_conversation_turns_for_llm(ctx.history[-12:])
         if hist_snip:
             lines.append(t("journal.chat_header", locale=locale))

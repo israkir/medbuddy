@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from medbuddy.config import Settings, get_settings
-from medbuddy.models.domain import MedicationRecord, VitalLogRecord
+from medbuddy.models.domain import HealthIssueEventRecord, MedicationRecord
 from medbuddy.protocols import UserDataPort
 
 from .dose_events import MockDoseEventMixin
@@ -36,7 +36,7 @@ class MockUserData(MockProfileMixin, MockMedicationMixin, MockDoseEventMixin, Us
         self._settings = settings
         self._users: dict[str, dict[str, Any]] = {}
         self._meds: dict[str, list[MedicationRecord]] = {}
-        self._vitals: dict[str, list[VitalLogRecord]] = {}
+        self._vitals: dict[str, list[HealthIssueEventRecord]] = {}
         self._doses: dict[str, dict[str, Any]] = {}
         self._dose_clarification: dict[str, dict[str, Any] | None] = {}
 

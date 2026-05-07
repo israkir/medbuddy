@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from medbuddy.application.profile_intents import apply_profile_update_from_extracted_patch
+from .profile_intents import apply_profile_update_from_extracted_patch
 from medbuddy.models.domain import ConversationTurn, Intent
 from medbuddy.protocols import ProfilePatch
 from medbuddy.services import AppServices

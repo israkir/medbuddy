@@ -8,16 +8,23 @@ from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.agents.orchestrator import run_tool_agent_loop
-from medbuddy.application.dose_clarification_resolve import try_resolve_pending_dose_clarification
-from medbuddy.application.locale_intents import try_locale_change_reply
-from medbuddy.application.medication_add_confirm_resolve import (
+from medbuddy.application.health_events.health_issue_event_log import maybe_record_health_issue_turn
+from medbuddy.application.pending.dose_clarification_resolve import (
+    try_resolve_pending_dose_clarification,
+)
+from medbuddy.application.pending.locale_intents import try_locale_change_reply
+from medbuddy.application.pending.medication_add_confirm_resolve import (
     try_resolve_pending_medication_add_confirmation,
 )
-from medbuddy.application.emergency_contact_resolve import (
+from medbuddy.application.pending.reminder_horizon_resolve import (
+    try_resolve_pending_reminder_horizon,
+)
+from medbuddy.application.profile.emergency_contact_resolve import (
     try_resolve_emergency_contact_from_message,
 )
-from medbuddy.application.profile_completion_nudge import append_profile_completion_nudge_if_due
-from medbuddy.application.reminder_horizon_resolve import try_resolve_pending_reminder_horizon
+from medbuddy.application.profile.profile_completion_nudge import (
+    append_profile_completion_nudge_if_due,
+)
 from medbuddy.services import AppServices
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
 from medbuddy.core.i18n import t
@@ -77,6 +84,14 @@ class MedicationAgent:
             ConversationTurn(role="user", content=user_text, at=datetime.now(UTC)),
         )
         log.info("medication_agent: user_key=%s conversation appended role=user", user_key)
+
+        await maybe_record_health_issue_turn(
+            svc,
+            user_key=user_key,
+            user_text=user_text,
+            locale=locale,
+            intent=intent,
+        )
 
         locale_reply = await try_locale_change_reply(
             svc,

@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 from medbuddy.models.domain import (
     DoseClarificationPending,
     DoseEventPendingCandidate,
     DoseEventReminderPayload,
+    HealthIssueEventRecord,
     MedicationAddConfirmationPending,
     MedicationDraft,
     MedicationRecord,
     ReminderHorizonPending,
-    VitalLogRecord,
 )
 
 ProfilePatch = dict[str, Any]
@@ -66,10 +66,29 @@ class UserDataPort(Protocol):
     ) -> MedicationRecord | None:
         """Deep-merge keys under ``raw_metadata['reminder']`` and persist."""
 
+    async def record_health_issue_event(
+        self,
+        line_user_id: str,
+        *,
+        routing_intent: str,
+        user_message: str,
+        locale: str,
+    ) -> HealthIssueEventRecord:
+        """Persist a classifier-routed health turn (symptoms, wellness, adherence, …)."""
+
+    async def list_recent_health_issue_events(
+        self,
+        line_user_id: str,
+        *,
+        limit: int = 20,
+        routing_intents: Sequence[str] | None = None,
+    ) -> list[HealthIssueEventRecord]:
+        """Most recent rows (newest first). When ``routing_intents`` is set, restrict to those intents."""
+
     async def list_recent_vital_logs(
         self, line_user_id: str, *, limit: int = 20
-    ) -> list[VitalLogRecord]:
-        """Most recent vital log rows (newest first)."""
+    ) -> list[HealthIssueEventRecord]:
+        """Most recent structured vital rows (``routing_intent`` = ``log_vital``)."""
 
     async def patch_medication(
         self, line_user_id: str, medication_id: str, fields: dict[str, Any]
@@ -83,7 +102,10 @@ class UserDataPort(Protocol):
         display_summary: str,
         payload: dict[str, Any],
         notes: str | None = None,
-    ) -> VitalLogRecord: ...
+        user_message: str | None = None,
+        locale: str | None = None,
+    ) -> HealthIssueEventRecord:
+        """Persist a structured vital reading (``routing_intent`` = ``log_vital``)."""
 
     async def sync_upcoming_dose_events(self, line_user_id: str) -> list[tuple[str, datetime]]:
         """Replace future pending dose rows and return ``(dose_event_id, scheduled_at)`` for enqueue."""

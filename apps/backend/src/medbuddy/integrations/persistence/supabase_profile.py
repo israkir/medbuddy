@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from medbuddy.models.domain import (
+    HEALTH_ROUTING_INTENT_VITAL,
     DoseClarificationPending,
+    HealthIssueEventRecord,
     MedicationAddConfirmationPending,
     ReminderHorizonPending,
-    VitalLogRecord,
     parse_pending_agent_clarification,
 )
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
@@ -49,7 +50,7 @@ def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _vital_row_to_record(row: dict[str, Any]) -> VitalLogRecord:
+def _health_issue_row_to_record(row: dict[str, Any]) -> HealthIssueEventRecord:
     raw = row.get("payload")
     if not isinstance(raw, dict):
         raw = {}
@@ -61,15 +62,26 @@ def _vital_row_to_record(row: dict[str, Any]) -> VitalLogRecord:
         nout = notes.strip() or None
     else:
         nout = str(notes)
-    ra = row.get("recorded_at")
-    recorded = _parse_ts(ra) if ra is not None else datetime.now(UTC)
-    return VitalLogRecord(
+    ts_raw = row.get("created_at") or row.get("recorded_at")
+    created = _parse_ts(ts_raw) if ts_raw is not None else datetime.now(UTC)
+    ri = row.get("routing_intent") or row.get("event_type") or HEALTH_ROUTING_INTENT_VITAL
+    ri_s = str(ri).strip()
+    if ri_s == "vital":
+        ri_s = HEALTH_ROUTING_INTENT_VITAL
+    k = row.get("kind")
+    ds = row.get("display_summary")
+    um = row.get("user_message")
+    loc = row.get("locale")
+    return HealthIssueEventRecord(
         id=str(row["id"]),
-        kind=str(row["kind"]),
-        display_summary=str(row["display_summary"]),
+        routing_intent=ri_s,
+        user_message=(str(um).strip() if isinstance(um, str) and um.strip() else None),
+        locale=(str(loc).strip() if isinstance(loc, str) and loc.strip() else None),
+        kind=(str(k).strip() if isinstance(k, str) and k.strip() else None),
+        display_summary=(str(ds).strip() if isinstance(ds, str) and ds.strip() else None),
         payload=raw,
         notes=nout,
-        recorded_at=recorded,
+        created_at=created,
     )
 
 
@@ -78,7 +90,7 @@ def _run_q(fn: Any) -> Any:
 
 
 class SupabaseProfileMixin:
-    """Profile, vital-log and pending-state methods for SupabaseUserData."""
+    """Profile, health-issue events, and pending-state methods for SupabaseUserData."""
 
     # Provided by SupabaseUserData.__init__
     _client: Any
@@ -233,6 +245,69 @@ class SupabaseProfileMixin:
             raise RuntimeError(msg)
         return _user_row_to_dict(row)
 
+    async def record_health_issue_event(
+        self,
+        line_user_id: str,
+        *,
+        routing_intent: str,
+        user_message: str,
+        locale: str,
+    ) -> HealthIssueEventRecord:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        body: dict[str, Any] = {
+            "patient_id": uid,
+            "routing_intent": routing_intent.strip(),
+            "user_message": user_message.strip(),
+            "locale": locale.strip(),
+            "payload": {},
+        }
+
+        def insert() -> Any:
+            return self._client.table("health_issue_events").insert(body).execute()
+
+        resp = await _run_q(insert)
+        rows = resp.data or []
+        if not rows:
+            msg = "Supabase health_issue_events insert returned no row"
+            raise RuntimeError(msg)
+        log.info(
+            "DB health_issue_events.record: patient_id=%s routing_intent=%s",
+            uid,
+            routing_intent.strip(),
+        )
+        return _health_issue_row_to_record(rows[0])
+
+    async def list_recent_health_issue_events(
+        self,
+        line_user_id: str,
+        *,
+        limit: int = 20,
+        routing_intents: Sequence[str] | None = None,
+    ) -> list[HealthIssueEventRecord]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+        lim = max(1, min(limit, 200))
+
+        def q() -> Any:
+            query = (
+                self._client.table("health_issue_events")
+                .select(
+                    "id, routing_intent, user_message, locale, kind, "
+                    "display_summary, payload, notes, created_at"
+                )
+                .eq("patient_id", uid)
+                .order("created_at", desc=True)
+                .limit(lim)
+            )
+            if routing_intents:
+                query = query.in_("routing_intent", list(routing_intents))
+            return query.execute()
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return [_health_issue_row_to_record(r) for r in rows]
+
     async def add_vital_log(
         self,
         line_user_id: str,
@@ -241,12 +316,19 @@ class SupabaseProfileMixin:
         display_summary: str,
         payload: dict[str, Any],
         notes: str | None = None,
-    ) -> VitalLogRecord:
+        user_message: str | None = None,
+        locale: str | None = None,
+    ) -> HealthIssueEventRecord:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
         n = (notes or "").strip() or None
+        um = (user_message or "").strip() or None
+        loc = (locale or "").strip() or None
         body: dict[str, Any] = {
             "patient_id": uid,
+            "routing_intent": HEALTH_ROUTING_INTENT_VITAL,
+            "user_message": um,
+            "locale": loc,
             "kind": kind.strip(),
             "display_summary": display_summary.strip(),
             "payload": dict(payload),
@@ -254,36 +336,28 @@ class SupabaseProfileMixin:
         }
 
         def insert() -> Any:
-            return self._client.table("vital_logs").insert(body).execute()
+            return self._client.table("health_issue_events").insert(body).execute()
 
         resp = await _run_q(insert)
         rows = resp.data or []
         if not rows:
-            msg = "Supabase vital_logs insert returned no row"
+            msg = "Supabase health_issue_events insert returned no row"
             raise RuntimeError(msg)
-        log.info("DB vital_logs.add: patient_id=%s inserted=1 kind=%s", uid, kind.strip())
-        return _vital_row_to_record(rows[0])
+        log.info(
+            "DB health_issue_events.vital: patient_id=%s kind=%s",
+            uid,
+            kind.strip(),
+        )
+        return _health_issue_row_to_record(rows[0])
 
     async def list_recent_vital_logs(
         self, line_user_id: str, *, limit: int = 20
-    ) -> list[VitalLogRecord]:
-        user = await self.get_or_create_user(line_user_id)
-        uid = user["id"]
-        lim = max(1, min(limit, 100))
-
-        def q() -> Any:
-            return (
-                self._client.table("vital_logs")
-                .select("id, kind, display_summary, payload, notes, recorded_at")
-                .eq("patient_id", uid)
-                .order("recorded_at", desc=True)
-                .limit(lim)
-                .execute()
-            )
-
-        resp = await _run_q(q)
-        rows = resp.data or []
-        return [_vital_row_to_record(r) for r in rows]
+    ) -> list[HealthIssueEventRecord]:
+        return await self.list_recent_health_issue_events(
+            line_user_id,
+            limit=limit,
+            routing_intents=(HEALTH_ROUTING_INTENT_VITAL,),
+        )
 
     async def get_dose_clarification_pending(
         self, line_user_id: str
