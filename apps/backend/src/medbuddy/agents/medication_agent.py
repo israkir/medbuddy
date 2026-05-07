@@ -146,12 +146,29 @@ class MedicationAgent:
 
         if intent == Intent.EMERGENCY:
             log.warning("medication_agent: user_key=%s emergency intent matched", user_key)
-            reply = t("agent.emergency", locale=locale)
+            contact_raw = user_row.get("emergency_contact")
+            hint = contact_raw.strip() if isinstance(contact_raw, str) and contact_raw.strip() else ""
+            if hint:
+                reply = t("agent.emergency_with_saved_contact", locale=locale)
+                reason = _preview_text(safe_text, limit=120)
+                reply = (
+                    f"{reply}\n\n"
+                    + t(
+                        "agent.simulated_emergency_notify",
+                        locale=locale,
+                        reason=reason,
+                        contact_hint=hint,
+                    )
+                )
+                meta: dict[str, Any] = {"simulated_emergency_notification": True}
+            else:
+                reply = t("agent.emergency", locale=locale)
+                meta = {}
             await svc.conversations.append_turn(
                 user_key,
                 ConversationTurn(role="assistant", content=reply, at=datetime.now(UTC)),
             )
-            return AgentTurnResult(reply=reply, metadata={})
+            return AgentTurnResult(reply=reply, metadata=meta)
 
         contact_reply = await try_resolve_emergency_contact_from_message(
             svc,
