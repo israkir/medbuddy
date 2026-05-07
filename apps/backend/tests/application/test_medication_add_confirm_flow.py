@@ -25,7 +25,7 @@ async def test_add_medication_incomplete_triggers_confirm_then_yes_saves() -> No
         instructions=None,
     )
     svc.llm = MockLLM(intent=Intent.ADD_MEDICATION, medication_draft=draft, locale="en")
-    r1 = await run_assistant_text_turn(svc, user_key=key, user_text="add vitamin d")
+    r1 = (await run_assistant_text_turn(svc, user_key=key, user_text="add vitamin d")).reply
     assert "vitamin d" in r1.lower()
     assert "yes" in r1.lower()
     pending = await svc.users.get_medication_add_confirmation_pending(key)
@@ -33,7 +33,7 @@ async def test_add_medication_incomplete_triggers_confirm_then_yes_saves() -> No
     assert pending.draft.name == "Vitamin D"
 
     svc.llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale="en")
-    r2 = await run_assistant_text_turn(svc, user_key=key, user_text="yes")
+    r2 = (await run_assistant_text_turn(svc, user_key=key, user_text="yes")).reply
     assert "vitamin" in r2.lower() or "saved" in r2.lower()
     meds = await svc.users.list_medications(key)
     assert len(meds) == 1
@@ -59,7 +59,7 @@ async def test_add_medication_incomplete_no_cancel_clears_pending() -> None:
     assert await svc.users.get_medication_add_confirmation_pending(key) is not None
 
     svc.llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale="en")
-    r2 = await run_assistant_text_turn(svc, user_key=key, user_text="no")
+    r2 = (await run_assistant_text_turn(svc, user_key=key, user_text="no")).reply
     assert "didn" in r2.lower() or "add" in r2.lower()
     assert len(await svc.users.list_medications(key)) == 0
     assert await svc.users.get_medication_add_confirmation_pending(key) is None

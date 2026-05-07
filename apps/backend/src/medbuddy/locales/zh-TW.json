@@ -31,7 +31,9 @@
   "agent": {
     "generic_error": "這邊剛剛出了點狀況，請稍後再試一次；若一直不行，也可以請家人協助。",
     "off_topic": "我主要陪您處理用藥提醒、藥物相關問題與照護相關的詢問。這個主題我不太適合回答，要不要聊聊您的用藥、劑量，或想記住的服藥時間？",
-    "emergency": "🚨 您說的狀況聽起來非常緊急，請立刻撥打 119（救護車）或請旁邊的人幫您撥打。請保持鎮定，坐下或躺好，等待救援，並保持電話接通。未經急救人員指示，請不要自行服藥。\n\n如果您有緊急聯絡人或家人，也請同步通知他們。\n\nMedBuddy 無法提供緊急醫療協助，請務必立刻向急救人員求助。"
+    "emergency": "🚨 您說的狀況聽起來非常緊急，請立刻撥打 119（救護車）或請旁邊的人幫您撥打。請保持鎮定，坐下或躺好，等待救援，並保持電話接通。未經急救人員指示，請不要自行服藥。\n\n如果您有緊急聯絡人或家人，也請同步通知他們。\n\nMedBuddy 無法提供緊急醫療協助，請務必立刻向急救人員求助。",
+    "simulated_emergency_notify": "（模擬）若為真實狀況，系統會通知您的緊急聯絡人：{reason}。檔案中聯絡方式：{contact_hint}。這不是真的簡訊或電話——若需要協助，請您自己也主動聯絡對方。",
+    "simulated_emergency_no_contact": "（尚未在個人檔保存緊急聯絡方式）"
   },
   "mocks": {
     "drugs": {
@@ -72,6 +74,10 @@
     "update_not_found": "我目前無法判斷要更新哪一個藥，請加上藥名。",
     "update_incomplete": "我有找到 {name}，但還需要你告訴我要改哪個欄位（藥名、劑量、時間或備註）。",
     "remove_not_found": "清單上找不到這個藥名，請再說一次，或先問「我的藥清單」。",
+    "removed_all": "已從清單移除全部藥物（共 {count} 筆）。",
+    "reminders_disabled_all": "已關閉用藥提醒（更新了 {count} 筆紀錄）。藥名與劑量仍保留在清單中。",
+    "reminders_disabled_one": "已關閉「{name}」的提醒。",
+    "reminders_disable_need_id": "請告訴我要關閉哪一種藥的提醒，或說「全部」關閉所有提醒。",
     "confirm_dose_none": "目前沒有可以勾選的近期用藥時段；若您指的是某個時間或藥名，再說一點細節好嗎？",
     "confirm_dose_ambiguous": "我看到有不只一筆可能符合的用藥，想請您確認是哪一筆：\n{options}\n您可以回覆藥名與時間；若上述都已服用，也可以回覆「全部」。",
     "confirm_dose_note_ambiguous": "我看到近期已服用紀錄不只一筆，想請您確認這段備註要加在哪一筆：\n{options}\n請回覆藥名與時間。",
@@ -102,6 +108,12 @@
     "summary_spo2": "血氧 {value}%",
     "summary_other": "{label}：{value}",
     "other_unknown_label": "紀錄"
+  },
+  "journal": {
+    "vitals_header": "近期生理數值紀錄：",
+    "chat_header": "近期對話摘要：",
+    "med_notes_header": "藥物備註／指示：",
+    "empty": "尚無可用紀錄——開始記錄血壓血糖或服藥備註後會顯示在這裡。"
   },
   "reminder": {
     "line_push": "用藥提醒（{time_local}）：該吃 {name}（{dosage}）。你存的吃法：{schedule}。若有不確定請問藥師或醫師。",

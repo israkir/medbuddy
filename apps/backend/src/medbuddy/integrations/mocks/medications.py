@@ -49,6 +49,68 @@ class MockMedicationMixin:
                 return True
         return False
 
+    async def delete_all_medications(self, line_user_id: str) -> int:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        meds = self._meds.get(line_user_id, [])
+        n = len(meds)
+        self._meds[line_user_id] = []
+        return n
+
+    async def merge_medication_raw_metadata(
+        self,
+        line_user_id: str,
+        medication_id: str,
+        reminder_patch: dict[str, Any],
+    ) -> MedicationRecord | None:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        meds = self._meds.get(line_user_id, [])
+        for i, m in enumerate(meds):
+            if m.id != medication_id:
+                continue
+            raw = dict(m.raw_metadata) if m.raw_metadata else {}
+            rem = raw.get("reminder")
+            if not isinstance(rem, dict):
+                rem = {}
+            rem = {**rem, **reminder_patch}
+            raw["reminder"] = rem
+            updated = MedicationRecord(
+                id=m.id,
+                name=m.name,
+                dosage=m.dosage,
+                schedule=m.schedule,
+                instructions=m.instructions,
+                raw_metadata=raw,
+            )
+            meds[i] = updated
+            return updated
+        return None
+
+    async def bulk_disable_reminders(
+        self,
+        line_user_id: str,
+        *,
+        medication_id: str | None = None,
+    ) -> int:
+        await asyncio.sleep(0)
+        meds = await self.list_medications(line_user_id)
+        if medication_id is not None:
+            meds = [m for m in meds if m.id == medication_id]
+        n = 0
+        for m in meds:
+            if await self.merge_medication_raw_metadata(
+                line_user_id,
+                m.id,
+                {
+                    "materialize_daily": False,
+                    "horizon_days": None,
+                    "needs_horizon_confirmation": False,
+                },
+            ):
+                n += 1
+        return n
+
     async def patch_medication(
         self, line_user_id: str, medication_id: str, fields: dict[str, Any]
     ) -> MedicationRecord | None:

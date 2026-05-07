@@ -148,6 +148,15 @@ class MockProfileMixin:
         self._vitals.setdefault(line_user_id, []).append(rec)
         return rec
 
+    async def list_recent_vital_logs(
+        self, line_user_id: str, *, limit: int = 20
+    ) -> list[VitalLogRecord]:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        items = list(self._vitals.get(line_user_id, []))
+        items.sort(key=lambda r: r.recorded_at, reverse=True)
+        return items[: max(1, min(limit, 100))]
+
     async def get_dose_clarification_pending(
         self, line_user_id: str
     ) -> DoseClarificationPending | None:

@@ -67,8 +67,8 @@ This TDD documents the **current prototype runtime** (Python/FastAPI). The MVP/G
 │           application/assistant_turn.py                         │
 │                       │                                         │
 │                       ▼                                         │
-│           agents/MedicationAgent                                │
-│           (intent → tool dispatch)                              │
+│           agents/MedicationAgent + orchestrator                 │
+│           (routing hints → complete_chat_with_tools loop)       │
 │                       │                                         │
 │          ┌────────────┼─────────────────┐                       │
 │          ▼            ▼                 ▼                       │
@@ -109,13 +109,13 @@ agents/          (per-port files)     (concrete or mock)
 
 **Trade-off accepted:** Protocol interfaces add a layer of indirection that is extra overhead for simple operations. This cost is accepted because the integrations (LLM, Supabase, LINE, OpenFDA) are the most likely points of change.
 
-### 2.2 Agent-dispatch pattern
+### 2.2 LLM tool orchestration pattern
 
-**Decision:** `MedicationAgent` maps each classified intent to a typed tool subclass and calls `tool.run(...)`. Tools are responsible for exactly one operation and return a `ToolResult`.
+**Decision:** After **`interpret_user_turn`** (routing hints: emergency, off_topic, logging), **`run_tool_agent_loop`** calls **`LLMPort.complete_chat_with_tools`** so the model selects **registered tool names** (OpenAI tools API / Gemini structured steps). Server-side handlers execute **`AgentTool`** implementations and feed **tool messages** back until a final reply or step cap.
 
-**Rationale:** Keeps `application/assistant_turn.py` thin — it classifies intent, builds context, delegates to the agent, and persists the turn. Each tool can be tested in isolation.
+**Rationale:** Keeps `application/assistant_turn.py` thin — it delegates to **`MedicationAgent`**, which gates safety paths then runs the orchestrator. Tools remain small and testable; multi-step combinations (bulk ops + reply) stay explicit in logs.
 
-**Trade-off accepted:** A single LLM call classifies intent before tool dispatch, adding ~200–400ms latency per turn. This is preferable to a multi-step chain LLM approach for the prototype's bounded intent set.
+**Trade-off accepted:** Orchestrator rounds add latency and token cost versus a single classify-and-dispatch hop; gains natural multi-tool turns and clearer alignment between user language and tool arguments.
 
 ### 2.3 Mock-first development
 
@@ -123,11 +123,11 @@ agents/          (per-port files)     (concrete or mock)
 
 **Rationale:** CI and local development must be zero-friction. The mock adapters exercise real application logic (not stubs that always succeed), catching integration contract violations before they reach production.
 
-### 2.4 Single-table LLM intent classification
+### 2.4 Structured routing hint plus tool orchestration
 
-**Decision:** A single structured `interpret_user_turn` call classifies intent and extracts adherence fields per user turn. There is no multi-step "chain of thought" pipeline.
+**Decision:** **`interpret_user_turn`** is one structured call per turn for **`Intent`** (+ optional fields for logs). **`complete_chat_with_tools`** implements the assistant: multiple provider rounds and **registered tool** execution per user message.
 
-**Rationale:** For a closed intent set (16 intents), single-call classification is cheaper, faster, and easier to test than agentic chains. A future open-domain expansion may revisit this.
+**Rationale:** Routing hints keep emergency/off_topic cheap and deterministic; tool loops handle phrasing, arguments, and multi-step workflows without expanding an unconstrained ReAct surface — tools are **registered in code**.
 
 ### 2.5 Pilot sign-off vs deployed voice paths
 
@@ -170,7 +170,7 @@ apps/backend/src/medbuddy/
 ├── application/                 # ← Application core (Layer: Use Cases)
 │   ├── assistant_turn.py        # run_assistant_text_turn() — delegates to MedicationAgent
 │   ├── patient_llm_context.py   # patient_context_for_llm() — dose sync + upcoming schedule blob
-│   ├── profile_intents.py       # try_profile_intent_reply — update_profile (LLM extract + patch)
+│   ├── profile_intents.py       # apply_profile_update_from_extracted_patch (orchestrator update_profile)
 │   ├── locale_intents.py        # try_locale_change_reply — quick locale switch from user text
 │   ├── medication_add_confirm_resolve.py  # pending yes/no after add-medication preview
 │   ├── dose_clarification_resolve.py      # pending dose / adherence clarification
@@ -178,7 +178,8 @@ apps/backend/src/medbuddy/
 │   └── vital_log_build.py                  # parses BP/glucose/etc. into VitalLogRecord
 │
 ├── agents/                      # ← Domain logic (Layer: Domain)
-│   ├── medication_agent.py      # MedicationAgent — intent→tool dispatch
+│   ├── medication_agent.py      # MedicationAgent — routing gates + orchestrator entry
+│   ├── orchestrator.py        # run_tool_agent_loop — complete_chat_with_tools
 │   ├── base.py                  # AgentTool base class, ToolResult
 │   └── tools/
 │       ├── medication_crud.py   # List/Add/Update/RemoveMedicationTool
@@ -279,8 +280,8 @@ application/assistant_turn.py
 agents/medication_agent.py
     │   1. Load profile + medications + recent turns; redact_pii_text; interpret_user_turn
     │   2. Persist user turn (original text, not redacted)
-    │   3. Dispatch order §5.1 (locale / pending states / emergency / hooks / …)
-    │   4. Persist assistant turn
+    │   3. Dispatch order §5.1 (locale / pending / emergency / hooks / off_topic / orchestrator)
+    │   4. Persist assistant turn (+ optional metadata on HTTP)
     ▼
 channels/line/orchestrator.py
     │ line_client.reply_message(reply_token, reply_text)
@@ -306,7 +307,7 @@ application/assistant_turn.py
     │   (same pipeline as LINE text — §4.1)
     ▼
 channels/api/routes.py
-    │ return {"reply": reply_text}
+    │ return {"reply": reply_text, "metadata": {...}}
     ▼
 HTTP client
 ```
@@ -329,7 +330,7 @@ application/assistant_turn.py
     │ run_assistant_text_turn(user_key, transcript)
     ▼
 HTTP client
-    │ {"reply": "…", "transcript": "…"}
+    │ {"reply": "…", "transcript": "…", "metadata": {}}
 ```
 
 TTS for the reply is **client-side** (e.g. **expo-speech**) using profile/UI language — not returned as audio from this endpoint.
@@ -426,62 +427,59 @@ LINE platform
 
 ## 5. Agent layer
 
-`MedicationAgent` (`agents/medication_agent.py`) implements the agent-dispatch pattern. Given a `TurnInterpretation` from `interpret_user_turn` and execution context, it selects and runs the appropriate `AgentTool`.
+`MedicationAgent` (`agents/medication_agent.py`) applies **fast routing** using `TurnInterpretation` from `interpret_user_turn`, then **`run_tool_agent_loop`** (`agents/orchestrator.py`) for the main chat path.
 
 ### 5.1 Dispatch order
 
 `MedicationAgent.run()` executes in this order after `interpret_user_turn` returns:
 
-1. **`try_locale_change_reply`** — conversational locale switch without going through `update_profile` when the model/user text indicates a language change.
+1. **`try_locale_change_reply`** — conversational locale switch without the orchestrator when the user text indicates a language change.
 2. **`try_resolve_pending_medication_add_confirmation`** — user answering yes/no to a pending add-medication preview (state in `UserDataPort`, not a separate intent).
 3. **`try_resolve_pending_dose_clarification`** — user answering a pending adherence/dose clarification.
 4. **`try_resolve_pending_reminder_horizon`** — user supplying how many days ahead to materialize reminders (after `add_medication` requested it).
-5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** tool, **no** diagnostic `compose_reply`.
+5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** orchestrator.
 6. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
-7. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no LLM for the reply body.
-8. **`Intent.UPDATE_PROFILE`** — `try_profile_intent_reply` (LLM `extract_profile_patch` → persist).
-9. **Registered tools** (`_TOOL_MAP`): for `confirm_dose`, **`ConfirmDoseTool` runs only when** `record_pending_dose_as_taken` or `dose_adherence_note` is set; otherwise **`compose_reply`** is used as `general_question`.
-10. **Intents without a tool** (e.g. `general_question`, `log_vital`) → **`compose_reply`** fallback.
-11. **`_maybe_append_pending_reminder`** — if add-confirmation or reminder-horizon is still pending, append a one-line nudge so context is not lost after a side question.
+7. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no orchestrator for the reply body.
+8. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, … Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
+9. **`_maybe_append_pending_reminder`** — if add-confirmation or reminder-horizon is still pending, append a one-line nudge after the orchestrator reply.
+
+Returns **`AgentTurnResult`** (`reply` + optional **`metadata`**, e.g. simulated caregiver notification).
 
 ```
-TurnInterpretation (intent + adherence slots)
+TurnInterpretation (routing hint)
     │
-    ├── locale / pending resolvers (steps 1–4) — may return before intent dispatch
+    ├── locale / pending resolvers (steps 1–4) — may return early
     ├── emergency (step 5)
     ├── try_intent_hooks (step 6)
     ├── off_topic (step 7)
-    ├── update_profile (step 8)
-    ├── list_medications          → ListMedicationsTool
-    ├── upcoming_doses            → ListUpcomingDosesTool
-    ├── add_medication            → AddMedicationTool
-    ├── update_medication         → UpdateMedicationTool
-    ├── remove_medication         → RemoveMedicationTool
-    ├── report_missed_dose        → ReportMissedDoseTool
-    ├── confirm_dose              → ConfirmDoseTool only if adherence slots set; else compose_reply
-    ├── explain_medication        → ExplainMedicationTool
-    ├── report_side_effects       → ReportSideEffectsTool
-    ├── interaction_check         → InteractionCheckTool
-    ├── request_summary           → GenerateHealthSummaryTool
-    └── log_vital / general_question / unmapped → compose_reply() fallback
+    └── run_tool_agent_loop (step 8)
+            │
+            └── complete_chat_with_tools ⟷ registered tools (multi-step) → final reply
 ```
 
 ### 5.2 Tool registry
 
-| Tool | Intent | Key operations |
-|------|--------|---------------|
-| `ListMedicationsTool` | `list_medications` | Load medication list → i18n formatted reply |
-| `ListUpcomingDosesTool` | `upcoming_doses` | Sync dose_events → list pending rows in local-time window (~7 days) → i18n formatted schedule |
-| `AddMedicationTool` | `add_medication` | LLM extract draft → persist → drug grounding → compose acknowledgment → reminder sync |
-| `UpdateMedicationTool` | `update_medication` | LLM resolve patch → update → i18n confirm → reminder sync |
-| `RemoveMedicationTool` | `remove_medication` | LLM resolve target → delete → i18n confirm → reminder sync |
-| `ReportMissedDoseTool` | `report_missed_dose` | Mark latest pending dose window as missed (`missed_at`) |
-| `ConfirmDoseTool` | `confirm_dose` | Apply `record_pending_dose_as_taken` / `dose_adherence_note` from interpretation → i18n confirmation |
-| `ExplainMedicationTool` | `explain_medication` | Personalization cache check → drug reference fetch → compose → cache save |
-| `ReportSideEffectsTool` | `report_side_effects` | Side-effect oriented compose with optional drug grounding |
-| `InteractionCheckTool` | `interaction_check` | Drug reference fetch → interaction-focused compose → cache save |
-| `LogVitalTool` | `log_vital` | Structured vital extraction → persist vital log → i18n acknowledgment |
-| `GenerateHealthSummaryTool` | `request_summary` | Aggregate patient context + history → structured LLM summary output |
+Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equivalents; handlers map names to `AgentTool.run` or orchestrator branches.
+
+| Tool class / name | Key operations |
+|---------------------|----------------|
+| `ListMedicationsTool` / `list_medications` | Load medication list → i18n formatted reply |
+| `ListUpcomingDosesTool` / `list_upcoming_doses` | Sync dose_events → list pending rows in local-time window (~7 days) → i18n formatted schedule |
+| `AddMedicationTool` / `add_medication` | LLM extract draft → persist → drug grounding → compose acknowledgment → reminder sync |
+| `UpdateMedicationTool` / `update_medication` | LLM resolve patch → update → i18n confirm → reminder sync |
+| `RemoveMedicationTool` / `remove_medication` | LLM resolve target → delete → i18n confirm → reminder sync |
+| `remove_all_medications` | Delete all medications + sync reminders |
+| `disable_reminders` | Bulk or single-med reminder disable + sync |
+| `ReportMissedDoseTool` / `report_missed_dose` | Mark latest pending dose window as missed (`missed_at`) |
+| `ConfirmDoseTool` / `confirm_dose` | Apply structured **`record_pending_dose_as_taken`** / **`dose_adherence_note`** from **tool arguments** → i18n confirmation |
+| `ExplainMedicationTool` / `explain_medication` | Personalization cache check → drug reference fetch → compose → cache save |
+| `ReportSideEffectsTool` / `report_side_effects` | Side-effect oriented compose with optional drug grounding |
+| `InteractionCheckTool` / `interaction_check` | Drug reference fetch → interaction-focused compose → cache save |
+| `LogVitalTool` / `log_vital` | Structured vital extraction → persist vital log → i18n acknowledgment |
+| `GenerateHealthSummaryTool` / `request_summary` | Aggregate patient context + history → structured LLM summary output |
+| `export_health_journal` | Structured journal export |
+| `update_profile` | **`extract_profile_patch`** → **`patch_user_profile`** |
+| `simulate_notify_emergency_contact` | Simulated caregiver notify + **metadata** for HTTP clients |
 
 ### 5.3 Tool interface
 
@@ -858,7 +856,7 @@ Authoritative method signatures and return types are in **`apps/backend/src/medb
 |------|---------|
 | Identity | `drug_cache_provenance_id` (property) — stored on personalized cache rows |
 | Intent / profile | `interpret_user_turn`, `extract_profile_patch(..., *, locale)`, `extract_locale_intent` |
-| Chat | `compose_reply`, `simplify_drug_text_to_patient_zh` |
+| Chat / orchestration | `complete_chat_with_tools`, `compose_reply`, `simplify_drug_text_to_patient_zh` |
 | Medications | `extract_medication_draft`, `resolve_medication_removal_id`, `resolve_medication_update`, `compose_medication_added_reply` (takes persisted `saved: MedicationRecord`, not a draft) |
 | Vitals | `extract_vital_log` |
 | Safety / summary | `check_interactions_structured` → `InteractionResult`; `generate_health_summary` → domain `HealthSummary` |
@@ -896,6 +894,7 @@ Pydantic models in `llm/schemas.py` back provider JSON extraction. Domain wrappe
 `integrations/mocks/llm.py` implements `LLMPort` for CI and local development:
 
 - `interpret_user_turn` yields `general_question` by default with adherence fields off.
+- `complete_chat_with_tools` runs a deterministic multi-step loop in tests (tool rounds then final text).
 - Tests pass explicit `intent=`, `record_pending_dose_as_taken`, `dose_adherence_note`, `medication_draft`, `locale_intent`, `removal_medication_id`, etc. to mirror real structured outputs.
 - `compose_reply` returns templated i18n strings.
 - No external API calls; no API keys required.
@@ -1016,7 +1015,7 @@ Application exceptions are caught at the channel layer and produce user-visible 
 
 | Failure | Behavior |
 |---------|----------|
-| `interpret_user_turn` parse error | Log warning with `user_key`; fall through to `compose_reply` with `general_question` intent |
+| `interpret_user_turn` parse error | Log warning; **`turn_interpretation_on_parse_failure()`** — safe default **`TurnInterpretation`**; orchestrator still runs |
 | `compose_reply` error | Return i18n error string; persist empty assistant turn to maintain history integrity |
 | Structured extraction error (add/remove) | Return i18n "couldn't understand" reply; no medication record written |
 
@@ -1277,11 +1276,10 @@ Use cases:
 
 ### 16.4 Adding a new agent tool
 
-1. Add an `Intent` value in `models/domain.py`.
-2. Extend **`IntentClassification.intent`** allowed strings in `llm/schemas.py` and **`INTENT_CLASSIFICATION_INSTRUCTIONS`** in `llm/intent_classification_prompt.py` (and any provider-specific classification wrappers if present).
-3. Subclass or implement `AgentTool` in `agents/tools/<name>.py` with `async def run(self, **kwargs: Any) -> ToolResult`.
-4. Register the tool in `MedicationAgent`’s `_TOOL_MAP`.
-5. If the tool (or `compose_reply`) needs new persistence, add methods to `UserDataPort` and implement in `MockUserData` + `SupabaseUserData`.
+1. Add an OpenAI-compatible tool definition (name, description, parameters) in `llm/agent_tool_definitions.py` and the Gemini parallel if required.
+2. Handle the tool **name** in `agents/orchestrator.py` — delegate to an `AgentTool` in `agents/tools/<name>.py` (`async def run(...) -> ToolResult`) or inline orchestration.
+3. If the tool needs new persistence, add methods to `UserDataPort` and implement in `MockUserData` + `SupabaseUserData`.
+4. Add i18n keys and tests (`tests/application/`). Optionally extend **`interpret_user_turn`** / **`Intent`** prompts **only** if you need the new label in logs or routing gates.
 
 ### 16.5 Adding a new locale
 
@@ -1297,7 +1295,7 @@ These are best-effort targets for the prototype — not contractual SLAs.
 
 | Attribute | Target | Notes |
 |-----------|--------|-------|
-| **Assistant turn latency (p90)** | < 5s | LLM interpretation + tool dispatch + compose reply |
+| **Assistant turn latency (p90)** | < 5s | Routing classify + **`complete_chat_with_tools`** rounds + tool handlers |
 | **Reminder delivery lag** | < 5 min from `scheduled_at` | Under normal conditions with arq worker running |
 | **Reconcile coverage** | 100% of overdue reminders re-enqueued within 60 min | Assuming 15–60 min cron frequency |
 | **Availability** | Best effort; no SLA | Render web service with health check restart |

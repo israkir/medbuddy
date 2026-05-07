@@ -19,16 +19,17 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 | **Recent conversation turns** | Yes, **after redaction** | `redact_conversation_turns_for_llm` in the same module. |
 | **Patient “context” block** | Yes, **redacted/narrowed** | Built via `patient_context_for_llm` → `build_patient_context_for_llm` in `apps/backend/src/medbuddy/application/patient_llm_context.py` + `llm/prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule), and when present a **time-ordered upcoming dose** section from materialized **`dose_events`** (local times, drug names, dose/schedule text — same facts as LINE reminder targets). |
 | **Drug reference / label snippets** | Yes | From registries (e.g. OpenFDA), not end-user PII. |
-| **Turn interpretation** | Yes, on **redacted** user text | `MedicationAgent` → `LLMPort.interpret_user_turn` (intent + adherence slots; see `apps/backend/src/medbuddy/application/assistant_turn.py` → `MedicationAgent`). |
+| **Turn interpretation** | Yes, on **redacted** user text | `LLMPort.interpret_user_turn` → **`Intent`** (+ optional fields for logs). Used for **`emergency`** / **`off_topic`** gates only. |
+| **Tool orchestration rounds** | Yes | Each assistant/tool cycle sends **system prompt**, **patient catalog/context**, **redacted** user line, and prior **assistant + tool** messages in the OpenAI/Gemini adapters (`complete_chat_with_tools`). Tool **results** are JSON/text echoed back to the model in follow-on rounds. |
 | **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
-| **Profile fields from chat** | Yes, for extraction (**often raw user message**) | `application/profile_intents.py` → `LLMPort.extract_profile_patch` (structured output); then **`patch_user_profile`**. |
+| **Profile fields from chat** | Yes, for extraction (**often raw user message**) | **`update_profile`** tool in **`run_tool_agent_loop`** → `LLMPort.extract_profile_patch` → **`patch_user_profile`** (`application/profile_intents.py`). |
 | **Health summary** | Yes | Structured prompt includes **unredacted** recent conversation turns in adapters today—see **[llm-context.md](./llm-context.md)**. |
 
 ## What is not sent to an LLM (by design)
 
 - **Raw** `health_notes`, `emergency_contact`, or **exact** `age_years` inside the standard **`build_patient_context_for_llm`** block (those appear only as coarse signals or omitted).
 
-**Exceptions:** Profile/locale extractors and health-summary prompts may include **raw or unredacted** user or conversation text where the feature requires it—see **[llm-context.md](./llm-context.md)**. Dose adherence notes are chosen in the **same** `interpret_user_turn` call as intent (on **redacted** `safe_text`), not a separate raw dose-note pass.
+**Exceptions:** Profile extractors and health-summary prompts may include **raw or unredacted** user or conversation text where the feature requires it—see **[llm-context.md](./llm-context.md)**. Adherence and dose notes are set only via the **`confirm_dose`** tool (**`interpret_user_turn`** does not apply adherence).
 
 ## User-facing vs model-facing context
 

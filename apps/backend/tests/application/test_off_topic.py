@@ -20,7 +20,9 @@ async def test_off_topic_refusal_english_mock() -> None:
     key = "U-off-topic-en"
     await svc.users.get_or_create_user(key)
     await svc.users.patch_user_profile(key, {"locale": "en"})
-    reply = await run_assistant_text_turn(svc, user_key=key, user_text="What's the weather today?")
+    reply = (
+        await run_assistant_text_turn(svc, user_key=key, user_text="What's the weather today?")
+    ).reply
     assert "medication" in reply.lower() or "medicine" in reply.lower()
     assert "best fit" in reply.lower() or "fit for" in reply.lower()
 
@@ -34,6 +36,6 @@ async def test_off_topic_refusal_zh_mock() -> None:
     svc.llm = MockLLM(intent=Intent.OFF_TOPIC)
     key = "U-off-topic-zh"
     await svc.users.get_or_create_user(key)
-    reply = await run_assistant_text_turn(svc, user_key=key, user_text="今天天氣怎麼樣")
+    reply = (await run_assistant_text_turn(svc, user_key=key, user_text="今天天氣怎麼樣")).reply
     assert "用藥" in reply or "藥" in reply
     assert "適合" in reply or "聊聊" in reply

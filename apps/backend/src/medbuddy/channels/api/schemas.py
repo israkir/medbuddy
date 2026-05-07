@@ -65,6 +65,10 @@ class MessageCreate(BaseModel):
 
 class MessageReply(BaseModel):
     reply: str
+    metadata: dict[str, object] = Field(
+        default_factory=dict,
+        description="Structured flags for the client UI (e.g. simulated emergency notification).",
+    )
 
 
 class MessageVoiceReply(BaseModel):
@@ -72,6 +76,7 @@ class MessageVoiceReply(BaseModel):
 
     reply: str
     transcript: str
+    metadata: dict[str, object] = Field(default_factory=dict)
 
 
 class MeResponse(BaseModel):

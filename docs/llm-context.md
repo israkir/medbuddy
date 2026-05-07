@@ -79,11 +79,22 @@ Implementation reference: `apps/backend/src/medbuddy/protocols/llm.py` (`LLMPort
 |--------|-------------------|
 | Current user message | **Redacted** (`safe_text` in `MedicationAgent`). |
 | `recent_context` | Last few turns formatted as `role: content` after **redaction** (`_recent_context_for_intent` → `redact_conversation_turns_for_llm`). |
-| Prompt + schema | `format_intent_classification_prompt` (`medbuddy/llm/intent_classification_prompt.py`) + pydantic **`IntentClassification`** (`medbuddy/llm/schemas.py`): **`intent`**, **`reasoning`**, **`record_pending_dose_as_taken`**, **`dose_adherence_note`**. Adapters map the parse to **`TurnInterpretation`** (`medbuddy/llm/turn_interpretation.py` → `medbuddy/models/domain.py`). **`MedicationAgent`** uses **`intent`** for routing and passes adherence fields into **`ConfirmDoseTool`** when applicable. |
+| Prompt + schema | **`IntentClassification`** → **`TurnInterpretation`**. **`intent`** gates **`emergency`** / **`off_topic`**; remaining fields are for logs/metrics. Tools and adherence come only from **`complete_chat_with_tools`**. |
+
+### `complete_chat_with_tools`
+
+Multi-step medication orchestration: OpenAI **chat.completions** with **`tools`** / Gemini structured **`AgentOrchestratorStep`** (see `integrations/llm/*.py`). Each round includes **system** instructions (persona + medication id/name catalog + **`patient_context_for_llm`**), **redacted** user text on the first user message, and subsequent **assistant** + **tool** messages as the loop progresses.
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User line (first turn) | **Redacted** (`safe_text`). |
+| System content | Catalog of medication **ids/names** for tool arguments; de-identified patient block; locale-aware instructions (`agent_system_prompt.py`). |
+| Tool outputs | Server-executed tool replies (often localized strings or JSON summaries); may echo user-facing medication names and schedule text—**not** an extra redaction pass today. |
+| Later rounds | Model may emit natural-language **assistant** content between tool calls; same thread is sent to the provider until a final reply or step limit. |
 
 ### `compose_reply`
 
-Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_lookup.py`), and **Interaction check** fallback when structured interaction analysis is unavailable.
+Used inside tools (**Explain medication**, **Interaction check** fallback, **`compose_reply`-style paths**), not as the top-level assistant dispatcher.
 
 | Input | Redaction / notes |
 |--------|-------------------|
@@ -132,7 +143,7 @@ Used by `MedicationAgent` fallback, **Explain medication** (`agents/tools/drug_l
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| User message | **Raw** `user_text` (not passed through `redact_pii_text` in `try_profile_intent_reply`). Intentional so the model can extract user-requested profile updates (for example preferred name, contact, locale, timezone); increases exposure of PII in the provider API relative to redacted flows. |
+| User message | **Raw** `user_text` when the orchestrator runs **`update_profile`** → **`extract_profile_patch`**. Intentional so the model can extract profile updates (name, contact, locale, timezone); higher PII exposure than redacted chat lines. |
 
 ### `generate_health_summary`
 
@@ -169,7 +180,7 @@ Personalized replies for explain/interaction intents are keyed by a fingerprint 
 |--------|----------|
 | Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
 | Patient context builders | `apps/backend/src/medbuddy/llm/prompts/persona.py`, `apps/backend/src/medbuddy/application/patient_llm_context.py` |
-| Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py` |
+| Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py`, `apps/backend/src/medbuddy/agents/orchestrator.py` |
 | LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` |
 | Privacy overview | [docs/privacy.md](./privacy.md) |
 

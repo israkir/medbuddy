@@ -99,6 +99,98 @@ class SupabaseMedicationMixin:
         log.info("DB medications.delete: patient_id=%s deleted=%d", uid, len(rows))
         return len(rows) > 0
 
+    async def delete_all_medications(self, line_user_id: str) -> int:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+
+        def q() -> Any:
+            return self._client.table("medications").delete().eq("patient_id", uid).execute()
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        n = len(rows)
+        log.info("DB medications.delete_all: patient_id=%s deleted=%d", uid, n)
+        return n
+
+    async def merge_medication_raw_metadata(
+        self,
+        line_user_id: str,
+        medication_id: str,
+        reminder_patch: dict[str, Any],
+    ) -> MedicationRecord | None:
+        user = await self.get_or_create_user(line_user_id)
+        uid = user["id"]
+
+        def select_one() -> Any:
+            return (
+                self._client.table("medications")
+                .select("id, name, dosage, schedule, instructions, raw_metadata")
+                .eq("patient_id", uid)
+                .eq("id", medication_id)
+                .limit(1)
+                .execute()
+            )
+
+        resp = await _run_q(select_one)
+        rows = resp.data or []
+        if not rows:
+            return None
+        row = rows[0]
+        raw = row.get("raw_metadata")
+        if not isinstance(raw, dict):
+            raw = {}
+        rem = raw.get("reminder")
+        if not isinstance(rem, dict):
+            rem = {}
+        rem_merged = {**rem, **reminder_patch}
+        raw_merged = {**raw, "reminder": rem_merged}
+        payload: dict[str, Any] = {"raw_metadata": raw_merged}
+
+        def upd() -> Any:
+            return (
+                self._client.table("medications")
+                .update(payload)
+                .eq("patient_id", uid)
+                .eq("id", medication_id)
+                .execute()
+            )
+
+        uresp = await _run_q(upd)
+        urows = uresp.data or []
+        if not urows:
+            return None
+        return _med_row_to_record(urows[0])
+
+    async def bulk_disable_reminders(
+        self,
+        line_user_id: str,
+        *,
+        medication_id: str | None = None,
+    ) -> int:
+        meds = await self.list_medications(line_user_id)
+        if medication_id is not None:
+            meds = [m for m in meds if m.id == medication_id]
+        n = 0
+        for m in meds:
+            updated = await self.merge_medication_raw_metadata(
+                line_user_id,
+                m.id,
+                {
+                    "materialize_daily": False,
+                    "horizon_days": None,
+                    "needs_horizon_confirmation": False,
+                },
+            )
+            if updated is not None:
+                n += 1
+        log.info(
+            "DB medications.bulk_disable_reminders: user=%s med_filter=%s patched=%d",
+            line_user_id,
+            medication_id or "all",
+            n,
+        )
+        return n
+
     async def patch_medication(
         self, line_user_id: str, medication_id: str, fields: dict[str, Any]
     ) -> MedicationRecord | None:

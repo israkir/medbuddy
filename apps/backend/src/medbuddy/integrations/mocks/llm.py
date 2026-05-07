@@ -1,8 +1,10 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.core.i18n import t
+from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
     InteractionCheckResult,
@@ -20,6 +22,30 @@ from medbuddy.models.domain import (
     TurnInterpretation,
 )
 from medbuddy.protocols import LLMPort, ProfilePatch
+
+_MOCK_INTENT_TOOL: dict[Intent, str] = {
+    Intent.LIST_MEDICATIONS: "list_medications",
+    Intent.UPCOMING_DOSES: "list_upcoming_doses",
+    Intent.ADD_MEDICATION: "add_medication",
+    Intent.REMOVE_MEDICATION: "remove_medication",
+    Intent.UPDATE_MEDICATION: "update_medication",
+    Intent.CONFIRM_DOSE: "confirm_dose",
+    Intent.REPORT_MISSED_DOSE: "report_missed_dose",
+    Intent.EXPLAIN_MEDICATION: "explain_medication",
+    Intent.REPORT_SIDE_EFFECTS: "report_side_effects",
+    Intent.INTERACTION_CHECK: "interaction_check",
+    Intent.LOG_VITAL: "log_vital",
+    Intent.REQUEST_SUMMARY: "generate_health_summary",
+    Intent.UPDATE_PROFILE: "update_profile",
+}
+
+
+def _last_user_content(messages: list[dict[str, Any]]) -> str:
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            c = m.get("content")
+            return c if isinstance(c, str) else ""
+    return ""
 
 
 class MockLLM(LLMPort):
@@ -60,6 +86,7 @@ class MockLLM(LLMPort):
         self._vital_log = vital_log
         self._locale_intent = locale_intent
         self.last_interpret_user_turn_input: str | None = None
+        self._orch_step = 0
 
     @property
     def drug_cache_provenance_id(self) -> str:
@@ -230,3 +257,47 @@ class MockLLM(LLMPort):
             medications=med_items,
             result=result,
         )
+
+    async def complete_chat_with_tools(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, list[ChatToolCall] | None]:
+        await asyncio.sleep(0)
+        _ = tools
+        if len(messages) <= 2:
+            self._orch_step = 0
+        self._orch_step += 1
+        step = self._orch_step
+
+        if step >= 2:
+            tool_texts = [
+                str(m.get("content", "")).strip()
+                for m in messages
+                if m.get("role") == "tool" and str(m.get("content", "")).strip()
+            ]
+            if tool_texts:
+                return ("\n\n".join(tool_texts), None)
+
+        if step == 1 and self._intent is not None:
+            name = _MOCK_INTENT_TOOL.get(self._intent)
+            if name:
+                args = "{}"
+                if name == "confirm_dose":
+                    record = (
+                        self._record_pending_dose_as_taken
+                        if self._record_pending_dose_as_taken is not None
+                        else True
+                    )
+                    note = self._dose_adherence_note
+                    payload: dict[str, Any] = {
+                        "record_pending_dose_as_taken": bool(record),
+                    }
+                    if note:
+                        payload["dose_adherence_note"] = note
+                    args = json.dumps(payload)
+                return (None, [ChatToolCall(id="mock-tc-1", name=name, arguments=args)])
+
+        ut = _last_user_content(messages)
+        return (self.reply_template.format(user_message=ut), None)

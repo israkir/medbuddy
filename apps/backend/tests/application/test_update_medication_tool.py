@@ -33,11 +33,13 @@ async def test_update_medication_updates_dosage_schedule_and_instructions() -> N
             clear_instructions=False,
         ),
     )
-    reply = await run_assistant_text_turn(
-        svc,
-        user_key=key,
-        user_text="update my aspirin to 81mg after breakfast and note avoid tea right after dose",
-    )
+    reply = (
+        await run_assistant_text_turn(
+            svc,
+            user_key=key,
+            user_text="update my aspirin to 81mg after breakfast and note avoid tea right after dose",
+        )
+    ).reply
     meds = await svc.users.list_medications(key)
     assert len(meds) == 1
     assert meds[0].dosage == "81mg"

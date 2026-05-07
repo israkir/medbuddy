@@ -21,7 +21,9 @@ from medbuddy.llm.turn_interpretation import (
     turn_interpretation_from_classification,
     turn_interpretation_on_parse_failure,
 )
+from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.llm.schemas import (
+    AgentOrchestratorStep,
     HealthSummaryResult,
     IntentClassification,
     InteractionCheckResult,
@@ -663,3 +665,66 @@ class GeminiLLM(LLMPort):
             medications=med_items,
             result=result,
         )
+
+    def _gemini_complete_chat_with_tools_sync(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, list[ChatToolCall] | None]:
+        parts: list[str] = []
+        for m in messages:
+            role = m.get("role")
+            if role == "system":
+                parts.append(f"[system]\n{m.get('content', '')}")
+            elif role == "user":
+                parts.append(f"[user]\n{m.get('content', '')}")
+            elif role == "assistant":
+                tc = m.get("tool_calls")
+                if tc:
+                    parts.append(f"[assistant tool_calls] {tc}")
+                else:
+                    parts.append(f"[assistant]\n{m.get('content', '')}")
+            elif role == "tool":
+                parts.append(f"[tool result id={m.get('tool_call_id')}]\n{m.get('content', '')}")
+        transcript = "\n\n".join(parts)
+        catalog: list[str] = []
+        for item in tools:
+            fn = item.get("function")
+            if isinstance(fn, dict):
+                catalog.append(f"- {fn.get('name')}: {fn.get('description', '')}")
+        catalog_txt = "\n".join(catalog)
+        loc = self._locale
+        lang_lock = language_lock(loc)
+        prompt = (
+            f"{lang_lock}\nYou are the MedBuddy agent planner.\n"
+            f"Tools:\n{catalog_txt}\n\nConversation:\n{transcript}\n\n"
+            "Return JSON matching AgentOrchestratorStep: either reply_text set (final user reply) "
+            "OR tool_calls set with tool names and arguments objects — not both empty.\n"
+            f"{lang_lock}"
+        )
+        try:
+            step = self._generate_structured_sync(self._chat_model, prompt, AgentOrchestratorStep)
+        except LLMParseError:
+            log.warning("Gemini orchestrator step structured parse failed")
+            return (None, None)
+        if step.tool_calls:
+            calls = [
+                ChatToolCall(
+                    id=f"g{i}",
+                    name=tc.name,
+                    arguments=json.dumps(tc.arguments) if tc.arguments else "{}",
+                )
+                for i, tc in enumerate(step.tool_calls)
+            ]
+            return (None, calls)
+        if step.reply_text and step.reply_text.strip():
+            return (step.reply_text.strip(), None)
+        return (None, None)
+
+    async def complete_chat_with_tools(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, list[ChatToolCall] | None]:
+        return await asyncio.to_thread(self._gemini_complete_chat_with_tools_sync, messages, tools)

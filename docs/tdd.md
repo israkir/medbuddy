@@ -105,7 +105,7 @@ flowchart LR
 
 ## 3. One conversation pipeline
 
-**Idea:** Whether the user typed on LINE, spoke (after transcription), or called the HTTP API, the same **turn runner** loads context, classifies intent, runs the right **tool** or composer, persists turns, and returns text.
+**Idea:** Whether the user typed on LINE, spoke (after transcription), or called the HTTP API, the same **turn runner** loads context, applies **fast routing** (`interpret_user_turn`), then **`run_tool_agent_loop`** so the model can call **registered tools** (possibly several per turn), persists turns, and returns **`AgentTurnResult`** (reply + optional metadata).
 
 **Why:** Predictable ordering of safety checks, pending confirmations, and persistence; no “special HTTP path” that bypasses redaction or emergency handling.
 
@@ -115,15 +115,15 @@ sequenceDiagram
   participant U as User
   participant CH as Channel Adapter
   participant PL as Turn Pipeline
-  participant CL as Intent Classifier
-  participant AG as Agent/Tools
+  participant CL as Intent hint (routing)
+  participant AG as Tool orchestrator + tools
   participant ST as Conversation Store
 
   U->>CH: Send text or voice transcript
   CH->>PL: Submit normalized message
   PL->>PL: Build model-safe context (redact/narrow)
-  PL->>CL: Classify intent + slots
-  CL-->>PL: Intent result
+  PL->>CL: Routing hint (intent label)
+  CL-->>PL: TurnInterpretation
 
   alt Pending state exists (confirm add / clarify dose)
     PL->>AG: Resolve from pending state
@@ -132,8 +132,8 @@ sequenceDiagram
     alt Emergency or boundary intent
       PL->>PL: Use fixed safe response pattern
     else Standard request
-      PL->>AG: Dispatch tool or compose response
-      AG-->>PL: Tool/composer result
+      PL->>AG: complete_chat_with_tools loop (tool calls + replies)
+      AG-->>PL: Final reply (+ optional metadata)
     end
   end
 
@@ -144,26 +144,27 @@ sequenceDiagram
 
 ---
 
-## 4. Tools instead of a free-form agent loop
+## 4. Registered tools instead of a free-form agent loop
 
-**Idea:** After classification, work is **one tool per job** (list meds, add, explain drug, confirm dose, summary, …). Tools return structured results; the assistant **composes** user-facing copy.
+**Idea:** The LLM chooses **named tools** from a fixed registry (`complete_chat_with_tools`) — list meds, add, bulk remove, explain drug, confirm dose, summary, … — possibly **multiple calls** before the final natural-language reply. Tools return structured results; many paths use deterministic i18n or **`compose_reply`** inside the tool.
 
 **Why:**
 
-- **Safety and audit:** Each operation has a clear boundary.
+- **Safety and audit:** Each operation has a clear boundary in code.
 - **Testing:** Tools are unit-testable without full chat simulation.
-- **Cost/latency:** A **single structured classification** step fits a **closed intent set** better than open-ended multi-step chains for this prototype.
+- **Flexibility vs chaos:** Multi-step **tool** loops are bounded by the registry and server-side execution — not arbitrary web/search ReAct.
 
 ```mermaid
 flowchart LR
-  INT["Interpreted intent"] --> D{"Which capability?"}
-  D --> M["Medication CRUD"]
-  D --> DR["Drug explain / interactions"]
-  D --> AD["Adherence (confirm / miss)"]
-  D --> HS["Health summary"]
-  D --> PR["Profile / locale"]
-  M & DR & AD & HS & PR --> RES["Tool result"]
-  RES --> CMP["Compose localized reply"]
+  RT["Routing hint + user text"] --> OR["Orchestrator loop"]
+  OR --> M["Medication CRUD / bulk"]
+  OR --> DR["Drug explain / interactions"]
+  OR --> AD["Adherence (confirm / miss)"]
+  OR --> HS["Health summary / vitals / journal"]
+  OR --> PR["Profile patch / notify (simulated)"]
+  M & DR & AD & HS & PR --> RES["Tool result(s)"]
+  RES --> OR
+  OR --> CMP["Final assistant reply"]
 ```
 
 ---
@@ -230,7 +231,7 @@ Operational complements (tokens, webhook signatures, cron secrets) are **standar
 
 ### 8.1 Runtime migration boundary
 
-The server-runtime migration is intentionally scoped: framework and I/O adapters can change (FastAPI prototype to Go/Fiber for MVP/Growth) while the assistant core, tool dispatch model, privacy boundary, and domain contracts remain stable.
+The server-runtime migration is intentionally scoped: framework and I/O adapters can change (FastAPI prototype to Go/Fiber for MVP/Growth) while the assistant core, tool orchestration model, privacy boundary, and domain contracts remain stable.
 
 ```mermaid
 flowchart LR

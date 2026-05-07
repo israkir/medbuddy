@@ -65,7 +65,7 @@ The repo today centers on LINE and the HTTP API; a **dedicated mobile client** i
 | Mode | Behavior |
 |------|----------|
 | **`EXPO_PUBLIC_USE_MOCK_DATA=true`** (typical local dev) | No backend required; **`companionApi`** can persist onboarding-shaped data locally; chat returns **i18n-only** mock explanations. |
-| **`EXPO_PUBLIC_USE_MOCK_DATA=false`** | **`companionApi`** calls **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`POST /v1/app/messages/voice`** (multipart), **`GET /v1/app/summary`** with **`X-App-User-Id`** and optional **`Authorization: Bearer`** per backend config. |
+| **`EXPO_PUBLIC_USE_MOCK_DATA=false`** | **`companionApi`** calls **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`POST /v1/app/messages/voice`** (multipart), **`GET /v1/app/summary`** with **`X-App-User-Id`** and optional **`Authorization: Bearer`** per backend config. Chat JSON may include **`metadata`** (e.g. **`simulated_emergency_notification`**); **`app/companion.tsx`** surfaces a banner when present. |
 
 **Commands:** `make fe-dev` / `make fe-dev-mock` vs `make fe-dev-api` (live backend) — see frontend README.
 

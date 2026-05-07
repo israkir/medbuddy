@@ -13,6 +13,7 @@ from medbuddy.llm.schemas import (
 from medbuddy.core.i18n import t
 
 __all__ = [
+    "AgentTurnResult",
     "ConversationTurn",
     "DoseClarificationPending",
     "MedicationAddConfirmationPending",
@@ -30,6 +31,14 @@ __all__ = [
     "TurnInterpretation",
     "VitalLogRecord",
 ]
+
+
+@dataclass(frozen=True)
+class AgentTurnResult:
+    """One assistant turn: reply text plus optional structured metadata for clients (e.g. UI banners)."""
+
+    reply: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class Intent(str, Enum):
