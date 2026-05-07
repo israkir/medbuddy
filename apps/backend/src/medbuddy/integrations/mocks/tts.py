@@ -6,7 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from medbuddy.protocols.ports import TextToSpeechPort
+from medbuddy.protocols import TextToSpeechPort
 
 log = logging.getLogger(__name__)
 

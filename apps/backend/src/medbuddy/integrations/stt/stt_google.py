@@ -9,7 +9,7 @@ from google.api_core.client_options import ClientOptions
 from google.cloud import speech_v2
 from google.cloud.speech_v2.types import cloud_speech
 
-from medbuddy.protocols.ports import SpeechToTextPort
+from medbuddy.protocols import SpeechToTextPort
 
 _STT_TIMEOUT_S = 120.0
 # Mandarin (Traditional, Taiwan) is not available as zh-TW + model long on global; Google lists
@@ -109,7 +109,7 @@ class GoogleSpeechToText(SpeechToTextPort):
             )
         except Exception:
             log.error(
-                "Google STT request failed: audio_bytes=%d locale=%s api_language=%s model=%s location=%s",
+                "Google STT request failed: audio_bytes=%d locale=%s api_language vb=%s model=%s location=%s",
                 audio_bytes,
                 locale_tag,
                 api_language,

@@ -40,7 +40,7 @@ async def require_mobile_auth(
         got = authorization.removeprefix("Bearer ").strip()
         if not secrets.compare_digest(got, expected):
             raise HTTPException(status_code=401, detail={"code": "invalid_bearer"})
-    elif not settings.mock_external_services:
+    elif not settings.is_mock:
         raise HTTPException(
             status_code=503,
             detail={

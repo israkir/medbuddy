@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.models.domain import Intent, MedicationDraft
@@ -13,7 +13,7 @@ from medbuddy.models.domain import Intent, MedicationDraft
 
 @pytest.mark.asyncio
 async def test_add_medication_incomplete_triggers_confirm_then_yes_saves() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-med-add-confirm"
     await svc.users.get_or_create_user(key)
@@ -43,7 +43,7 @@ async def test_add_medication_incomplete_triggers_confirm_then_yes_saves() -> No
 
 @pytest.mark.asyncio
 async def test_add_medication_incomplete_no_cancel_clears_pending() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-med-add-cancel"
     await svc.users.get_or_create_user(key)
@@ -67,7 +67,7 @@ async def test_add_medication_incomplete_no_cancel_clears_pending() -> None:
 
 @pytest.mark.asyncio
 async def test_add_medication_complete_skips_confirm() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-med-add-full"
     await svc.users.get_or_create_user(key)

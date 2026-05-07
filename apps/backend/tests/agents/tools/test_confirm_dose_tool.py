@@ -7,14 +7,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from medbuddy.agents.tools.confirm_dose import ConfirmDoseTool
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.models.domain import MedicationDraft
 
 
 @pytest.mark.asyncio
 async def test_confirm_dose_records_pending_and_replies() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-confirm-dose"
     await svc.users.get_or_create_user(key)
@@ -50,7 +50,7 @@ async def test_confirm_dose_records_pending_and_replies() -> None:
 
 @pytest.mark.asyncio
 async def test_confirm_dose_saves_note_on_dose_event() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-confirm-dose-note"
     await svc.users.get_or_create_user(key)
@@ -80,7 +80,7 @@ async def test_confirm_dose_saves_note_on_dose_event() -> None:
 @pytest.mark.asyncio
 async def test_confirm_dose_appends_note_when_already_taken() -> None:
     """Follow-up side-effect text must persist on the dose row after pending was cleared."""
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-confirm-dose-followup-note"
     await svc.users.get_or_create_user(key)
@@ -118,7 +118,7 @@ async def test_confirm_dose_appends_note_when_already_taken() -> None:
 
 @pytest.mark.asyncio
 async def test_confirm_dose_asks_disambiguation_when_multiple_candidates() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-confirm-dose-ambiguous"
     await svc.users.get_or_create_user(key)
@@ -165,7 +165,7 @@ async def test_confirm_dose_asks_disambiguation_when_multiple_candidates() -> No
 
 @pytest.mark.asyncio
 async def test_confirm_dose_note_asks_disambiguation_when_multiple_recent_taken() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-confirm-dose-note-ambiguous"
     await svc.users.get_or_create_user(key)

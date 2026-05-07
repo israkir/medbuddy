@@ -88,7 +88,7 @@ There is **no** global reminder timezone env var — **`patients.timezone`** in 
 | **API + reminder worker (default)** | Repo-root [`Dockerfile`](../Dockerfile) → [`docker-entrypoint-web.sh`](../docker-entrypoint-web.sh): **`uvicorn`** and, if **`REDIS_URL`** is set, **`arq medbuddy.reminders.worker.WorkerSettings`**. |
 | **Worker only (optional scale-out)** | Same **`Dockerfile`** image; override start command to **`arq medbuddy.reminders.worker.WorkerSettings`** (API service must use **uvicorn-only** start command — do not run arq in both). |
 
-The same container needs **Supabase** for **`UserDataPort`** and **`LINE_CHANNEL_ACCESS_TOKEN`** for push when **`MOCK_EXTERNAL_SERVICES=false`**.
+The same container needs **Supabase** for **`UserDataPort`** and **`LINE_CHANNEL_ACCESS_TOKEN`** for push when **`MEDBUDDY_INTEGRATION=real`**.
 
 ## Render
 
@@ -121,10 +121,10 @@ If Redis or the **arq** process restarts, some due rows may never get a job. A l
 | Push + mark sent | `apps/backend/src/medbuddy/reminders/deliver.py` |
 | Worker entry | `apps/backend/src/medbuddy/reminders/worker.py` |
 | Hook after medication changes | `apps/backend/src/medbuddy/reminders/lifecycle.py` (called from medication CRUD tools after successful add/update/remove) |
-| Supabase persistence | `apps/backend/src/medbuddy/integrations/persistence/supabase_stores.py` |
-| User IANA zone helpers | `apps/backend/src/medbuddy/user_timezone.py` |
-| LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `protocols/ports.py` |
-| Reconcile route | `apps/backend/src/medbuddy/http/shared_routes.py` |
+| Supabase persistence | `apps/backend/src/medbuddy/integrations/persistence/supabase_dose_events.py` · `supabase_stores.py` |
+| User IANA zone helpers | `apps/backend/src/medbuddy/core/timezone.py` |
+| LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `protocols/line.py` |
+| Reconcile route | `apps/backend/src/medbuddy/channels/internal/routes.py` |
 
 ## LINE quotas
 

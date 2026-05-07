@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import DoseEventPendingCandidate
 
 

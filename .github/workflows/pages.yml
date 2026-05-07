@@ -1,0 +1,85 @@
+name: Publish presentation to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/presentation/**'
+      - 'assets/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Allow this workflow to publish to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; do not cancel in-progress runs so a
+# deploy that already started can finish before the next one begins.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assemble static site
+        run: |
+          set -euo pipefail
+
+          # The deck lives at docs/presentation/index.html and references images
+          # via "../../assets/screenshots/...". To make those relative paths
+          # resolve when served from GitHub Pages, mirror the repo layout inside
+          # the publish directory: _site/docs/presentation/* and _site/assets/*.
+          rm -rf _site
+          mkdir -p _site/docs
+          cp -R docs/presentation _site/docs/presentation
+          cp -R assets _site/assets
+
+          # Friendly root: redirect the site root to the deck so the published
+          # URL is one click instead of three nested folders.
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>MedBuddy — deck</title>
+            <meta http-equiv="refresh" content="0; url=./docs/presentation/">
+            <link rel="canonical" href="./docs/presentation/">
+            <style>body{font-family:system-ui,sans-serif;padding:2rem;color:#0f1f1d}a{color:#066658}</style>
+          </head>
+          <body>
+            Redirecting to <a href="./docs/presentation/">the MedBuddy deck</a>.
+          </body>
+          </html>
+          HTML
+
+          # Disable Jekyll processing on the published artifact (paths starting
+          # with underscores, etc. should pass through verbatim).
+          touch _site/.nojekyll
+
+          echo "--- _site tree ---"
+          find _site -maxdepth 4 -print
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

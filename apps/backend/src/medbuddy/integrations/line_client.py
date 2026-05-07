@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from linebot.v3.messaging import (
@@ -16,7 +17,9 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 
-from medbuddy.protocols.ports import LineMessagingPort
+from medbuddy.protocols import LineMessagingPort
+
+log = logging.getLogger(__name__)
 
 
 def _coerce_reply_messages(messages: list[dict[str, Any]]) -> list[Message]:
@@ -46,18 +49,56 @@ class LineHttpClient(LineMessagingPort):
         self._blob = AsyncMessagingApiBlob(api_client)
 
     async def reply_message_batch(self, reply_token: str, messages: list[dict[str, Any]]) -> None:
+        log.info(
+            "LINE outbound: reply attempt message_count=%d reply_token_prefix=%s",
+            len(messages),
+            (reply_token or "")[:8],
+        )
         req = ReplyMessageRequest(
             reply_token=reply_token,
             messages=_coerce_reply_messages(messages),
         )
-        await self._messaging.reply_message(req)
+        try:
+            await self._messaging.reply_message(req)
+        except Exception:
+            log.error(
+                "LINE outbound: reply failed message_count=%d reply_token_prefix=%s",
+                len(messages),
+                (reply_token or "")[:8],
+                exc_info=True,
+            )
+            raise
+        log.info(
+            "LINE outbound: reply accepted message_count=%d reply_token_prefix=%s",
+            len(messages),
+            (reply_token or "")[:8],
+        )
 
     async def push_message_batch(self, to_user_id: str, messages: list[dict[str, Any]]) -> None:
+        log.info(
+            "LINE outbound: push attempt message_count=%d to_user_prefix=%s",
+            len(messages),
+            (to_user_id or "")[:8],
+        )
         req = PushMessageRequest(
             to=to_user_id,
             messages=_coerce_reply_messages(messages),
         )
-        await self._messaging.push_message(req)
+        try:
+            await self._messaging.push_message(req)
+        except Exception:
+            log.error(
+                "LINE outbound: push failed message_count=%d to_user_prefix=%s",
+                len(messages),
+                (to_user_id or "")[:8],
+                exc_info=True,
+            )
+            raise
+        log.info(
+            "LINE outbound: push accepted message_count=%d to_user_prefix=%s",
+            len(messages),
+            (to_user_id or "")[:8],
+        )
 
     async def reply_text(self, reply_token: str, text: str) -> None:
         await self.reply_message_batch(reply_token, [{"type": "text", "text": text}])

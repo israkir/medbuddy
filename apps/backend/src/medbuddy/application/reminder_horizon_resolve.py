@@ -13,8 +13,8 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
 _DAYS_PATTERNS = [

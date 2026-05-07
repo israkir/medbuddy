@@ -10,7 +10,7 @@ from medbuddy.llm.schemas import (
     InteractionCheckResult,
     MedicationSummaryItem,
 )
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 
 __all__ = [
     "ConversationTurn",
@@ -138,6 +138,7 @@ class DoseEventPendingCandidate:
     dosage: str
     schedule: str
     scheduled_at: datetime
+    last_nudge_at: datetime | None = None
 
 
 DoseClarificationKind = Literal["pending_taken", "note_on_taken"]

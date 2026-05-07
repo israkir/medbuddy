@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.models.domain import MedicationDraft
 from medbuddy.reminders.deliver import deliver_dose_reminder
@@ -12,7 +12,7 @@ from medbuddy.reminders.deliver import deliver_dose_reminder
 
 @pytest.mark.asyncio
 async def test_deliver_sends_line_push_and_marks_sent() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-test-line"
     await svc.users.get_or_create_user(key)
@@ -37,7 +37,7 @@ async def test_deliver_sends_line_push_and_marks_sent() -> None:
 
 @pytest.mark.asyncio
 async def test_deliver_skips_when_dose_already_marked_missed() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-test-line-missed"
     await svc.users.get_or_create_user(key)

@@ -1,8 +1,8 @@
 import asyncio
 
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import DrugGrounding
-from medbuddy.protocols.ports import DrugDataPort
+from medbuddy.protocols import DrugDataPort
 
 
 class MockDrugData(DrugDataPort):

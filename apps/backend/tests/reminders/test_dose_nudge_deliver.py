@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.models.domain import MedicationDraft
 from medbuddy.reminders.deliver import deliver_dose_reminder, deliver_dose_reminder_nudge
@@ -14,10 +14,7 @@ from medbuddy.reminders.deliver import deliver_dose_reminder, deliver_dose_remin
 
 @pytest.mark.asyncio
 async def test_nudge_sends_after_primary_and_increments_count() -> None:
-    settings = Settings(
-        mock_external_services=True,
-        reminder_nudge_intervals_minutes=[60],
-    )
+    settings = make_mock_settings(MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES="60")
     svc = build_app_services(settings)
     key = "U-nudge-test"
     await svc.users.get_or_create_user(key)
@@ -48,10 +45,7 @@ async def test_nudge_sends_after_primary_and_increments_count() -> None:
 
 @pytest.mark.asyncio
 async def test_nudge_skips_when_taken() -> None:
-    settings = Settings(
-        mock_external_services=True,
-        reminder_nudge_intervals_minutes=[60],
-    )
+    settings = make_mock_settings(MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES="60")
     svc = build_app_services(settings)
     key = "U-nudge-taken"
     await svc.users.get_or_create_user(key)

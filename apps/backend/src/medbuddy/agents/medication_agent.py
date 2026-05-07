@@ -45,17 +45,17 @@ from medbuddy.application.medication_add_confirm_resolve import (
 )
 from medbuddy.application.reminder_horizon_resolve import try_resolve_pending_reminder_horizon
 from medbuddy.application.profile_intents import try_profile_intent_reply
-from medbuddy.engine.types import AppServices
-from medbuddy.exceptions import MedBuddyError
+from medbuddy.services import AppServices
+from medbuddy.core.errors import MedBuddyError
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import ConversationTurn, Intent, MedicationRecord, TurnInterpretation
 from medbuddy.privacy.redact import (
     redact_conversation_turns_for_llm,
     redact_pii_text,
 )
-from medbuddy.prompts.persona import get_system_persona
-from medbuddy.user_locale import effective_user_locale
+from medbuddy.llm.prompts.persona import get_system_persona
+from medbuddy.core.locale import effective_user_locale
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +96,12 @@ def _confirm_dose_should_run(interpretation: TurnInterpretation) -> bool:
     return interpretation.record_pending_dose_as_taken or bool(interpretation.dose_adherence_note)
 
 
+def _preview_text(text: str, *, limit: int = 120) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "..."
+
+
 class MedicationAgent:
     """Stateless agent — create once, call ``run()`` per conversation turn."""
 
@@ -117,6 +123,12 @@ class MedicationAgent:
             The assistant reply suitable for sending back to the user.
         """
         safe_text = redact_pii_text(user_text)
+        log.info(
+            "medication_agent: user_key=%s inbound chars=%d redacted_preview=%r",
+            user_key,
+            len(user_text),
+            _preview_text(safe_text),
+        )
 
         # Load profile/meds and recent turns so intent classification can use dialogue context
         # (short replies like "一次" / "once" need the prior assistant question to avoid off_topic).
@@ -125,6 +137,12 @@ class MedicationAgent:
             svc.conversations.get_recent_turns(user_key, svc.settings.conversation_history_turns),
         )
         recent_ctx = _recent_context_for_intent(history)
+        log.info(
+            "medication_agent: user_key=%s llm interpret start redacted_chars=%d recent_ctx_chars=%d",
+            user_key,
+            len(safe_text),
+            len(recent_ctx or ""),
+        )
         interpretation = await svc.llm.interpret_user_turn(safe_text, recent_context=recent_ctx)
         intent = interpretation.intent
         log.info(
@@ -144,6 +162,7 @@ class MedicationAgent:
             user_key,
             ConversationTurn(role="user", content=user_text, at=datetime.now(UTC)),
         )
+        log.info("medication_agent: user_key=%s conversation appended role=user", user_key)
 
         locale_reply = await try_locale_change_reply(
             svc,
@@ -154,6 +173,7 @@ class MedicationAgent:
             llm=svc.llm,
         )
         if locale_reply is not None:
+            log.info("medication_agent: user_key=%s locale change handled", user_key)
             await svc.conversations.append_turn(
                 user_key,
                 ConversationTurn(role="assistant", content=locale_reply, at=datetime.now(UTC)),
@@ -164,6 +184,9 @@ class MedicationAgent:
             svc, user_key=user_key, user_text=user_text, locale=locale
         )
         if med_confirm_reply is not None:
+            log.info(
+                "medication_agent: user_key=%s pending med add confirmation resolved", user_key
+            )
             await svc.conversations.append_turn(
                 user_key,
                 ConversationTurn(role="assistant", content=med_confirm_reply, at=datetime.now(UTC)),
@@ -174,6 +197,7 @@ class MedicationAgent:
             svc, user_key=user_key, user_text=user_text, locale=locale
         )
         if clarify_reply is not None:
+            log.info("medication_agent: user_key=%s pending dose clarification resolved", user_key)
             await svc.conversations.append_turn(
                 user_key,
                 ConversationTurn(role="assistant", content=clarify_reply, at=datetime.now(UTC)),
@@ -184,6 +208,7 @@ class MedicationAgent:
             svc, user_key=user_key, user_text=user_text, locale=locale
         )
         if horizon_reply is not None:
+            log.info("medication_agent: user_key=%s pending reminder horizon resolved", user_key)
             await svc.conversations.append_turn(
                 user_key,
                 ConversationTurn(role="assistant", content=horizon_reply, at=datetime.now(UTC)),
@@ -192,6 +217,7 @@ class MedicationAgent:
 
         # 1. Emergency — fixed safety response, no LLM, no delay
         if intent == Intent.EMERGENCY:
+            log.warning("medication_agent: user_key=%s emergency intent matched", user_key)
             reply = t("agent.emergency", locale=locale)
             await svc.conversations.append_turn(
                 user_key,
@@ -221,7 +247,17 @@ class MedicationAgent:
         if reply is None:
             tool = _TOOL_MAP.get(intent)
             if tool is not None:
+                log.info(
+                    "medication_agent: user_key=%s tool dispatch intent=%s tool=%s",
+                    user_key,
+                    intent.name,
+                    tool.name,
+                )
                 if tool is _confirm_dose_tool and not _confirm_dose_should_run(interpretation):
+                    log.info(
+                        "medication_agent: user_key=%s confirm_dose skipped; composing fallback",
+                        user_key,
+                    )
                     reply = await _compose_fallback_reply(
                         svc,
                         user_key=user_key,
@@ -249,8 +285,49 @@ class MedicationAgent:
                         tool_kwargs["dose_adherence_note"] = interpretation.dose_adherence_note
                     result = await _run_tool_safe(tool, **tool_kwargs)
                     reply = result.reply
+
+                    # For non-confirm_dose intents, the classifier may still have detected
+                    # that the user took a dose and/or left a note (e.g. "took it, headache").
+                    # Apply those adherence slots here so they are never silently dropped.
+                    if tool is not _confirm_dose_tool:
+                        _note = interpretation.dose_adherence_note
+                        if interpretation.record_pending_dose_as_taken:
+                            try:
+                                await svc.users.mark_pending_doses_taken(user_key, notes=_note)
+                                log.info(
+                                    "medication_agent: user_key=%s side-channel dose taken"
+                                    " note=%r",
+                                    user_key,
+                                    _note,
+                                )
+                            except Exception:
+                                log.exception(
+                                    "medication_agent: user_key=%s side-channel mark_taken failed",
+                                    user_key,
+                                )
+                        elif _note:
+                            try:
+                                await svc.users.append_note_to_recent_taken_dose(
+                                    user_key, notes=_note
+                                )
+                                log.info(
+                                    "medication_agent: user_key=%s side-channel note appended"
+                                    " note=%r",
+                                    user_key,
+                                    _note,
+                                )
+                            except Exception:
+                                log.exception(
+                                    "medication_agent: user_key=%s side-channel append_note failed",
+                                    user_key,
+                                )
             else:
                 # 6. Free-form LLM fallback for unhandled intents
+                log.info(
+                    "medication_agent: user_key=%s no tool for intent=%s; composing fallback",
+                    user_key,
+                    intent.name,
+                )
                 reply = await _compose_fallback_reply(
                     svc,
                     user_key=user_key,
@@ -272,6 +349,11 @@ class MedicationAgent:
         await svc.conversations.append_turn(
             user_key,
             ConversationTurn(role="assistant", content=reply, at=datetime.now(UTC)),
+        )
+        log.info(
+            "medication_agent: user_key=%s conversation appended role=assistant reply_chars=%d",
+            user_key,
+            len(reply),
         )
         return reply
 
@@ -307,7 +389,7 @@ async def _run_tool_safe(tool: Any, **kwargs: Any) -> ToolResult:
 
 
 def _user_error_message(exc: MedBuddyError, *, locale: str) -> str:
-    from medbuddy.exceptions import (
+    from medbuddy.core.errors import (
         MedicationExtractionError,
         MedicationNotFoundError,
         VitalExtractionError,
@@ -336,7 +418,14 @@ async def _compose_fallback_reply(
     patient_ctx = await patient_context_for_llm(svc, user_key, user_row, medications, locale=locale)
     system_persona = get_system_persona(locale=locale)
     history_llm = redact_conversation_turns_for_llm(history)
-    return await svc.llm.compose_reply(
+    log.info(
+        "medication_agent: user_key=%s llm compose start intent=%s user_preview=%r history_turns=%d",
+        user_key,
+        intent.name,
+        _preview_text(safe_text),
+        len(history_llm),
+    )
+    reply = await svc.llm.compose_reply(
         system_persona=system_persona,
         patient_context=patient_ctx,
         drug_grounding=None,
@@ -344,6 +433,13 @@ async def _compose_fallback_reply(
         user_message=safe_text,
         locale=locale,
     )
+    log.info(
+        "medication_agent: user_key=%s llm compose done reply_chars=%d reply_preview=%r",
+        user_key,
+        len(reply),
+        _preview_text(redact_pii_text(reply)),
+    )
+    return reply
 
 
 async def _maybe_append_pending_reminder(

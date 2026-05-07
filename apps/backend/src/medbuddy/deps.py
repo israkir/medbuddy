@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 
 
 def get_services(request: Request) -> AppServices:

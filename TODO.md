@@ -2,7 +2,7 @@
 
 Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`apps/frontend`, Expo).
 
-**Implemented today:** Shared **`run_assistant_text_turn`** for LINE and **`/v1/app`**; **Supabase** when `SUPABASE_*` is set (**`UserDataPort`**, conversation store, drug caches, **`dose_events`**); **Redis + arq** for LINE dose reminders when **`REDIS_URL`** is set. **Expo** uses **`companionApi`** for **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`GET /v1/app/summary`** when **`EXPO_PUBLIC_USE_MOCK_DATA=false`**.
+**Implemented today:** Shared **`run_assistant_text_turn`** for LINE and **`/v1/app`**; **Supabase** when `SUPABASE_*` is set (**`UserDataPort`**, conversation store, drug caches, **`dose_events`**); **Redis + arq** for LINE dose reminders when **`REDIS_URL`** is set. **Expo** uses **`companionApi`** for **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`POST /v1/app/messages/voice`**, **`GET /v1/app/summary`** when **`EXPO_PUBLIC_USE_MOCK_DATA=false`**.
 
 ---
 
@@ -10,9 +10,9 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Architecture
 
-- [x] **`channels/mobile/`** REST for the standalone app; **`channels/line/`** for LINE; shared **`application/assistant_turn`**.
+- [x] **`channels/api/`** REST for the standalone app; **`channels/line/`** for LINE; shared **`application/assistant_turn`**.
 
-- [ ] **Documentation:** Expand [`docs/tdd-extended.md`](docs/tdd-extended.md) (agent layer) with why **tool execution is server-driven** — the backend classifies intent and dispatches `AgentTool`s; clients only send user text (and channel envelopes). Cover trust boundaries, a single place for side effects and auditability, and parity across LINE and **`/v1/app`**.
+- [x] **Documentation:** Expand [`docs/tdd-extended.md`](docs/tdd-extended.md) (agent layer) with why **tool execution is server-driven** — the backend classifies intent and dispatches `AgentTool`s; clients only send user text (and channel envelopes). Cover trust boundaries, a single place for side effects and auditability, and parity across LINE and **`/v1/app`**.
 
 - [ ] If the mobile client needs different **CORS** or **gateway** rules than the LINE webhook, configure at the edge or in FastAPI middleware scoped to **`/v1/app`**.
 
@@ -67,13 +67,13 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Reports
 
-- [ ] **Doctor report for the patient:** Generate a structured summary the patient can share with a clinician (e.g. current medications, schedule, adherence, recent dose confirmations and notes), with appropriate privacy and export or share UX on mobile/LINE as the product requires.
+- [x] **Doctor report for the patient:** Generate a structured summary the patient can share with a clinician (e.g. current medications, schedule, adherence, recent dose confirmations and notes), with appropriate privacy and export or share UX on mobile/LINE as the product requires.
 
 ### Quality
 
 - [ ] Make **assistant conversation** more **human-like** (natural tone, empathy, pacing; less robotic phrasing) via prompts, few-shot examples, and/or light post-processing where appropriate.
 
-- [ ] CI running **`make be-check`** (or equivalent) on PRs; deployment runbook and rollback.
+- [x] CI running **`make be-check`** (or equivalent) on PRs; deployment runbook and rollback.
 
 **References:** [`apps/backend/.env.example`](apps/backend/.env.example), [`apps/backend/README.md`](apps/backend/README.md), [`compose.yaml`](compose.yaml).
 
@@ -97,7 +97,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Integration (largely done)
 
-- [x] **`companionApi`** → **`/v1/app/onboarding`**, **`/messages`**, **`/summary`** when mock is off.
+- [x] **`companionApi`** → **`/v1/app/onboarding`**, **`/messages`**, **`/messages/voice`**, **`/summary`** when mock is off.
 
 - [ ] Harden **loading / error / offline** UX consistently across screens.
 

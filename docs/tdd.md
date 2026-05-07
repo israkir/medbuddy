@@ -8,6 +8,10 @@ This summary is the **architectural story**: **what** we built, **why** it is sh
 
 ## 1. System context
 
+**Stage framing:**
+- **Prototype (current):** Python + FastAPI validates product logic and pilot behavior quickly.
+- **MVP/Growth target:** Go + Fiber runtime on the same ports/adapters boundary, so agent/tool/domain behavior stays unchanged while server/runtime adapters are swapped.
+
 **Idea:** One **assistant core** serves **LINE** (primary UX) and an **HTTP API** (integrations, tests, reference app). **Voice** is “audio → text, then the same pipeline as typing” where enabled.
 
 **Why:** Duplicate logic per channel would diverge; one pipeline keeps behavior and safety rules consistent.
@@ -223,6 +227,10 @@ Operational complements (tokens, webhook signatures, cron secrets) are **standar
 **Idea:** **Mock integrations** run core logic in CI and local dev **without** vendor keys. **Production** uses real adapters driven by configuration. **Worker process** optional when a queue is configured (reminders); API can still run for chat.
 
 **Why:** Fast feedback for engineers; safe path from prototype to staged pilot without forking the codebase.
+
+### 8.1 Runtime migration boundary
+
+The server-runtime migration is intentionally scoped: framework and I/O adapters can change (FastAPI prototype to Go/Fiber for MVP/Growth) while the assistant core, tool dispatch model, privacy boundary, and domain contracts remain stable.
 
 ```mermaid
 flowchart LR

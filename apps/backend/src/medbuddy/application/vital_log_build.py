@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from medbuddy.exceptions import VitalExtractionError
-from medbuddy.i18n import t
+from medbuddy.core.errors import VitalExtractionError
+from medbuddy.core.i18n import t
 from medbuddy.llm.schemas import VitalLogExtraction
 
 

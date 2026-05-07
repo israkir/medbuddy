@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from medbuddy.config import Settings
-from medbuddy.drug_cache_keys import normalize_query_key
+from medbuddy.integrations.caching_drugs import normalize_query_key
 from medbuddy.models.domain import DrugGrounding
 from medbuddy.protocols.drug_caches import DrugCachesPort
 

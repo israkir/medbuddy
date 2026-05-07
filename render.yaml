@@ -1,5 +1,5 @@
 # Render Blueprint — https://render.com/docs/infrastructure-as-code
-# Production web service: real integrations only. Render injects RENDER=true; see Settings._render_host_production_defaults.
+# Production web service: real integrations only.
 # Docker path defaults to ./Dockerfile from repo root; dockerContext is . so COPY apps/backend/... works.
 # After deploy: set PUBLIC_BASE_URL to https://<service-name>.onrender.com and add secrets in Environment.
 # REDIS_URL: same container runs uvicorn + arq reminder worker when set (managed Redis required in production).
@@ -10,15 +10,13 @@ services:
     runtime: docker
     plan: free
     region: singapore
-    # Repo-root Dockerfile (Render’s default path). Context must be repo root for COPY apps/backend/...
+    # Repo-root Dockerfile (Render's default path). Context must be repo root for COPY apps/backend/...
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
     envVars:
       - key: MEDBUDDY_INTEGRATION
         value: real
-      - key: MOCK_EXTERNAL_SERVICES
-        value: "false"
       - key: DEBUG
         value: "false"
       - key: PYTHONUNBUFFERED
@@ -34,10 +32,12 @@ services:
         sync: false
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
+      - key: LLM_PROVIDER
+        value: gemini
       - key: GEMINI_API_KEY
         sync: false
-      - key: LLM_PROVIDER
-        value: openai
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL

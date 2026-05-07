@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 
 from medbuddy.models.domain import ConversationTurn
-from medbuddy.protocols.ports import ConversationStorePort
+from medbuddy.protocols import ConversationStorePort
 
 
 class InMemoryConversationStore(ConversationStorePort):

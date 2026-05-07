@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.models.domain import Intent
 
 
 @pytest.mark.asyncio
 async def test_off_topic_refusal_english_mock() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
@@ -27,7 +27,7 @@ async def test_off_topic_refusal_english_mock() -> None:
 
 @pytest.mark.asyncio
 async def test_off_topic_refusal_zh_mock() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)

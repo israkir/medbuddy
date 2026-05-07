@@ -8,7 +8,7 @@ that can be forwarded to API error responses.
 from __future__ import annotations
 
 
-class MedBuddyError(Exception):
+class Error(Exception):
     """Base for all application-level errors."""
 
     def __init__(self, message: str, *, code: str = "medbuddy_error") -> None:
@@ -18,11 +18,23 @@ class MedBuddyError(Exception):
 
 
 # ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+
+class ConfigError(Error):
+    """Raised when a required env var is missing or has an invalid value."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="config_error")
+
+
+# ---------------------------------------------------------------------------
 # LLM / AI layer
 # ---------------------------------------------------------------------------
 
 
-class LLMError(MedBuddyError):
+class LLMError(Error):
     """Raised when an LLM call fails (network, quota, parse error, etc.)."""
 
     def __init__(self, message: str, *, code: str = "llm_error") -> None:
@@ -48,7 +60,7 @@ class LLMQuotaError(LLMError):
 # ---------------------------------------------------------------------------
 
 
-class AgentError(MedBuddyError):
+class AgentError(Error):
     """Raised when the agent cannot fulfil a request (tool failure, invalid state)."""
 
     def __init__(self, message: str, *, code: str = "agent_error") -> None:
@@ -68,7 +80,7 @@ class ToolExecutionError(AgentError):
 # ---------------------------------------------------------------------------
 
 
-class MedicationError(MedBuddyError):
+class MedicationError(Error):
     """Errors related to medication records."""
 
     def __init__(self, message: str, *, code: str = "medication_error") -> None:
@@ -93,7 +105,7 @@ class MedicationExtractionError(MedicationError):
         )
 
 
-class VitalExtractionError(MedBuddyError):
+class VitalExtractionError(Error):
     """Could not extract a usable vital sign reading from the user's message."""
 
     def __init__(self) -> None:
@@ -108,9 +120,16 @@ class VitalExtractionError(MedBuddyError):
 # ---------------------------------------------------------------------------
 
 
-class DrugLookupError(MedBuddyError):
+class DrugLookupError(Error):
     """Raised when a drug-data source (OpenFDA, TFDA) returns an error."""
 
     def __init__(self, source: str, cause: str) -> None:
         super().__init__(f"Drug lookup failed [{source}]: {cause}", code="drug_lookup_error")
         self.source = source
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible aliases (old module name was exceptions.py)
+# ---------------------------------------------------------------------------
+
+MedBuddyError = Error

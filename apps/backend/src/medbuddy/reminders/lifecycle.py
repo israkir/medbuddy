@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 from medbuddy.reminders.enqueue import enqueue_reminder_jobs
 
 log = logging.getLogger(__name__)

@@ -17,7 +17,7 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 |------|----------------|-------|
 | **User message** (current turn) | Yes, **after redaction** | See `redact_pii_text` in `apps/backend/src/medbuddy/privacy/redact.py`. Redaction is pattern-based, not full PHI scrubbing. |
 | **Recent conversation turns** | Yes, **after redaction** | `redact_conversation_turns_for_llm` in the same module. |
-| **Patient “context” block** | Yes, **mostly de-identified** | Built via `patient_context_for_llm` → `build_patient_context_for_llm` in `apps/backend/src/medbuddy/application/patient_llm_context.py` + `prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule), and when present a **time-ordered upcoming dose** section from materialized **`dose_events`** (local times, drug names, dose/schedule text — same facts as LINE reminder targets). |
+| **Patient “context” block** | Yes, **redacted/narrowed** | Built via `patient_context_for_llm` → `build_patient_context_for_llm` in `apps/backend/src/medbuddy/application/patient_llm_context.py` + `llm/prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule), and when present a **time-ordered upcoming dose** section from materialized **`dose_events`** (local times, drug names, dose/schedule text — same facts as LINE reminder targets). |
 | **Drug reference / label snippets** | Yes | From registries (e.g. OpenFDA), not end-user PII. |
 | **Turn interpretation** | Yes, on **redacted** user text | `MedicationAgent` → `LLMPort.interpret_user_turn` (intent + adherence slots; see `apps/backend/src/medbuddy/application/assistant_turn.py` → `MedicationAgent`). |
 | **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
@@ -36,6 +36,12 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 - **`build_patient_context_for_chat_display`**: use when the **same thread** should show the user their **full** stored profile snippet (e.g. listing medications together with profile lines). This string is **not** intended for external LLM APIs.
 
 Conversation rows in the database are still stored from the **original** user message (for continuity with the product). Most assistant/tool paths pass **redacted** text into the LLM; **profile update**, **locale**, and **health summary** paths may use **raw** or **unredacted** strings as documented in **[llm-context.md](./llm-context.md)**.
+
+## Redaction vs. de-identification
+
+**Redaction (current):** Pattern-based masking applied at the LLM boundary on every call — emails, Taiwan-style mobile numbers, and long digit runs are replaced with `[…]` before text reaches any LLM. This runs in `privacy/redact.py` and is unit-tested on every PR. Redaction is fast and deterministic but is not a substitute for clinical de-identification: names, addresses, free-form clinical details, and many international phone formats may pass through.
+
+**De-identification (future hardening):** NER-based clinical scrubbing — a dedicated service or on-prem model that recognizes and removes named entities (persons, locations, medical identifiers) before LLM calls. Planned as a Growth-phase privacy investment; see the Future hardening section below. In code-adjacent prose and implementation notes, use *redaction* for the current mechanism and reserve *de-identification* for the future NER-based hardening.
 
 ## Redaction behavior (summary)
 
@@ -67,7 +73,7 @@ Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_
 | Per-call LLM inputs and privacy exceptions | [docs/llm-context.md](./llm-context.md) |
 | Redaction | `apps/backend/src/medbuddy/privacy/redact.py` |
 | Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `agents/medication_agent.py`, `profile_intents.py` |
-| De-identified vs display context | `apps/backend/src/medbuddy/prompts/persona.py` |
+| De-identified vs display context | `apps/backend/src/medbuddy/llm/prompts/persona.py` |
 | Tests | `apps/backend/tests/test_privacy_redact.py`, `test_persona_llm_safe.py` |
 
 ## Operations and compliance

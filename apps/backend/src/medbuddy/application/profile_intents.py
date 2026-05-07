@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import Intent
-from medbuddy.protocols.ports import LLMPort, ProfilePatch
-from medbuddy.prompts.persona import gender_option_label, normalized_profile_gender
-from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
-from medbuddy.user_timezone import normalize_timezone_patch
+from medbuddy.protocols import LLMPort, ProfilePatch
+from medbuddy.llm.prompts.persona import gender_option_label, normalized_profile_gender
+from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
+from medbuddy.core.timezone import normalize_timezone_patch
 
 
 def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:

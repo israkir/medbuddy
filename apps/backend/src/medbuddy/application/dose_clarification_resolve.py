@@ -6,8 +6,8 @@ import re
 from datetime import UTC, datetime
 from typing import Literal
 
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 
 _ALL_WORDS_EN = frozenset({"all", "both", "all of them"})
 _ALL_WORDS_ZH = frozenset({"全部", "兩個都", "兩種都要", "都要"})

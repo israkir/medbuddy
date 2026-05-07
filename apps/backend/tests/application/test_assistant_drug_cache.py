@@ -8,14 +8,13 @@ import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.container import build_app_services
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.models.domain import Intent
 
 
 @pytest.mark.asyncio
 async def test_personalization_cache_hit_short_circuits(mock_settings) -> None:
-    mock_settings.mock_external_services = True
     base = build_app_services(mock_settings)
     caches = AsyncMock()
     caches.get_personalized_reply = AsyncMock(return_value="（快取）個人化用藥說明")
@@ -41,7 +40,6 @@ async def test_personalization_cache_hit_short_circuits(mock_settings) -> None:
 
 @pytest.mark.asyncio
 async def test_personalization_cache_miss_saves_after_compose(mock_settings) -> None:
-    mock_settings.mock_external_services = True
     base = build_app_services(mock_settings)
     caches = AsyncMock()
     caches.get_personalized_reply = AsyncMock(return_value=None)
@@ -71,7 +69,6 @@ async def test_personalization_cache_miss_saves_after_compose(mock_settings) -> 
 async def test_personalization_llm_meta_source_is_model_when_no_reference_data(
     mock_settings,
 ) -> None:
-    mock_settings.mock_external_services = True
     base = build_app_services(mock_settings)
     caches = AsyncMock()
     caches.get_personalized_reply = AsyncMock(return_value=None)

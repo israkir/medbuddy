@@ -7,9 +7,9 @@ from typing import Any
 
 from medbuddy.agents.base import ToolResult
 from medbuddy.application.vital_log_build import vital_payload_and_summary
-from medbuddy.engine.types import AppServices
-from medbuddy.exceptions import VitalExtractionError
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.errors import VitalExtractionError
+from medbuddy.core.i18n import t
 from medbuddy.privacy.redact import redact_pii_text
 
 log = logging.getLogger(__name__)

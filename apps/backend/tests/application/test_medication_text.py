@@ -10,7 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from medbuddy.container import build_app_services
 from medbuddy.deps import get_services
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.main import app
 from medbuddy.models.domain import Intent, MedicationDraft, MedicationRecord
@@ -22,8 +22,6 @@ def _headers(*, user: str = "u-med-text") -> dict[str, str]:
 
 @pytest.mark.asyncio
 async def test_messages_add_medication(mock_settings) -> None:
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
     uid = "user-add-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
@@ -38,7 +36,7 @@ async def test_messages_add_medication(mock_settings) -> None:
     )
     app.dependency_overrides[get_services] = lambda: svc
     try:
-        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.post(
                     "/v1/app/messages",
@@ -59,8 +57,6 @@ async def test_messages_add_medication(mock_settings) -> None:
 @pytest.mark.asyncio
 async def test_messages_add_medication_when_classifier_returns_add_intent(mock_settings) -> None:
     """Production uses LLM structured output for intent; tests pin ADD_MEDICATION + extraction."""
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
     uid = "user-add-intent-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
@@ -77,7 +73,7 @@ async def test_messages_add_medication_when_classifier_returns_add_intent(mock_s
     )
     app.dependency_overrides[get_services] = lambda: svc
     try:
-        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.post(
                     "/v1/app/messages",
@@ -96,8 +92,6 @@ async def test_messages_add_medication_when_classifier_returns_add_intent(mock_s
 
 @pytest.mark.asyncio
 async def test_messages_list_medications(mock_settings) -> None:
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
     uid = "user-list-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
@@ -113,7 +107,7 @@ async def test_messages_list_medications(mock_settings) -> None:
     )
     app.dependency_overrides[get_services] = lambda: svc
     try:
-        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.post(
                     "/v1/app/messages",
@@ -130,8 +124,6 @@ async def test_messages_list_medications(mock_settings) -> None:
 
 @pytest.mark.asyncio
 async def test_messages_remove_medication(mock_settings) -> None:
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
     uid = "user-rm-1"
     mid = str(uuid.uuid4())
     transport = ASGITransport(app=app)
@@ -143,7 +135,7 @@ async def test_messages_remove_medication(mock_settings) -> None:
     )
     app.dependency_overrides[get_services] = lambda: svc
     try:
-        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.post(
                     "/v1/app/messages",
@@ -161,8 +153,6 @@ async def test_messages_remove_medication(mock_settings) -> None:
 
 @pytest.mark.asyncio
 async def test_messages_update_profile(mock_settings) -> None:
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
     uid = "user-profile-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
@@ -172,7 +162,7 @@ async def test_messages_update_profile(mock_settings) -> None:
     )
     app.dependency_overrides[get_services] = lambda: svc
     try:
-        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.post(
                     "/v1/app/messages",
@@ -192,15 +182,13 @@ async def test_messages_update_profile(mock_settings) -> None:
 @pytest.mark.asyncio
 async def test_messages_explain_medication_replies(mock_settings) -> None:
     """Explain-medication intent runs compose path (mock LLM) and returns text."""
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
     uid = "user-explain-1"
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
     svc.llm = MockLLM(intent=Intent.EXPLAIN_MEDICATION)
     app.dependency_overrides[get_services] = lambda: svc
     try:
-        with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 r = await client.post(
                     "/v1/app/messages",

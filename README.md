@@ -17,7 +17,7 @@
 
 ---
 
-**MedBuddy** is a medication companion monorepo: a **FastAPI** backend (LINE + HTTP API) and an optional **Expo** app for future mobile work.
+**MedBuddy** is a medication companion monorepo: a **FastAPI** backend (LINE + HTTP API) with a reference **Expo** client for future mobile work.
 
 > **Disclaimer:** This is a software prototype. It is **not** a substitute for professional medical advice, diagnosis, or treatment.
 
@@ -80,9 +80,9 @@ Today’s patient-facing experience is built around **LINE**: chat with the medi
 
 <p align="center"><a href="docs/features.md#11-line-messaging-api">More LINE screenshots</a> in the feature catalog (§1.1).</p>
 
-### Standalone mobile app (concept)
+### Reference Expo client — future / B2B2C surface
 
-The repo today centers on LINE and the HTTP API; a **dedicated mobile client** is a product direction, not a shipped guarantee. The screens below are **concept-only** mockups to illustrate that idea—not screenshots of a production app.
+The repo today centers on LINE and the HTTP API; the **Expo client** is a reference for future mobile work, not part of the current pilot. The screens below are **concept-only** mockups—not screenshots of a production app.
 
 <p align="center">
   <img src="assets/screenshots/mobile-1.png" alt="Concept: standalone app home or main screen" width="260">

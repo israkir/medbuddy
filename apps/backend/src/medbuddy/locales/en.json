@@ -77,6 +77,8 @@
     "confirm_dose_note_ambiguous": "I found more than one recent taken dose. Which dose should I attach this note to?\n{options}\nPlease reply with the medication name and time.",
     "confirm_dose_clarify_invalid": "Please reply with one of the numbers shown (for example 1 or 2), or say \"all\" if that applies.",
     "confirm_dose_recorded": "Got it—I’ve marked {count} dose(s) as taken. Thanks for letting me know.",
+    "confirm_dose_recorded_detail": "Got it—I’ve recorded {name} ({dose}) as taken. Thanks for letting me know.",
+    "confirm_dose_recorded_detail_with_note": "Got it—I’ve recorded {name} ({dose}) as taken and saved your note: {note}",
     "confirm_dose_recorded_with_note": "Got it—I’ve marked {count} dose(s) as taken and saved your note: {note}",
     "confirm_dose_note_appended": "Got it—I’ve added that to your most recent dose record: {note}",
     "missed_dose_recorded": "Thanks for telling me. I’ve marked {count} dose(s) as missed.",
@@ -85,7 +87,9 @@
     "upcoming_empty": "There are no pending reminder doses in the next week on file. If you expected some, medications may need dose timing saved, or there may be no active reminders — you can ask to list your medicines.",
     "upcoming_line": "{time_local}{due_suffix} — {name} ({dosage}); on your record: {schedule}",
     "upcoming_time_other_day": "{date} {time}",
-    "upcoming_due_suffix": " (due)"
+    "upcoming_due_suffix": " (due)",
+    "incomplete_setup_notice": "The following medication record(s) have an incomplete name — you may want to re-add them with the correct details: {names}",
+    "pending_horizon_notice": "Also, the following medication(s) have no daily reminder schedule yet — let me know how many days you'd like reminders for: {names}"
   },
   "vital": {
     "logged": "Got it — I’ve saved that for you: {summary}.",

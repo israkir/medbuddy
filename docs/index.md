@@ -18,6 +18,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | [`privacy.md`](privacy.md) | Engineers, compliance, operators | PII goals, redaction coverage, what goes to the LLM and what doesn't, compliance notes |
 | [`llm-context.md`](llm-context.md) | Developers, compliance reviewers | Per-call LLM input reference — every `LLMPort` method with the data sent, redaction applied, and privacy exceptions |
 | [`frontend-expo.md`](frontend-expo.md) | Mobile engineers, product | Reference Expo app — **future product** kept separate from the primary LINE + backend documentation |
+| [`go-port-mapping.md`](go-port-mapping.md) | Engineers, platform leads | Python-to-Go/Fiber migration map — module/interface/package equivalence and translation notes |
 
 ---
 
@@ -66,6 +67,8 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | What is the Supabase schema? | [`tdd-extended.md`](tdd-extended.md) §6 Data model |
 | Is the Expo app the primary product? | No — see [`frontend-expo.md`](frontend-expo.md) |
 | What does PII redaction cover? | [`privacy.md`](privacy.md) — Redaction behavior |
+| What do OD-1/OD-5/T1/T2/T3 codes mean? | [`prd-extended.md` §13 Open decisions](prd-extended.md#13-open-decisions) — codes &amp; abbreviations |
 | What's left before production? | [`../TODO.md`](../TODO.md) |
 | How do I add a new LLM adapter? | [`tdd-extended.md`](tdd-extended.md) §16 Extension points |
 | How do I add a new intent / tool? | [`tdd-extended.md`](tdd-extended.md) §16, [`../apps/backend/README.md`](../apps/backend/README.md) |
+| How does Python map to Go/Fiber modules? | [`go-port-mapping.md`](go-port-mapping.md) |

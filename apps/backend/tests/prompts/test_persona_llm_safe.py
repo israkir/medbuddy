@@ -1,6 +1,6 @@
 """Patient context for LLM must not echo raw profile strings."""
 
-from medbuddy.prompts.persona import build_patient_context_for_llm
+from medbuddy.llm.prompts.persona import build_patient_context_for_llm
 
 
 def test_llm_context_includes_preferred_name_for_addressing_omits_other_raw_profile() -> None:

@@ -16,7 +16,7 @@
 
 | Kind | Implemented today |
 |------|-------------------|
-| **Assistant chat** | **`run_assistant_text_turn`** — one user text in, one reply string out. Used by **LINE** (text + STT transcript from voice) and **`POST /v1/app/messages`**. Implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py). |
+| **Assistant chat** | **`run_assistant_text_turn`** — one user text in, one reply string out. Used by **LINE** (text + STT transcript from voice), **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** (after STT). Implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py). |
 | **LINE-only (no full assistant turn)** | **`follow`** → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
 | **HTTP without chat pipeline** | **`GET /v1/app/health`**, **`GET /v1/app/info`**, **`GET /v1/app/me`**, **`POST /v1/app/onboarding`**, **`GET /v1/app/summary`** — auth + user store / LLM as documented below. |
 | **Infrastructure** | **`GET /health`**, **`POST /internal/reminders/reconcile`** (cron). |
@@ -190,7 +190,7 @@ Below, **“Examples”** are illustrative; **`interpret_user_turn`** (or `MockL
 | **Scenario** | User updates profile fields **in chat** (name, age, emergency contact, health notes, gender, locale, timezone). |
 | **Examples** | Same one-line replies as after LINE welcome; “叫我老王”; “我對青霉素过敏”; “switch to English”; “my timezone is America/New_York”. |
 | **Outcome** | **`LLMPort.extract_profile_patch`** (structured output) → **`patch_user_profile`**. Empty parse → **`profile.update_unclear`**. Locale updates are acknowledged in the target language. |
-| **Contrast** | Standalone **onboarding** uses **`POST /onboarding`** with typed JSON — not this intent. |
+| **Contrast** | Standalone **onboarding** uses **`POST /v1/app/onboarding`** with typed JSON — not this intent. |
 
 ---
 
@@ -304,5 +304,5 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 - Clinical diagnosis or replacing clinician/pharmacist judgment.
 - **Full TFDA HTTP** — stub returns empty; mocks may imitate TFDA.
-- **LINE `postback`** handling** — no user-facing action yet.
+- **LINE `postback` handling** — no user-facing action yet.
 - **Reference Expo** hold-to-talk → **`POST /v1/app/messages/voice`** — see [`frontend-expo.md`](frontend-expo.md). **LINE** voice notes use the same STT → assistant pipeline; replies are **text** by default and can be **text + audio** when `MEDBUDDY_LINE_VOICE_REPLIES` is enabled. Expo read-aloud remains on-device (expo-speech) after HTTP voice turns.

@@ -1,7 +1,7 @@
 import pytest
 
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.extensibility.intent_hooks import (
     clear_intent_hooks,
     register_intent_hook,

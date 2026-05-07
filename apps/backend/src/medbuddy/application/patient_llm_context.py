@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 from medbuddy.models.domain import MedicationRecord
-from medbuddy.prompts.persona import build_patient_context_for_llm
+from medbuddy.llm.prompts.persona import build_patient_context_for_llm
 from medbuddy.reminders.upcoming_display import (
     format_upcoming_doses_for_llm,
     upcoming_schedule_window_utc,
 )
-from medbuddy.user_timezone import effective_user_timezone
+from medbuddy.core.timezone import effective_user_timezone
 
 
 async def patient_context_for_llm(

@@ -7,9 +7,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
-from medbuddy.engine.types import AppServices
-from medbuddy.exceptions import MedicationExtractionError, MedicationNotFoundError
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.errors import MedicationExtractionError, MedicationNotFoundError
+from medbuddy.core.i18n import t
 from medbuddy.llm.medication_draft_build import (
     dose_or_schedule_display,
     medication_draft_needs_add_confirmation,
@@ -22,7 +22,7 @@ from medbuddy.models.domain import (
 )
 from medbuddy.privacy.redact import redact_pii_text
 from medbuddy.application.patient_llm_context import patient_context_for_llm
-from medbuddy.prompts.persona import format_patient_medication_context
+from medbuddy.llm.prompts.persona import format_patient_medication_context
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
 log = logging.getLogger(__name__)

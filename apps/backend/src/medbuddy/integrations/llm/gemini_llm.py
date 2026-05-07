@@ -1,27 +1,17 @@
-"""Gemini adapter — requires optional dependency google-genai.
-
-Improvements over the original:
-- ``generate_structured()`` uses Gemini's ``response_schema`` parameter
-  with a Pydantic model, eliminating manual JSON-fence stripping.
-- ``check_interactions_structured()`` returns a typed ``InteractionResult``
-  with severity-graded ``InteractionPair`` objects.
-- ``generate_health_summary()`` produces a doctor-ready ``HealthSummary``
-  as a Pydantic-validated structured output.
-- All sync helpers are wrapped in ``asyncio.to_thread`` (unchanged).
-"""
+"""Gemini adapter — google-genai SDK."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import re
 import time
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
-from medbuddy.exceptions import LLMParseError
-from medbuddy.i18n import t
+from medbuddy.core.errors import LLMParseError
+from medbuddy.core.i18n import t
+from medbuddy.integrations.llm._common import language_lock, strip_json_fence
 from medbuddy.llm.intent_classification_prompt import format_intent_classification_prompt
 from medbuddy.llm.medication_draft_build import (
     dose_or_schedule_display,
@@ -51,39 +41,17 @@ from medbuddy.models.domain import (
     MedicationRecord,
     TurnInterpretation,
 )
-from medbuddy.prompts.persona import get_system_persona
-from medbuddy.protocols.ports import LLMPort, ProfilePatch
+from medbuddy.llm.prompts.persona import get_system_persona
+from medbuddy.protocols import LLMPort, ProfilePatch
 from medbuddy.reminders.prefs import reminder_compose_appendix
-from medbuddy.user_locale import normalize_locale_patch
-from medbuddy.user_timezone import normalize_timezone_patch
+from medbuddy.core.locale import normalize_locale_patch
+from medbuddy.core.timezone import normalize_timezone_patch
+from google import genai as _genai
+from google.genai import types as _genai_types
 
 log = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
-_LANGUAGE_LOCK: dict[str, str] = {
-    "en": (
-        "LANGUAGE REQUIREMENT: You MUST reply in English only. "
-        "Do not switch to any other language regardless of the language used in conversation history or user input."
-    ),
-    "zh-TW": (
-        "語言規定：你的回覆必須使用繁體中文（台灣），"
-        "無論對話歷史或使用者訊息使用何種語言，都不得切換語言。"
-    ),
-}
-
-
-def _language_lock(locale: str) -> str:
-    return _LANGUAGE_LOCK.get(locale, _LANGUAGE_LOCK["zh-TW"])
-
-
-def _strip_json_fence(raw: str) -> str:
-    """Fallback JSON fence stripper for models that ignore response_mime_type."""
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"\s*```$", "", text)
-    return text.strip()
 
 
 class GeminiLLM(LLMPort):
@@ -94,15 +62,8 @@ class GeminiLLM(LLMPort):
         locale: str = "zh-TW",
         intent_model: str = "gemini-2.5-flash",
     ) -> None:
-        try:
-            from google import genai
-            from google.genai import types as genai_types
-        except ImportError as e:
-            raise ImportError(
-                "Install medbuddy-api with the `llm` extra: pip install 'medbuddy-api[llm]'"
-            ) from e
-        self._client: Any = genai.Client(api_key=api_key)
-        self._genai_types = genai_types
+        self._client: Any = _genai.Client(api_key=api_key)
+        self._genai_types = _genai_types
         self._intent_model = intent_model
         self._chat_model = intent_model
         self._locale = locale
@@ -188,7 +149,7 @@ class GeminiLLM(LLMPort):
         if not raw:
             raise LLMParseError(f"Empty response for schema {schema.__name__}")
         try:
-            data = json.loads(_strip_json_fence(raw))
+            data = json.loads(strip_json_fence(raw))
             parsed = schema.model_validate(data)
         except (json.JSONDecodeError, Exception) as exc:
             raise LLMParseError(
@@ -331,7 +292,7 @@ class GeminiLLM(LLMPort):
         hist_lines = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
         loc = locale or self._locale
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
-        lang_lock = _language_lock(loc)
+        lang_lock = language_lock(loc)
         prompt = (
             f"{lang_lock}\n\n"
             f"{system_persona}\n\n"
@@ -508,7 +469,7 @@ class GeminiLLM(LLMPort):
         locale: str,
     ) -> str:
         loc = locale or self._locale
-        lang_lock = _language_lock(loc)
+        lang_lock = language_lock(loc)
         persona = get_system_persona(locale=loc)
         task = t("gemini.medication_added_companion", locale=loc)
         drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
@@ -572,7 +533,7 @@ class GeminiLLM(LLMPort):
         locale: str,
     ) -> InteractionCheckResult:
         loc = locale or self._locale
-        lang_lock = _language_lock(loc)
+        lang_lock = language_lock(loc)
         un = t("medication.unspecified", locale=loc)
         med_list = "\n".join(
             f"- {m.name} {dose_or_schedule_display(m.dosage, unspecified_label=un)} "
@@ -631,7 +592,7 @@ class GeminiLLM(LLMPort):
         locale: str,
     ) -> HealthSummaryResult:
         loc = locale or self._locale
-        lang_lock = _language_lock(loc)
+        lang_lock = language_lock(loc)
         persona = get_system_persona(locale=loc)
         un = t("medication.unspecified", locale=loc)
         med_lines = (

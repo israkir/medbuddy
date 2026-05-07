@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 
 
 def _normalize_missed_note(raw: str | None) -> str | None:

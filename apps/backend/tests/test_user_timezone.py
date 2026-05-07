@@ -1,6 +1,6 @@
 """Tests for IANA timezone helpers."""
 
-from medbuddy.user_timezone import (
+from medbuddy.core.timezone import (
     DEFAULT_USER_TIMEZONE,
     effective_user_timezone,
     is_valid_iana_timezone,

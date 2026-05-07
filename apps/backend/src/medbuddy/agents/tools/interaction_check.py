@@ -10,14 +10,14 @@ import logging
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
-from medbuddy.drug_cache_keys import (
+from medbuddy.integrations.caching_drugs import (
     DRUG_REFERENCE_SOURCE_OPENFDA,
     normalize_query_key,
     personalization_fingerprint,
     resolve_medication_id_for_personalization,
 )
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.llm.schemas import InteractionCheckResult
 from medbuddy.models.domain import ConversationTurn, Intent, InteractionResult, MedicationRecord
 from medbuddy.privacy.redact import redact_pii_text
@@ -103,7 +103,7 @@ class InteractionCheckTool:
             )
             reply = _format_interaction_reply(interaction_result, locale=locale)
         else:
-            from medbuddy.prompts.persona import get_system_persona
+            from medbuddy.llm.prompts.persona import get_system_persona
 
             system_persona = get_system_persona(locale=locale)
             system_persona = (

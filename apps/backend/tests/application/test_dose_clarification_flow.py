@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.models.domain import Intent, MedicationDraft
@@ -15,7 +15,7 @@ from medbuddy.models.domain import Intent, MedicationDraft
 
 @pytest.mark.asyncio
 async def test_assistant_resolves_pending_dose_with_choice_one() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-dose-clarify-pick-1"
     await svc.users.get_or_create_user(key)
@@ -60,7 +60,7 @@ async def test_assistant_resolves_pending_dose_with_choice_one() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_resolves_pending_dose_all() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-dose-clarify-all"
     await svc.users.get_or_create_user(key)
@@ -98,7 +98,7 @@ async def test_assistant_resolves_pending_dose_all() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_invalid_clarification_keeps_pending() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-dose-clarify-invalid"
     await svc.users.get_or_create_user(key)
@@ -136,7 +136,7 @@ async def test_assistant_invalid_clarification_keeps_pending() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_unrelated_message_clears_pending_clarification() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-dose-clarify-clear"
     await svc.users.get_or_create_user(key)
