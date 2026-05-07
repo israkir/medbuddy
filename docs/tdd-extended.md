@@ -68,7 +68,7 @@ This TDD documents the **current prototype runtime** (Python/FastAPI). The MVP/G
 │                       │                                         │
 │                       ▼                                         │
 │           agents/MedicationAgent + orchestrator                 │
-│           (routing hints → complete_chat_with_tools loop)       │
+│           (routing hints → prior redacted turns → tools loop)    │
 │                       │                                         │
 │          ┌────────────┼─────────────────┐                       │
 │          ▼            ▼                 ▼                       │
@@ -111,11 +111,11 @@ agents/          (per-port files)     (concrete or mock)
 
 ### 2.2 LLM tool orchestration pattern
 
-**Decision:** After **`interpret_user_turn`** (routing hints: emergency, off_topic, logging), **`run_tool_agent_loop`** calls **`LLMPort.complete_chat_with_tools`** so the model selects **registered tool names** (OpenAI tools API / Gemini structured steps). Server-side handlers execute **`AgentTool`** implementations and feed **tool messages** back until a final reply or step cap.
+**Decision:** After **`interpret_user_turn`** (routing hints: emergency, off_topic, logging), **`run_tool_agent_loop`** calls **`LLMPort.complete_chat_with_tools`** so the model selects **registered tool names** (OpenAI tools API / Gemini structured steps). The **first** provider request includes **system**, **`orchestrator_prior_messages`** (redacted tail of **`conversation_turns`**, capped by **`agent_orchestrator_history_turns`** / env **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, `0` = none), and the **current** redacted user line; subsequent rounds append **assistant** + **`tool`** messages for that turn. Server-side handlers execute **`AgentTool`** implementations and feed **tool messages** back until a final reply or step cap.
 
 **Rationale:** Keeps `application/assistant_turn.py` thin — it delegates to **`MedicationAgent`**, which gates safety paths then runs the orchestrator. Tools remain small and testable; multi-step combinations (bulk ops + reply) stay explicit in logs.
 
-**Trade-off accepted:** Orchestrator rounds add latency and token cost versus a single classify-and-dispatch hop; gains natural multi-tool turns and clearer alignment between user language and tool arguments.
+**Trade-off accepted:** Orchestrator rounds add latency and token cost versus a single classify-and-dispatch hop; prior-thread injection adds more tokens on the first hop but improves follow-up understanding (“yes”, “the second one”). Gains natural multi-tool turns and clearer alignment between user language and tool arguments.
 
 ### 2.3 Mock-first development
 
@@ -440,7 +440,7 @@ LINE platform
 5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** orchestrator.
 6. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
 7. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no orchestrator for the reply body.
-8. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, … Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
+8. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) where configured; model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, … Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
 9. **`_maybe_append_pending_reminder`** — if add-confirmation or reminder-horizon is still pending, append a one-line nudge after the orchestrator reply.
 
 Returns **`AgentTurnResult`** (`reply` + optional **`metadata`**, e.g. simulated caregiver notification).
@@ -454,7 +454,7 @@ TurnInterpretation (routing hint)
     ├── off_topic (step 7)
     └── run_tool_agent_loop (step 8)
             │
-            └── complete_chat_with_tools ⟷ registered tools (multi-step) → final reply
+            └── complete_chat_with_tools (prior thread + current line) ⟷ registered tools (multi-step) → final reply
 ```
 
 ### 5.2 Tool registry
@@ -870,7 +870,7 @@ All LLM calls follow the same layered structure:
 | **System persona** | `get_system_persona(locale)` — from `locales/*.json` `prompts.system_persona` | No PII; includes non-diagnostic instruction and `[…]` masking instruction |
 | **Patient context** | `patient_context_for_llm(...)` → `build_patient_context_for_llm(..., upcoming_doses_context=…)` | De-identified profile signals, medication list, plus **materialized** pending **`dose_events`** lines for ~7 days from local midnight (soonest first) when sync is run |
 | **Drug grounding** | OpenFDA label snippets (indications, dosage, warnings) or `None` | Registry data only; no patient PII |
-| **Conversation history** | Recent `ConversationTurn` objects | Redacted via `redact_conversation_turns_for_llm()` |
+| **Conversation history** | Recent `ConversationTurn` objects | Redacted via `redact_conversation_turns_for_llm()`; **`complete_chat_with_tools`** prepends a tail capped by **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`** (see [`llm-context.md`](llm-context.md)) |
 | **User message** | Current turn | Redacted via `redact_pii_text()` |
 | **Extra system** | Intent-specific instructions (e.g. interaction-check companion, summary format) | No PII |
 
@@ -1203,6 +1203,7 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | `GEMINI_MODEL` | `gemini-2.5-flash` | |
 | `OPENAI_API_KEY` | — | Required when `LLM_PROVIDER=openai` |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | |
+| `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | `12` | Prior **redacted** user/assistant turns prepended to `complete_chat_with_tools`; `0` disables |
 
 ### 15.4 Speech (STT) and public URL
 

@@ -74,6 +74,7 @@ class Settings:
     google_speech_location: str
 
     conversation_history_turns: int
+    agent_orchestrator_history_turns: int
     dose_clarification_ttl_seconds: int
     drug_reference_cache_ttl_hours: int
     drug_personalization_cache_ttl_hours: int
@@ -84,6 +85,7 @@ class Settings:
 
     reminder_default_local_time: str
     reminder_horizon_days: int
+    profile_completion_nudge_every_n_user_turns: int
     reminder_nudge_intervals_minutes: tuple[int, ...] = field(default_factory=tuple)
 
     @property
@@ -226,6 +228,9 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         google_speech_project_id=_str(env, "GOOGLE_SPEECH_PROJECT_ID"),
         google_speech_location=_str(env, "GOOGLE_SPEECH_LOCATION", "global"),
         conversation_history_turns=_int(env, "CONVERSATION_HISTORY_TURNS", default=5),
+        agent_orchestrator_history_turns=_int(
+            env, "MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS", default=12, ge=0, le=50
+        ),
         dose_clarification_ttl_seconds=_int(
             env, "MEDBUDDY_DOSE_CLARIFICATION_TTL_SECONDS", default=900, ge=60, le=86400
         ),
@@ -240,6 +245,13 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         cron_secret=_str(env, "MEDBUDDY_CRON_SECRET"),
         reminder_default_local_time=_str(env, "MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME", "09:00"),
         reminder_horizon_days=_int(env, "MEDBUDDY_REMINDER_HORIZON_DAYS", default=14, ge=1, le=90),
+        profile_completion_nudge_every_n_user_turns=_int(
+            env,
+            "MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS",
+            default=12,
+            ge=0,
+            le=500,
+        ),
         reminder_nudge_intervals_minutes=_nudge_intervals(
             env, "MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES"
         ),

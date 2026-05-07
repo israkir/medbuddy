@@ -120,7 +120,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 ## 2. Agent layer (hexagonal + LLM tool orchestration)
 
-**Summary:** `MedicationAgent` runs **`interpret_user_turn`** for **fast routing** (emergency, off_topic after hooks, logging), then **`run_tool_agent_loop`** so the model selects **named tools** via **`LLMPort.complete_chat_with_tools`** (multi-step; OpenAI native tools / Gemini structured steps). Handlers live in `agents/tools/` and return `ToolResult`; the turn result is **`AgentTurnResult`** (`reply` + optional **`metadata`**).
+**Summary:** `MedicationAgent` runs **`interpret_user_turn`** for **fast routing** (emergency, off_topic after hooks, logging), then **`run_tool_agent_loop`** so the model selects **named tools** via **`LLMPort.complete_chat_with_tools`** (multi-step; OpenAI native tools / Gemini structured steps). The orchestrator prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, default 12; `0` disables) so follow-ups are contextualized. Handlers live in `agents/tools/` and return `ToolResult`; the turn result is **`AgentTurnResult`** (`reply` + optional **`metadata`**).
 
 **User value:** Multi-step tasks (e.g. bulk clear + sync), safer separation of routing vs tool arguments, same hexagonal ports.
 
@@ -133,7 +133,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 | Tool / orchestrator API | Role | Location |
 |---------------------------|------|----------|
-| `run_tool_agent_loop` | Multi-round **`complete_chat_with_tools`**; executes tools by name | `agents/orchestrator.py` |
+| `run_tool_agent_loop` | Multi-round **`complete_chat_with_tools`**; injects **prior redacted** thread (`orchestrator_prior_messages`) then executes tools by name | `agents/orchestrator.py` |
 | `AGENT_TOOLS_*` | Model-visible tool names & schemas | `llm/agent_tool_definitions.py` |
 | `ListMedicationsTool`, … | Same typed tools as before; invoked by **name** from the orchestrator | `agents/tools/*.py` |
 | Bulk / journal / notify | `remove_all_medications`, `disable_reminders`, `export_health_journal`, `simulate_notify_emergency_contact`, **`update_profile`** | Wired in `orchestrator.py` → tools / `extract_profile_patch` |
@@ -153,7 +153,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 - Structured **turn interpretation** via **`LLMPort.interpret_user_turn`** (Gemini, OpenAI, or `MockLLM` in tests): yields **`TurnInterpretation`** for **gates** and logging (emergency, off_topic). It still receives **recent redacted dialogue** so short replies are not misclassified without context.
 - **User message persistence:** The **raw** user line is appended to `conversation_turns` early in the turn (then downstream logic runs).
 - Replies and LLM scaffold copy use the user’s **`effective_user_locale`** (`patients.locale`): `compose_reply`, medication-added flow, explain/interaction/side-effect fallbacks, and structured interaction analysis are locale-aware—not only the process default `MEDBUDDY_LOCALE`.
-- **Handling order in `MedicationAgent`** (matches code): **structured locale / reply-language change** (`try_locale_change_reply`) → **pending add-medication confirmation** → **pending dose disambiguation** → **pending reminder-horizon** → **`emergency`** fixed i18n reply (no LLM body) → **intent hooks** → **`off_topic`** fixed refusal → **`run_tool_agent_loop`** (tools include **`update_profile`**, **`confirm_dose`** with structured args, bulk remove, reminder disable, journal export, simulated notify, …) → **`_maybe_append_pending_reminder`** → append assistant turn → return **`AgentTurnResult`**.
+- **Handling order in `MedicationAgent`** (matches code): **structured locale / reply-language change** (`try_locale_change_reply`) → **pending add-medication confirmation** → **pending dose disambiguation** → **pending reminder-horizon** → **`emergency`** fixed i18n reply (no LLM body) → **intent hooks** → **`off_topic`** fixed refusal → **`run_tool_agent_loop`** (passes **recent conversation turns** into **`complete_chat_with_tools`** so follow-ups are not isolated utterances; tools include **`update_profile`**, **`confirm_dose`** with structured args, bulk remove, reminder disable, journal export, simulated notify, …) → **`_maybe_append_pending_reminder`** → append assistant turn → return **`AgentTurnResult`**.
 - **`report_side_effects`**, **`explain_medication`**, **`interaction_check`**: drug grounding + composed reply paths; **`report_side_effects`** is for *currently experiencing* a symptom attributed to a med (distinct from hypothetical explain questions).
 - Drug snippet **prefetch** in the main turn applies to `explain_medication`, `interaction_check`, and (after a successful save) `add_medication` only.
 - For `explain_medication` and `interaction_check`, locale-specific **companion** instructions bias replies toward purpose, timing rationale, and cautions—without replacing clinician advice. Structured interaction lines use i18n keys under **`interaction.*`** (severity labels, recommendation prefix).

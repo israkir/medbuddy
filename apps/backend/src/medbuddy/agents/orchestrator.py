@@ -1,4 +1,8 @@
-"""LLM tool-calling loop: model chooses tools; server executes and returns results."""
+"""LLM tool-calling loop: model chooses tools; server executes and returns results.
+
+Prior redacted user/assistant turns (when configured) are injected before the current user
+message on the first provider hop — see ``orchestrator_prior_messages`` and ``run_tool_agent_loop``.
+"""
 
 from __future__ import annotations
 
@@ -41,6 +45,28 @@ from medbuddy.services import AppServices
 log = logging.getLogger(__name__)
 
 _MAX_AGENT_STEPS = 8
+
+
+def orchestrator_prior_messages(
+    turns: list[ConversationTurn],
+    *,
+    max_turns: int,
+) -> list[dict[str, Any]]:
+    """Redacted user/assistant turns as Chat Completions messages (excludes the current line)."""
+    if max_turns <= 0 or not turns:
+        return []
+    redacted = redact_conversation_turns_for_llm(turns)
+    tail = redacted[-max_turns:]
+    out: list[dict[str, Any]] = []
+    for turn in tail:
+        if turn.role not in ("user", "assistant"):
+            continue
+        content = (turn.content or "").strip()
+        if not content:
+            continue
+        out.append({"role": turn.role, "content": content})
+    return out
+
 
 _list_tool = ListMedicationsTool()
 _add_tool = AddMedicationTool()
@@ -343,6 +369,7 @@ async def run_tool_agent_loop(
     history: list[ConversationTurn],
     locale: str,
     llm: Any,
+    max_prior_turns: int,
 ) -> AgentTurnResult:
     """Multi-step OpenAI-tool loop until the model returns text or max steps."""
     cat = json.dumps(
@@ -350,10 +377,12 @@ async def run_tool_agent_loop(
         ensure_ascii=False,
     )
     patient_ctx = await patient_context_for_llm(svc, user_key, user_row, medications, locale=locale)
+    prior_msgs = orchestrator_prior_messages(history, max_turns=max_prior_turns)
     system = build_agent_system_prompt(
         locale=locale,
         medication_catalog_json=cat,
         patient_context_block=patient_ctx,
+        prior_turn_count=len(prior_msgs),
     )
     ctx = _OrchestrationContext(
         svc=svc,
@@ -366,10 +395,9 @@ async def run_tool_agent_loop(
         history=history,
     )
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": safe_text},
-    ]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    messages.extend(prior_msgs)
+    messages.append({"role": "user", "content": safe_text})
 
     for step in range(_MAX_AGENT_STEPS):
         content, tool_calls = await llm.complete_chat_with_tools(

@@ -3008,7 +3008,7 @@ class: deep eng-proto
   <path class="sc-arrow" d="M540,208 L540,218"/>
   <rect class="sc-box-pipeline" x="270" y="218" width="540" height="36" rx="7"/>
   <text class="sc-label" x="540" y="234" text-anchor="middle">MedicationAgent</text>
-  <text class="sc-sublabel" x="540" y="248" text-anchor="middle">run_tool_agent_loop  ·  complete_chat_with_tools</text>
+  <text class="sc-sublabel" x="540" y="248" text-anchor="middle">prior redacted turns  ·  run_tool_agent_loop  ·  complete_chat_with_tools</text>
 
   <!-- Agent → tools -->
   <path class="sc-arrow" d="M540,254 L540,264"/>
@@ -3253,7 +3253,7 @@ class: deep eng-proto
 
 1. **Hexagonal (ports &amp; adapters)** — domain &amp; use-case code talks only to interfaces. Vendor swap (Gemini → OpenAI, Supabase → another DB) is one adapter file.
 2. **One conversation pipeline** — LINE text, LINE voice (after STT), HTTP text, HTTP voice — all share `run_assistant_text_turn`. No "special" channel can bypass redaction or emergency handling.
-3. **Registered tool orchestrator** — `interpret_user_turn` for fast routing; **`complete_chat_with_tools`** selects named tools (multi-step when needed). No unconstrained ReAct shell.
+3. **Registered tool orchestrator** — `interpret_user_turn` for fast routing; **`complete_chat_with_tools`** receives a **redacted prior thread** (capped per env) plus the current line, then selects named tools (multi-step when needed). No unconstrained ReAct shell.
 4. **Mock-first** — every external dependency has a mock adapter.
 5. **Reminders = materialised rows + queue** — chat turns stay fast; delivery + retries live in arq workers; reconcile endpoint catches outages.
 6. **Drug grounding vs generative language** — registry data **grounds** facts; the LLM does **language**. Reduces "confident hallucination" on dosing.
@@ -3365,7 +3365,7 @@ class: deep eng-proto single-conversation-slide
   <!-- Step 5: locale / hooks / off-topic / profile / tools / fallback -->
   <rect class="sc-box-pipeline" x="236" y="276" width="586" height="56" rx="7"/>
   <text class="sc-label" x="529" y="296" text-anchor="middle">locale/hook short-circuit → run_tool_agent_loop()</text>
-  <text class="sc-sublabel" x="529" y="311" text-anchor="middle">complete_chat_with_tools  ·  registered tools  ·  optional metadata</text>
+  <text class="sc-sublabel" x="529" y="311" text-anchor="middle">prior redacted turns  ·  complete_chat_with_tools  ·  registered tools  ·  optional metadata</text>
   <text class="sc-sublabel" x="529" y="325" text-anchor="middle">locale-aware · drug-grounded response</text>
   <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 332 L529 346"/>
 
@@ -3517,7 +3517,7 @@ class: deep eng-proto
 | Drug personalisation | 30–60% | Repeat questions skip the LLM |
 | System prompt + tool defs | reused each round | Grounding copy stable across turns |
 
-Per-turn budget: routing classify (~700 tokens) plus one or more orchestrator rounds (~1–3k+ tokens depending on tools). Provider swap behind one port — cost vs quality tunable without touching the pipeline.
+Per-turn budget: routing classify (~700 tokens) plus one or more orchestrator rounds (~1–3k+ tokens depending on tools and **prior-thread depth**, capped by env). Provider swap behind one port — cost vs quality tunable without touching the pipeline.
 
 **Target:** &lt;US$0.05 / MAU / month at MVP · &lt;US$0.02 at Growth with caching maturity.
 

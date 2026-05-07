@@ -11,6 +11,7 @@ from medbuddy.services import AppServices
 from medbuddy.core.errors import MedicationExtractionError, MedicationNotFoundError
 from medbuddy.core.i18n import t
 from medbuddy.llm.medication_draft_build import (
+    apply_one_off_reminder_dose_default,
     dose_or_schedule_display,
     medication_draft_needs_add_confirmation,
 )
@@ -157,6 +158,7 @@ class AddMedicationTool:
             raise MedicationExtractionError()
 
         un = t("medication.unspecified", locale=locale)
+        draft = apply_one_off_reminder_dose_default(draft, unspecified_label=un, locale=locale)
         if medication_draft_needs_add_confirmation(
             draft, unspecified_label=un, user_text=user_text
         ):

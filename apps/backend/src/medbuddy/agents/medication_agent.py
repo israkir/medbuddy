@@ -13,6 +13,10 @@ from medbuddy.application.locale_intents import try_locale_change_reply
 from medbuddy.application.medication_add_confirm_resolve import (
     try_resolve_pending_medication_add_confirmation,
 )
+from medbuddy.application.emergency_contact_resolve import (
+    try_resolve_emergency_contact_from_message,
+)
+from medbuddy.application.profile_completion_nudge import append_profile_completion_nudge_if_due
 from medbuddy.application.reminder_horizon_resolve import try_resolve_pending_reminder_horizon
 from medbuddy.services import AppServices
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
@@ -134,6 +138,24 @@ class MedicationAgent:
             )
             return AgentTurnResult(reply=reply, metadata={})
 
+        contact_reply = await try_resolve_emergency_contact_from_message(
+            svc,
+            user_key=user_key,
+            user_text=user_text,
+            history=history,
+            locale=locale,
+            intent=intent,
+        )
+        if contact_reply is not None:
+            log.info(
+                "medication_agent: user_key=%s emergency contact line saved from chat", user_key
+            )
+            await svc.conversations.append_turn(
+                user_key,
+                ConversationTurn(role="assistant", content=contact_reply, at=datetime.now(UTC)),
+            )
+            return AgentTurnResult(reply=contact_reply, metadata={})
+
         hook_reply = await try_intent_hooks(intent, svc, user_text)
         if hook_reply is not None:
             await svc.conversations.append_turn(
@@ -163,9 +185,18 @@ class MedicationAgent:
             history=history,
             locale=locale,
             llm=svc.llm,
+            max_prior_turns=svc.settings.agent_orchestrator_history_turns,
         )
         reply = await _maybe_append_pending_reminder(
             svc, user_key=user_key, reply=orch.reply, locale=locale
+        )
+        reply = append_profile_completion_nudge_if_due(
+            settings=svc.settings,
+            user_key=user_key,
+            user_row=user_row,
+            reply=reply,
+            locale=locale,
+            history_before_latest_user_message=history,
         )
 
         await svc.conversations.append_turn(

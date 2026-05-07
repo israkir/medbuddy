@@ -83,11 +83,12 @@ Implementation reference: `apps/backend/src/medbuddy/protocols/llm.py` (`LLMPort
 
 ### `complete_chat_with_tools`
 
-Multi-step medication orchestration: OpenAI **chat.completions** with **`tools`** / Gemini structured **`AgentOrchestratorStep`** (see `integrations/llm/*.py`). Each round includes **system** instructions (persona + medication id/name catalog + **`patient_context_for_llm`**), **redacted** user text on the first user message, and subsequent **assistant** + **tool** messages as the loop progresses.
+Multi-step medication orchestration: OpenAI **chat.completions** with **`tools`** / Gemini structured **`AgentOrchestratorStep`** (see `integrations/llm/*.py`). The **first** provider request includes **system**, then **prior** **`user` / `assistant`** messages (recent thread from `conversation_turns`, **redacted**, capped by **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, default 12), then the **current** **redacted** user line (`safe_text`). Later rounds append **assistant** + **tool** messages from the same turn.
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| User line (first turn) | **Redacted** (`safe_text`). |
+| Prior turns | **Redacted** (`orchestrator_prior_messages` → `redact_conversation_turns_for_llm`). |
+| Current user line | **Redacted** (`safe_text`). |
 | System content | Catalog of medication **ids/names** for tool arguments; de-identified patient block; locale-aware instructions (`agent_system_prompt.py`). |
 | Tool outputs | Server-executed tool replies (often localized strings or JSON summaries); may echo user-facing medication names and schedule text—**not** an extra redaction pass today. |
 | Later rounds | Model may emit natural-language **assistant** content between tool calls; same thread is sent to the provider until a final reply or step limit. |
@@ -180,7 +181,7 @@ Personalized replies for explain/interaction intents are keyed by a fingerprint 
 |--------|----------|
 | Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
 | Patient context builders | `apps/backend/src/medbuddy/llm/prompts/persona.py`, `apps/backend/src/medbuddy/application/patient_llm_context.py` |
-| Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py`, `apps/backend/src/medbuddy/agents/orchestrator.py` |
+| Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py`, `apps/backend/src/medbuddy/agents/orchestrator.py` (`orchestrator_prior_messages`) |
 | LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` |
 | Privacy overview | [docs/privacy.md](./privacy.md) |
 

@@ -235,7 +235,11 @@ class ProfilePatchExtraction(BaseModel):
     emergency_contact: str | None = Field(
         default=None,
         max_length=200,
-        description="Family or emergency contact if clearly given; null otherwise",
+        description=(
+            "Single free-text line for who to call in an emergency if clearly given — combine relationship, "
+            "name, and phone (e.g. 'Son David 0912345678',「女兒小雅 0922111333」). Null if not stated. "
+            "Do not put the user's own preferred_name here."
+        ),
     )
     health_notes: str | None = Field(
         default=None,

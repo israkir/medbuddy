@@ -266,7 +266,8 @@ class MockLLM(LLMPort):
     ) -> tuple[str | None, list[ChatToolCall] | None]:
         await asyncio.sleep(0)
         _ = tools
-        if len(messages) <= 2:
+        # First hop of each user turn has no tool results yet; later hops include role=tool.
+        if not any(m.get("role") == "tool" for m in messages):
             self._orch_step = 0
         self._orch_step += 1
         step = self._orch_step

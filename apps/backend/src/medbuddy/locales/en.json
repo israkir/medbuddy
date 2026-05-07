@@ -31,7 +31,7 @@
   "agent": {
     "generic_error": "Something went wrong on our side. Please try again in a moment — or ask someone you trust to help if it keeps happening.",
     "off_topic": "I’m here for your medications, reminders, and everyday health questions about them. I’m not the best fit for that topic — how about your medicines, doses, or what you’d like a reminder for?",
-    "emergency": "🚨 This sounds like a medical emergency. Please call 119 (ambulance) or 110 (police) right away, or have someone nearby call for you. If you can, sit or lie down safely and stay on the phone with emergency services. Do not take extra medication without speaking to them first.\n\nIf you have a family or emergency contact, please call them too.\n\nI am not able to provide emergency medical care — please get help from emergency services immediately.",
+    "emergency": "🚨 This sounds like a medical emergency. Please call 119 (ambulance) or 110 (police) right away, or have someone nearby call for you. If you can, sit or lie down safely and stay on the phone with emergency services. Do not take extra medication without speaking to them first.\n\nIf you have a family or emergency contact, please call them too. When you are safe, you can tell MedBuddy their name and mobile number in chat so we can keep an emergency contact on file for next time.\n\nI am not able to provide emergency medical care — please get help from emergency services immediately.",
     "simulated_emergency_notify": "(Simulation) Your emergency contact would be notified about: {reason}. Saved contact on file: {contact_hint}. This is not a real SMS or phone call — please reach out to them yourself if you need help.",
     "simulated_emergency_no_contact": "(No emergency contact saved in your profile yet.)"
   },
@@ -59,6 +59,7 @@
   },
   "medication": {
     "unspecified": "Unspecified",
+    "default_one_unit_dose": "1 pill (tell me if your clinician gave a different amount)",
     "added": "Saved: {name}, dose {dosage}, schedule {schedule}. Tell me if you want to change anything.",
     "add_confirm_prompt": "Before I save {name}, I’d like to confirm a few details:\n  • Dose: {dosage}\n  • Timing: {schedule}\n  • Notes: {instructions}\n\nIf dose or timing is still unclear, you can update them now for more accurate reminders — or save as-is and fix later. Reply \"yes\" to save, or send a corrected message (e.g. \"Aspirin 100mg after breakfast\").",
     "add_confirm_pending_reminder": "(Still waiting: shall I save {name}? Reply \"yes\" to confirm or \"no\" to cancel — or send the corrected dose and timing.)",
@@ -167,7 +168,8 @@
     "ack_timezone": "timezone “{timezone}”",
     "ack_timezone_cleared": "timezone cleared",
     "updated": "Got it—I have saved: {summary}. You can update anytime.",
-    "update_unclear": "Happy to help — in one short message, could you share what you’d like saved? For example how to call you, age if you’re comfortable, a contact for emergencies, or allergies / important health notes. Example: \"My name is Mei, I’m 72.\""
+    "update_unclear": "Happy to help — in one short message, could you share what you’d like saved? For example how to call you, age if you’re comfortable, a contact for emergencies, or allergies / important health notes. Example: \"My name is Mei, I’m 72.\"",
+    "completion_nudge_footer": "💡 When you have a moment, filling in your profile — how we should address you, age if you’re comfortable, sex/gender, an emergency contact, and any allergies or important health notes — helps MedBuddy support you safely. You can share any of these here anytime."
   },
   "tests": {
     "intent_hook_reply": "(hook) Doctor summary will be available later."
