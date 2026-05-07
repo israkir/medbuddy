@@ -6,12 +6,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
-from medbuddy.engine.types import AppServices
+from medbuddy.core.i18n import t
+from medbuddy.core.timezone import effective_user_timezone
+from medbuddy.llm.medication_draft_build import is_placeholder_field
+from medbuddy.reminders.prefs import reminder_prefs_from_metadata
 from medbuddy.reminders.upcoming_display import (
     format_upcoming_doses_user_reply,
     upcoming_schedule_window_utc,
 )
-from medbuddy.user_timezone import effective_user_timezone
+from medbuddy.services import AppServices
 
 
 class ListUpcomingDosesTool:
@@ -39,5 +42,43 @@ class ListUpcomingDosesTool:
             until_utc_exclusive=end_utc,
             max_items=96,
         )
-        reply = format_upcoming_doses_user_reply(rows, tz_name=tz_name, now_utc=now, locale=locale)
+
+        # Split out dose_events whose medication has a placeholder name — those are incomplete
+        # records that should never be presented as real scheduled doses.
+        good_rows = [r for r in rows if not is_placeholder_field(r.medication_name)]
+        incomplete_names = [
+            r.medication_name for r in rows if is_placeholder_field(r.medication_name)
+        ]
+
+        reply = format_upcoming_doses_user_reply(
+            good_rows, tz_name=tz_name, now_utc=now, locale=locale
+        )
+
+        # Append notice for medications with placeholder names
+        if incomplete_names:
+            unique_incomplete = list(dict.fromkeys(incomplete_names))
+            names_str = (
+                "、".join(unique_incomplete)
+                if locale.startswith("zh")
+                else ", ".join(unique_incomplete)
+            )
+            reply += "\n\n" + t(
+                "medication.incomplete_setup_notice", locale=locale, names=names_str
+            )
+
+        # Append notice for medications awaiting horizon confirmation
+        meds = await svc.users.list_medications(user_key)
+        pending_horizon = [
+            m
+            for m in meds
+            if reminder_prefs_from_metadata(m.raw_metadata).needs_horizon_confirmation
+        ]
+        if pending_horizon:
+            names_str = (
+                "、".join(m.name for m in pending_horizon)
+                if locale.startswith("zh")
+                else ", ".join(m.name for m in pending_horizon)
+            )
+            reply += "\n\n" + t("medication.pending_horizon_notice", locale=locale, names=names_str)
+
         return ToolResult(reply=reply)

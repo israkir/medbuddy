@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import Intent
-from medbuddy.protocols.ports import LLMPort
-from medbuddy.user_locale import (
+from medbuddy.protocols import LLMPort
+from medbuddy.core.locale import (
     effective_user_locale,
     normalize_locale_patch,
 )

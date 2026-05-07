@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 
 _PROFILE_GENDER_I18N: dict[str, str] = {

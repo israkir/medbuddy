@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from medbuddy.agents.tools.medication_crud import persist_medication_add_from_draft
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 
 _YES_EN = frozenset(
     {

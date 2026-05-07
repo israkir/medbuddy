@@ -66,8 +66,21 @@ class MedicationExtraction(BaseModel):
     """Structured medication extracted from a user message."""
 
     name: str = Field(description="Generic or brand name of the medication")
-    dosage: str = Field(description="Dosage amount and unit, e.g. '10mg' or '未指定'")
-    schedule: str = Field(description="Frequency/timing, e.g. '每日一次' or '未指定'")
+    dosage: str = Field(
+        description=(
+            "Dosage amount and unit. Accept any quantity the user states: metric units "
+            "(e.g. '10mg', '500mg'), pill/tablet counts in any language "
+            "(e.g. '1 tablet', '一顆', '兩片', '三粒'), or volume/other forms. "
+            "Use '未指定' only when the user gave NO quantity at all."
+        )
+    )
+    schedule: str = Field(
+        description=(
+            "Recurring frequency or timing for ongoing use, e.g. '每日一次', '飯後', 'once daily'. "
+            "Use '未指定' when the user specified no recurring schedule (e.g. one-off reminders). "
+            "Do NOT put one-time reminder timing here — that goes in first_reminder_in_minutes."
+        )
+    )
     instructions: str | None = Field(
         default=None,
         description="Additional instructions from the user in their own words, or null",
@@ -187,10 +200,14 @@ class IntentClassification(BaseModel):
         default=None,
         max_length=500,
         description=(
-            "If record_pending_dose_as_taken is True, optional note for the dose row (side effect, "
-            "context for clinician). If False but the user is following up to log something on their "
-            "most recent taken dose (e.g. symptom after taking), put that text here; else null. "
-            "Null for general symptoms or chit-chat not meant as a dose log entry."
+            "Short text to store on the dose record for the clinician. Set this whenever the user "
+            "reports a symptom, reaction, or observation that is connected to a specific dose — "
+            "regardless of intent. Specifically: (a) when record_pending_dose_as_taken is True and "
+            "the user also mentions a side effect or feeling (e.g. '吃完拉肚子', 'took it, feel dizzy', "
+            "'吃了有頭痛'), capture the symptom here; (b) when the user follows up after a dose already "
+            "taken with a new symptom or observation meant for their medical record. "
+            "Null only when the message has no connection to a specific dose event: pure general "
+            "advice questions, hypothetical drug questions, or chit-chat."
         ),
     )
 

@@ -7,12 +7,20 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import MessageKind
-from medbuddy.user_locale import effective_user_locale
+from medbuddy.core.locale import effective_user_locale
+from medbuddy.privacy.redact import redact_pii_text
 
 log = logging.getLogger(__name__)
+
+
+def _preview_redacted(text: str, *, limit: int = 80) -> str:
+    redacted = redact_pii_text(text)
+    if len(redacted) <= limit:
+        return redacted
+    return redacted[:limit] + "..."
 
 
 def _message_kind(message: dict[str, Any]) -> MessageKind:
@@ -156,9 +164,10 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
     if kind == MessageKind.TEXT:
         text = message.get("text") or ""
         log.info(
-            "LINE flow: user_id=%s inbound text chars=%d",
+            "LINE flow: user_id=%s inbound text chars=%d preview=%r",
             line_user_id,
             len(text),
+            _preview_redacted(text),
         )
         row = await svc.users.get_or_create_user(line_user_id)
         loc = effective_user_locale(row.get("locale"))
@@ -192,9 +201,10 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
             await svc.line.reply_text(reply_token, t("agent.generic_error", locale=loc))
             return
         log.info(
-            "LINE flow: user_id=%s STT done transcribed_chars=%d",
+            "LINE flow: user_id=%s STT done transcribed_chars=%d preview=%r",
             line_user_id,
             len(user_text),
+            _preview_redacted(user_text),
         )
         await _handle_user_message(
             svc,

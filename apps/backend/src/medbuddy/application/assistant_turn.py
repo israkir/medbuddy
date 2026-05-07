@@ -8,7 +8,7 @@ to preserve the stable public API imported by the channel routes.
 from __future__ import annotations
 
 from medbuddy.agents.medication_agent import MedicationAgent
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 
 _agent = MedicationAgent()
 

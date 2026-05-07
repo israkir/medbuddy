@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.models.domain import Intent
@@ -13,7 +13,7 @@ from medbuddy.models.domain import Intent
 
 @pytest.mark.asyncio
 async def test_confirm_dose_intent_without_adherence_slots_does_not_mark_dose() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     svc.llm = MockLLM(
         intent=Intent.CONFIRM_DOSE,

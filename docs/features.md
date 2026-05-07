@@ -97,7 +97,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 **Implementation**
 
-- Routes in `channels/mobile/routes.py` (or equivalent); wired through the same assistant entrypoint as LINE text.
+- Routes in `channels/api/routes.py`; wired through the same assistant entrypoint as LINE text.
 
 **Reference client**
 
@@ -344,7 +344,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 **Configuration**
 
-- `MEDBUDDY_INTEGRATION`, `MOCK_EXTERNAL_SERVICES`, and per-env tokens drive `build_app_services` in `container.py`. On Render (`RENDER=true`), production-safe defaults force real integrations.
+- `MEDBUDDY_INTEGRATION` and per-env tokens drive `build_app_services` in `container.py`. On Render (`RENDER=true`), `load_settings()` forces `real` mode regardless of env.
 
 ---
 
@@ -358,7 +358,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 | Topic | Behavior |
 |-------|----------|
-| Trigger | Successful **`add_medication`** or **`remove_medication`** via **`MedicationAgent`** tools (LINE webhook or **`POST /v1/app/messages`**). |
+| Trigger | Successful **`add_medication`**, **`update_medication`**, or **`remove_medication`** via **`MedicationAgent`** tools (LINE webhook or **`POST /v1/app/messages`**). |
 | Extraction | On add, the LLM can return structured **reminder preferences** (e.g. first reminder in N minutes, daily horizon days, whether to fan daily rows, optional local time). Stored under **`medications.raw_metadata.reminder`** and consumed when building `dose_events` (e.g. “in 5 minutes” → a single upcoming instant without fanning the full horizon). Env defaults `MEDBUDDY_REMINDER_*` apply when fields are unset. |
 | Scheduling | `UserDataPort.sync_upcoming_dose_events` replaces future `dose_events` per medication **`raw_metadata.reminder`**: **`daily_local_hhmm_list`** (multiple instants per day) or **`daily_local_hhmm`**, else fallback `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` (`09:00`), in **`patients.timezone`**, horizon `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, cap 90). The free-text **`schedule`** field is **display/copy**; clock instants come from structured reminder prefs populated from LLM extraction on add (and related flows), not from parsing the schedule string alone. |
 | Delivery | With Redis, `enqueue_reminder_jobs` schedules arq `send_reminder_for_dose` with `_defer_until = scheduled_at`. Worker runs `deliver_dose_reminder` → LINE `push_message`, then `reminder_sent_at`. |
@@ -428,12 +428,61 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 ## 12. Explicit non-goals (current codebase)
 
+These are **not** backlog items or deferred features — they are deliberate exclusions that protect the product's positioning and safety posture.
+
 | Non-goal | Notes |
 |----------|--------|
-| Clinical diagnosis | Prompts push back; not a substitute for professionals. |
-| Full TFDA API in production HTTP | Stub returns empty; mocks may fake TFDA. |
-| Reference Expo hold-to-talk → backend STT | Wired to **`POST /v1/app/messages/voice`**; see [`frontend-expo.md`](frontend-expo.md). **LINE** voice uses STT and replies as **text** by default, with optional **text + audio** when `MEDBUDDY_LINE_VOICE_REPLIES` is enabled. Expo spoken replies remain **on-device** (expo-speech). |
+| Clinical diagnosis or prescribing guidance | Prompts push back; fixed safety reply for emergency wording; not a substitute for professionals. |
+| Autonomous dose changes by AI | The assistant suggests; the user confirms. Held even at Tier 3. |
+| AI symptom-checker / triage | Babylon / Ada territory; regulatory minefield; directly contradicts “never diagnostic.” |
+| Pharmacy referral fees or ad-supported answers | Patient trust is the moat — monetising the answer destroys it. Explicitly deck-excluded. |
+| Generic chronic-care coaching | Dilutes into Livongo / Omada lookalike; deck positions explicitly against this wedge. |
+| Open-ended ReAct agent expansion | TDD §3 architectural ceiling: closed intent set, one LLM call to classify, then one typed tool. Intentional, not a backlog item. |
+| Full TFDA API in production HTTP | Stub returns empty; mocks may fake TFDA. Growth-phase item when legally and technically viable. |
 | Rich LINE reminder UI | No Flex cards, carousel, or postback “mark taken” on the reminder message in v1. |
+| Reference Expo hold-to-talk → backend STT | Wired to **`POST /v1/app/messages/voice`**; see [`frontend-expo.md`](frontend-expo.md). **LINE** voice uses STT and replies as **text** by default, with optional **text + audio** when `MEDBUDDY_LINE_VOICE_REPLIES` is enabled. Expo spoken replies remain **on-device** (expo-speech). |
+
+---
+
+## 13. Future feature directions
+
+Features are grouped into three tiers gated by market and maturity signals, not by calendar. No tier graduates without its named trigger. Authoritative gate definitions live in [`prd-extended.md §13`](prd-extended.md#13-open-decisions).
+
+### Tier 1 — Adjacent depth (post-Pilot, pre-Growth)
+
+Same buyer (patient / family), same surface (LINE), same safety posture. Each compounds the existing pillars.
+
+| Feature | What it does | Trigger signal |
+|---------|-------------|----------------|
+| **T1.1 Caregiver Circle** | Read-only family share via second LINE account. Daily/weekly digest; patient-initiated invite with explicit, revocable consent. Never raw chat, never edit rights. | ≥30% of pilot users mention a family member at onboarding, OR elderly retention curve flattens due to self-onboarding friction. |
+| **T1.2 Pill / Blister-Pack Photo Recognition** | Vision model returns a candidate drug from a photo (“this looks like Amlodipine 5 mg — add?”). Low-confidence falls back to “ask the pharmacist.” Addresses Asia-specific unlabeled re-packaged blisters (分包). Confirmation flow (`medication_add_confirm_resolve`) unchanged. | ≥20% drop-off at “build the list” step in onboarding funnel, OR users organically send pill photos. |
+| **T1.3 Refill horizon & shortage radar** | Track days-of-supply; nudge before run-out. Layer in TFDA / FDA shortage feed when available. Never recommend a specific pharmacy (deck-excluded). | Pilot data shows clusters of consecutive missed doses (suggests run-out, not forgetfulness). |
+| **T1.4 Food / herbal / TCM interaction layer** | Extend `interaction_check` to food-drug (grapefruit ↔ statins; vitamin K ↔ warfarin) and TCM/herbal interactions (ginkgo ↔ anticoagulants; ginseng ↔ warfarin). Answers cite public references (NCCIH, MSK About Herbs); disclaimer to consult pharmacist for novel combinations. | Q&A logs show repeated food/supplement questions falling through to `general_question`. |
+| **T1.5 “Why am I missing this dose?” reflection** | On recurring miss pattern, ask once what's in the way. Branches: time wrong → offer to shift reminder; side-effect avoidance; ran out. Logs structured reason for visit-prep summary. One probe per pattern per week — never nag. Schedule-shift is suggested, never auto-applied. | Miss rate > expected baseline (1–3/week per persona) and `report_missed_dose` captures no reason. |
+| **T1.6 Vitals trend deltas in chat** | `log_vital` already records BP/glucose. Add trend-awareness: “Your morning BP has been 145+ for 5 of 7 days — want to flag this?” Plain-English delta; no clinical thresholds (avoids medical-device classification per OD-1). Language is “you might want to mention this,” never “this is high.” | Median pilot user logs vitals ≥3×/week (data exists to trend on). |
+
+### Tier 2 — Platform & B2B2C levers (first LOI, OD-1 + OD-2 resolved)
+
+| Feature | What it does | Trigger signal |
+|---------|-------------|----------------|
+| **T2.1 Clinician summary handoff** | One-page PDF or QR-linked URL with meds, recent changes, missed-dose reasons (from T1.5), vitals trend (from T1.6), and patient questions. Patient owns the artifact; no clinic pull without per-patient consent. Activates Revenue Channel 1. | First clinic LOI, OR ≥1 pilot user reports the doctor read the summary in-room. |
+| **T2.2 Pharma-sponsored PSP module** | Disease-area overlay (T2D, anticoagulation, post-stroke) funded by a disease-area sponsor — never by an individual brand. Sponsor badge in header only; independent editorial review; no brand name in answers. Activates Revenue Channel 3. | ≥80% grounding rate on a single disease area in pilot (the underwriting bar). |
+| **T2.3 Public API hardening** | Per-tenant rate limits, OAuth / signed tokens, DPA template, audit log export. Resolves OD-2. Tenants cannot override safety/persona rules. Activates Revenue Channel 2. | First integrator conversation that asks for a DPA. |
+| **T2.4 Polypharmacy / deprescribing flags** | When list crosses 5+ drugs or includes Beers-Criteria / STOPP-START combinations, surface a non-prescriptive flag and optional routing to a partner pharmacy queue. Pharmacist makes any clinical call; no financial referral kickback. | First pharmacy chain partnership signed. |
+| **T2.5 Wearable & home-device passive vitals ingest** | Optional passthrough: Apple Health / Google Fit, Omron Connect, CGM streams (Libre/Dexcom). Wearable data never routed through LLM unredacted — only aggregated summaries enter the prompt. APPI/PIPA residency rules apply per region. | ≥30% of T1.6 vitals-trend users are already logging manually. |
+
+### Tier 3 — Frontier bets (Series A+, OD-1 + OD-5 required)
+
+Do not begin engineering on any T3 feature before OD-1 and OD-5 are resolved.
+
+| Feature | What it does | Gate |
+|---------|-------------|------|
+| **T3.1 NHI PharmaCloud / My Health Bank import** | Import dispensing history from Taiwan's NHI 健保雲端藥歷 via 健保快易通 API. Med list goes from “what the patient remembered” to “what was dispensed in the last 6 months.” Taiwan structural moat — unavailable to US-built competitors. | OD-1 + OD-5 resolved + HPA / NHI pilot program. |
+| **T3.2 Insurer / NHI value-based adherence** | Revenue-share or P4P with private insurers (Cathay, Fubon, Nan Shan) or NHI Diabetes P4P. Editorial firewall extends to insurer — they cannot influence answers. | Clean adherence delta measurable from T1.5 + T2.2; OD-1 resolved before signing. |
+| **T3.3 KakaoTalk and WhatsApp channel expansion** | Replicate core assistant onto KakaoTalk (Korea) and WhatsApp (SEA → global). One channel adapter + one locale pack + one drug-data source per market. Korea PIPA forces in-country data residency. Mainland China remains out of this expansion line and is treated as a separate product/JV path (WeChat + domestic LLM + on-shore stack). | Taiwan reaches Series A milestones AND country-specific drug-data source accessible. |
+| **T3.4 Psychiatric medication adherence specialty** | Scoped vertical for SSRIs, mood stabilizers, antipsychotics, ADHD meds. Suicidal-ideation language must extend the existing fixed-emergency-reply rule — significantly more conservative than current escalation. | Psychiatry clinic partner with signed pilot + documented clinical advisor sign-off + OD-1 resolved. |
+| **T3.5 Voice-first elderly mode + smart-speaker bridge** | Voice-only onboarding and reminder confirmation. Bridge to LINE Clova (JP), Google Home (TW/global), SKT NUGU (KR). Confirmations go through the same `run_assistant_text_turn` pipeline — same redaction and emergency handling, no bypass. | OD-3 closed (NG-1 promoted) + Japan market launch readiness. |
+| **T3.6 De-identified RWD aggregates** | Aggregate, IRB-reviewed adherence-pattern datasets for academic and pharma R&D. Patient opt-in separate from product consent. Trust metrics must be at zero. **If in doubt, don't.** | Ethics review board constituted + all trust metrics at zero. |
 
 ---
 

@@ -30,3 +30,5 @@ apps/frontend/dist/
 apps/frontend/web-build/
 apps/frontend/.metro-health-check*
 apps/frontend/coverage/
+
+/secret

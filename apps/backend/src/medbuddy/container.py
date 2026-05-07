@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import logging
-
 import httpx
 
 from medbuddy.config import Settings
-from medbuddy.engine.types import AppServices
-from medbuddy.protocols.ports import LLMPort
+from medbuddy.core.errors import ConfigError
+from medbuddy.integrations.caching_drugs import CachingDrugData
+from medbuddy.integrations.drugs_http import HttpDrugData
+from medbuddy.integrations.line_audio_blob_store import LineAudioBlobStore
+from medbuddy.integrations.line_client import LineHttpClient
+from medbuddy.integrations.llm.gemini_llm import GeminiLLM
+from medbuddy.integrations.llm.openai_llm import OpenAILLM
 from medbuddy.integrations.mocks import (
     InMemoryConversationStore,
     MockDrugData,
@@ -17,39 +20,49 @@ from medbuddy.integrations.mocks import (
     MockSpeechToText,
     MockUserData,
 )
-from medbuddy.integrations.caching_drugs import CachingDrugData
-from medbuddy.integrations.drugs_http import HttpDrugData
-from medbuddy.integrations.llm.gemini_llm import GeminiLLM
-from medbuddy.integrations.llm.openai_llm import OpenAILLM
-from medbuddy.integrations.line_audio_blob_store import LineAudioBlobStore
-from medbuddy.integrations.line_client import LineHttpClient
 from medbuddy.integrations.mocks.tts import MockTextToSpeech
+from medbuddy.integrations.persistence.supabase_drug_caches import SupabaseDrugCaches
+from medbuddy.integrations.persistence.supabase_stores import (
+    SupabaseConversationStore,
+    SupabaseUserData,
+    create_supabase_client,
+)
 from medbuddy.integrations.stt.stt_google import GoogleSpeechToText
 from medbuddy.integrations.tts.tts_google import GoogleTextToSpeech
-from medbuddy.protocols.ports import TextToSpeechPort
-
-log = logging.getLogger(__name__)
+from medbuddy.protocols.llm import LLMPort
+from medbuddy.protocols.speech import TextToSpeechPort
+from medbuddy.services import AppServices
 
 
 def _build_llm(settings: Settings) -> LLMPort:
     loc = settings.locale
-    if settings.llm_provider == "openai":
+    if settings.llm_provider.value == "openai":
         if not settings.openai_api_key:
-            log.warning("OPENAI_API_KEY missing (LLM_PROVIDER=openai); using MockLLM")
-            return MockLLM(locale=loc)
-        return OpenAILLM(
-            api_key=settings.openai_api_key,
-            locale=loc,
-            model=settings.openai_model,
-        )
+            raise ConfigError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+        return OpenAILLM(api_key=settings.openai_api_key, locale=loc, model=settings.openai_model)
     if not settings.gemini_api_key:
-        log.warning("GEMINI_API_KEY missing; using MockLLM")
-        return MockLLM(locale=loc)
+        raise ConfigError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
     return GeminiLLM(
         api_key=settings.gemini_api_key,
         locale=settings.locale,
         intent_model=settings.gemini_model,
     )
+
+
+def _build_stt_tts(
+    settings: Settings,
+) -> tuple[GoogleSpeechToText, TextToSpeechPort | None]:
+    if not settings.google_speech_project_id:
+        raise ConfigError("GOOGLE_SPEECH_PROJECT_ID is required in real mode for speech-to-text")
+    stt = GoogleSpeechToText(
+        project_id=settings.google_speech_project_id,
+        location=settings.google_speech_location,
+        language_code=settings.locale,
+    )
+    tts: TextToSpeechPort | None = (
+        GoogleTextToSpeech() if settings.line_voice_replies != "off" else None
+    )
+    return stt, tts
 
 
 def build_app_services(
@@ -58,7 +71,8 @@ def build_app_services(
     outbound_http: httpx.AsyncClient | None = None,
 ) -> AppServices:
     line_audio_blobs = LineAudioBlobStore(public_base_url=settings.public_base_url)
-    if settings.mock_external_services:
+
+    if settings.is_mock:
         loc = settings.locale
         return AppServices(
             line=MockLineClient(),
@@ -73,71 +87,24 @@ def build_app_services(
             drug_caches=None,
         )
 
+    # Real mode — every dep must be present; fail fast with ConfigError.
     if not settings.line_channel_access_token:
-        msg = "LINE channel access token is required when MOCK_EXTERNAL_SERVICES=false"
-        raise ValueError(msg)
+        raise ConfigError("LINE_CHANNEL_ACCESS_TOKEN is required in real mode")
+    if not settings.supabase_url or not settings.supabase_publishable_key:
+        raise ConfigError("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in real mode")
 
     line = LineHttpClient(channel_access_token=settings.line_channel_access_token)
-
     llm = _build_llm(settings)
+    stt, tts = _build_stt_tts(settings)
 
-    if settings.google_speech_project_id:
-        stt = GoogleSpeechToText(
-            project_id=settings.google_speech_project_id,
-            location=settings.google_speech_location,
-            language_code=settings.locale,
-        )
-        tts: TextToSpeechPort | None = GoogleTextToSpeech()
-    else:
-        log.warning("GOOGLE_SPEECH_PROJECT_ID missing; using MockSpeechToText for STT")
-        stt = MockSpeechToText(locale=settings.locale)
-        tts = None
-        if settings.line_voice_replies != "off":
-            log.warning(
-                "LINE voice replies are enabled (%s) but Google TTS is unavailable "
-                "(set GOOGLE_SPEECH_PROJECT_ID); assistant will send text only",
-                settings.line_voice_replies,
-            )
+    outbound = outbound_http or httpx.AsyncClient(timeout=httpx.Timeout(20.0))
+    drugs_http = HttpDrugData(locale=settings.locale, http_client=outbound)
 
-    drug_caches = None
-    drugs_backend: HttpDrugData | CachingDrugData = HttpDrugData(
-        locale=settings.locale,
-        http_client=outbound_http,
-    )
-
-    if settings.supabase_url and settings.supabase_publishable_key:
-        try:
-            from medbuddy.integrations.persistence.supabase_drug_caches import SupabaseDrugCaches
-            from medbuddy.integrations.persistence.supabase_stores import (
-                SupabaseConversationStore,
-                SupabaseUserData,
-                create_supabase_client,
-            )
-        except ImportError:
-            log.warning(
-                "SUPABASE_URL and a publishable/anon key are set but the supabase "
-                "package is not installed; install with pip install 'medbuddy-api[supabase]'. "
-                "Using in-memory user and conversation stores.",
-            )
-            user_data = MockUserData(settings)
-            conversations_store = InMemoryConversationStore()
-        else:
-            sb_client = create_supabase_client(settings)
-            user_data = SupabaseUserData(sb_client, settings)
-            conversations_store = SupabaseConversationStore(sb_client, user_data)
-            drug_caches = SupabaseDrugCaches(sb_client, settings)
-            drugs_backend = CachingDrugData(
-                HttpDrugData(locale=settings.locale, http_client=outbound_http),
-                drug_caches,
-            )
-    else:
-        log.warning(
-            "Real mode without Supabase: user and conversation data stay in memory. "
-            "Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY; run "
-            "supabase/schema.sql for RLS) for Postgres-backed persistence.",
-        )
-        user_data = MockUserData(settings)
-        conversations_store = InMemoryConversationStore()
+    sb_client = create_supabase_client(settings)
+    user_data = SupabaseUserData(sb_client, settings)
+    conversations_store = SupabaseConversationStore(sb_client, user_data)
+    drug_caches = SupabaseDrugCaches(sb_client, settings)
+    drugs_backend = CachingDrugData(drugs_http, drug_caches)
 
     return AppServices(
         line=line,

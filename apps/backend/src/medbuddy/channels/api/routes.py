@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.channels.mobile.auth import MobileAuthContext, require_mobile_auth
-from medbuddy.channels.mobile.schemas import (
+from medbuddy.channels.api.auth import MobileAuthContext, require_mobile_auth
+from medbuddy.channels.api.schemas import (
     HealthSummaryResponse,
     MeResponse,
     MedicationSummaryItemResponse,
@@ -21,11 +21,11 @@ from medbuddy.channels.mobile.schemas import (
     MessageVoiceReply,
     OnboardingSubmit,
 )
-from medbuddy.user_locale import effective_user_locale
-from medbuddy.user_timezone import effective_user_timezone
+from medbuddy.core.locale import effective_user_locale
+from medbuddy.core.timezone import effective_user_timezone
 from medbuddy.deps import get_services
-from medbuddy.engine.types import AppServices
-from medbuddy.exceptions import MedBuddyError
+from medbuddy.services import AppServices
+from medbuddy.core.errors import MedBuddyError
 
 log = logging.getLogger(__name__)
 

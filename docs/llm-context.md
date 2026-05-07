@@ -1,6 +1,6 @@
 # LLM inputs: what we send and how privacy is applied
 
-This document describes **what data** each backend LLM call includes, **which redaction or de-identification** applies, and where it lives in code. It complements **[privacy.md](./privacy.md)** (operational goals and limits) with a **per-call** map.
+This document describes **what data** each backend LLM call includes, **which redaction** applies today, and where it lives in code. It complements **[privacy.md](./privacy.md)** (operational goals and limits) with a **per-call** map.
 
 **Audience:** Developers working on prompts, tools, or compliance reviews.
 
@@ -20,7 +20,7 @@ Maps each turn’s `content` through `redact_pii_text`. Used wherever tools pass
 
 ### Patient context for external LLMs (`patient_context_for_llm` → `build_patient_context_for_llm`)
 
-**Assembler:** `apps/backend/src/medbuddy/application/patient_llm_context.py` runs `UserDataPort.sync_upcoming_dose_events`, queries **`list_upcoming_dose_events`** for a ~**7-day** window from **local calendar midnight** in **`patients.timezone`**, formats that slice with `reminders/upcoming_display.py`, then calls **`build_patient_context_for_llm`** (`apps/backend/src/medbuddy/prompts/persona.py`) with the result as **`upcoming_doses_context`**.
+**Assembler:** `apps/backend/src/medbuddy/application/patient_llm_context.py` runs `UserDataPort.sync_upcoming_dose_events`, queries **`list_upcoming_dose_events`** for a ~**7-day** window from **local calendar midnight** in **`patients.timezone`**, formats that slice with `reminders/upcoming_display.py`, then calls **`build_patient_context_for_llm`** (`apps/backend/src/medbuddy/llm/prompts/persona.py`) with the result as **`upcoming_doses_context`**.
 
 Typical blocks in the string sent to the model:
 
@@ -71,7 +71,7 @@ Current architecture is intentionally **hybrid**:
 
 ## Per `LLMPort` method (what goes to the model)
 
-Implementation reference: `apps/backend/src/medbuddy/protocols/ports.py` (`LLMPort`). Concrete adapters: `integrations/llm/gemini_llm.py`, `integrations/llm/openai_llm.py` (same contract).
+Implementation reference: `apps/backend/src/medbuddy/protocols/llm.py` (`LLMPort`). Concrete adapters: `integrations/llm/gemini_llm.py`, `integrations/llm/openai_llm.py` (same contract).
 
 ### `interpret_user_turn`
 
@@ -159,7 +159,7 @@ Snippets from **TFDA** and/or **OpenFDA** are factual drug label excerpts, not p
 
 ## Caching (`drug_personalization_cache`)
 
-Personalized replies for explain/interaction intents are keyed by a fingerprint that includes **hashed** `patient_context` from **`patient_context_for_llm`** (med list + **time-ordered upcoming doses** when rows exist) and **redacted** query text where applicable (`apps/backend/src/medbuddy/drug_cache_keys.py`). Cached reply text may still be sensitive; treat storage under your retention policy.
+Personalized replies for explain/interaction intents are keyed by a fingerprint that includes **hashed** `patient_context` from **`patient_context_for_llm`** (med list + **time-ordered upcoming doses** when rows exist) and **redacted** query text where applicable (`apps/backend/src/medbuddy/integrations/caching_drugs.py`). Cached reply text may still be sensitive; treat storage under your retention policy.
 
 ---
 
@@ -168,7 +168,7 @@ Personalized replies for explain/interaction intents are keyed by a fingerprint 
 | Concern | Location |
 |--------|----------|
 | Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
-| Patient context builders | `apps/backend/src/medbuddy/prompts/persona.py`, `apps/backend/src/medbuddy/application/patient_llm_context.py` |
+| Patient context builders | `apps/backend/src/medbuddy/llm/prompts/persona.py`, `apps/backend/src/medbuddy/application/patient_llm_context.py` |
 | Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py` |
 | LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` |
 | Privacy overview | [docs/privacy.md](./privacy.md) |

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from google.cloud import texttospeech
 
-from medbuddy.protocols.ports import TextToSpeechPort
+from medbuddy.protocols import TextToSpeechPort
 
 log = logging.getLogger(__name__)
 

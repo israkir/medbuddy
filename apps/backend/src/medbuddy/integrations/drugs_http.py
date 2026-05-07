@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from medbuddy.models.domain import DrugGrounding
-from medbuddy.protocols.ports import DrugDataPort
+from medbuddy.protocols import DrugDataPort
 
 _LABEL_SECTION_MAX = 2000
 

@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
     InteractionCheckResult,
@@ -19,7 +19,7 @@ from medbuddy.models.domain import (
     MedicationRecord,
     TurnInterpretation,
 )
-from medbuddy.protocols.ports import LLMPort, ProfilePatch
+from medbuddy.protocols import LLMPort, ProfilePatch
 
 
 class MockLLM(LLMPort):

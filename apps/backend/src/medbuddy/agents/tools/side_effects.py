@@ -24,12 +24,12 @@ import logging
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
-from medbuddy.engine.types import AppServices
-from medbuddy.i18n import t
+from medbuddy.services import AppServices
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import ConversationTurn, MedicationRecord
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
 from medbuddy.application.patient_llm_context import patient_context_for_llm
-from medbuddy.prompts.persona import get_system_persona
+from medbuddy.llm.prompts.persona import get_system_persona
 
 log = logging.getLogger(__name__)
 

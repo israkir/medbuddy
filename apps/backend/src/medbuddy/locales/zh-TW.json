@@ -1,6 +1,6 @@
 {
   "gemini": {
-    "extract_medication_intro": "從使用者的訊息擷取要新增的用藥。若欄位不明，填「未註明」。不要臆測使用者未明確提供的劑量、服用時間或備註。",
+    "extract_medication_intro": "從使用者的訊息擷取要新增的用藥。若欄位不明，填「未註明」。不要臆測使用者未明確提供的劑量、服用時間或備註。dosage 欄位請填使用者說的用量，包含中文數量詞（例如「一顆」「兩片」「三粒」）；schedule 欄位填長期服用規律（如「每日一次」「飯後」），若只是一次性提醒則填「未註明」。",
     "extract_medication_reminder_rules": "同時擷取用藥「提醒」相關欄位（整數可為 null）：\n- first_reminder_in_minutes：若使用者明確要求「幾分鐘後／馬上」吃第一次藥或第一次提醒，填實際分鐘數；否則 null。\n- materialize_daily_reminders：若使用者只要單次／一次性提醒（例如「五分鐘後提醒我」且未談之後每天），填 false；若希望之後每天固定時間提醒，填 true。\n- reminder_horizon_days：若使用者明確說要連續提醒幾天（1–90），填數字；否則 null（交給系統預設）。\n- needs_horizon_confirmation：若使用者沒說要連續提醒幾天、且情境上應追問（例如只新增藥物但未提提醒範圍），填 true，且 materialize_daily_reminders 應為 false。\n- daily_reminder_local_hhmm：若使用者每天只要「一個」固定吃藥時間（24 小時制 HH:MM），填該時間；否則 null。\n- daily_reminder_local_hhmm_list：若使用者希望「同一天多個」固定時間提醒（例如早／午／晚、飯後三餐、一天三次），填多個不重複的 HH:MM（由早到晚）；若未說明幾點，可用常見用餐時間（例如 08:00、12:30、18:30）。若只需單次每日時間或交給系統預設，填 null。\n不要把只有藥名的訊息自動補成推測劑量或吃法；缺少資訊時維持未註明／null，讓助理先向使用者確認。\n規則範例：「五分鐘內吃阿斯匹靈」→ first_reminder_in_minutes=5、materialize_daily_reminders=false、needs_horizon_confirmation=false。",
     "added_ask_reminder_horizon": "【提醒設定】系統尚未建立每日重複提醒。請在回覆中友善詢問：希望連續提醒幾天，或是否只需要單次／臨時提醒。",
     "added_first_reminder_only": "【已排程】系統已為使用者安排約 {minutes} 分鐘後的一次用藥提醒（無每日重複）。請在回覆中簡短確認此時間點。",
@@ -77,6 +77,8 @@
     "confirm_dose_note_ambiguous": "我看到近期已服用紀錄不只一筆，想請您確認這段備註要加在哪一筆：\n{options}\n請回覆藥名與時間。",
     "confirm_dose_clarify_invalid": "請用選項上的數字回覆（例如 1 或 2）；若以上全都適用也可回覆「全部」。",
     "confirm_dose_recorded": "好的，已幫你記下 {count} 筆「已服藥」。謝謝你告訴我。",
+    "confirm_dose_recorded_detail": "好的，已記下你服了 {name}（{dose}）。謝謝你告訴我。",
+    "confirm_dose_recorded_detail_with_note": "好的，已記下你服了 {name}（{dose}），並附上備註：{note}",
     "confirm_dose_recorded_with_note": "好的，已幫你記下 {count} 筆「已服藥」，並附上備註：{note}",
     "confirm_dose_note_appended": "好的，已把你說的內容加在最近一筆已服藥紀錄上：{note}",
     "missed_dose_recorded": "謝謝你告訴我，已幫你記下 {count} 筆「漏服／未服用」。",
@@ -85,7 +87,9 @@
     "upcoming_empty": "接下來一週內目前沒有「待服用」的提醒時段。若您預期應該有，可能是尚未設定吃法／提醒，或可先問「我的藥清單」。",
     "upcoming_line": "{time_local}{due_suffix} — {name}（{dosage}）；紀錄上的吃法：{schedule}",
     "upcoming_time_other_day": "{date} {time}",
-    "upcoming_due_suffix": "（應服用）"
+    "upcoming_due_suffix": "（應服用）",
+    "incomplete_setup_notice": "以下藥物資料不完整（藥名未清楚紀錄），建議重新設定：{names}",
+    "pending_horizon_notice": "另外，以下藥物尚未設定每日提醒週期，請告訴我您想提醒幾天：{names}"
   },
   "vital": {
     "logged": "好的，已幫你記下：{summary}。",

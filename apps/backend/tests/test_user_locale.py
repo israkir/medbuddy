@@ -1,6 +1,6 @@
 """Unit tests for app UI locale normalization."""
 
-from medbuddy.user_locale import effective_user_locale, normalize_locale_patch
+from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 
 
 def test_effective_user_locale_accepts_allowed() -> None:

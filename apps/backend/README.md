@@ -9,7 +9,7 @@ Paths below are relative to **`apps/backend/`**.
 ## Architecture overview
 
 ```
-channels/line/   channels/mobile/
+channels/line/   channels/api/
       ↓                 ↓
    application/assistant_turn.py    ← single entry point for both channels
           ↓
@@ -17,7 +17,7 @@ channels/line/   channels/mobile/
           ↓
    agents/tools/                    ← medication CRUD, drug lookup, interactions, summary
           ↓
-   protocols/ports.py               ← abstract interfaces (hexagonal boundary)
+  protocols/                       ← abstract interfaces (hexagonal boundary)
     ↓           ↓         ↓
 integrations/  integrations/ integrations/
 gemini_llm    supabase_stores  drugs_http
@@ -33,7 +33,7 @@ gemini_llm    supabase_stores  drugs_http
 | Area | Path | Role |
 |------|------|------|
 | **Channels** | `channels/line/` | LINE webhook, HMAC signature verification, event pipeline |
-| | `channels/mobile/` | Mobile REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
+| | `channels/api/` | App REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
 | | `application/patient_llm_context.py` | `patient_context_for_llm()` — de-identified context plus materialized upcoming `dose_events` for LLM prompts |
 | | `application/profile_intents.py` | Profile updates when intent is `update_profile` (`extract_profile_patch`) |
@@ -45,9 +45,9 @@ gemini_llm    supabase_stores  drugs_http
 | | `agents/tools/interaction_check.py` | `InteractionCheckTool` |
 | | `agents/tools/health_summary.py` | `GenerateHealthSummaryTool` (doctor-ready output) |
 | **Models** | `models/domain.py` | `Intent`, `TurnInterpretation`, `MedicationDraft`, `MedicationRecord`, `ConversationTurn` |
-| **Protocols** | `protocols/ports.py` | Abstract interfaces: `LLMPort`, `UserDataPort`, `LineMessagingPort`, etc. |
+| **Protocols** | `protocols/` | Abstract interfaces: `LLMPort`, `UserDataPort`, `LineMessagingPort`, etc. (one file per port) |
 | | `protocols/drug_caches.py` | `DrugCachesPort` |
-| **Engine** | `engine/types.py` | `AppServices` dataclass — DI container |
+| **Services** | `services.py` | `AppServices` dataclass — DI container |
 | **Container** | `container.py` | `build_app_services(settings)` — wires mock vs real adapters |
 | **Integrations** | `integrations/llm/gemini_llm.py`, `integrations/llm/openai_llm.py` | LLM adapters (`LLM_PROVIDER` selects which runs) |
 | | `integrations/line_client.py` | LINE Messaging API SDK |
@@ -58,13 +58,13 @@ gemini_llm    supabase_stores  drugs_http
 | | `integrations/stt/stt_google.py` | Google Cloud Speech-to-Text V2 |
 | | `integrations/mocks/` | In-memory mock adapters for all ports |
 | **Privacy** | `privacy/redact.py` | `redact_pii_text()` — emails, phone patterns, digit runs |
-| **Prompts** | `prompts/persona.py` | `get_system_persona()`, LLM-safe vs display patient context |
+| **Prompts** | `llm/prompts/persona.py` | `get_system_persona()`, LLM-safe vs display patient context |
 | **Reminders** | `reminders/` | arq worker, dose scheduling, LINE push delivery, reconcile |
-| **Shared routes** | `http/shared_routes.py` | `/health`, `/internal/reminders/reconcile` |
-| **i18n** | `i18n.py` | `t()` — key lookup with zh-TW fallback |
-| **Config** | `config.py` | Pydantic Settings; loads `apps/backend/.env` then repo-root `.env` |
+| **Shared routes** | `channels/internal/routes.py` | `/health`, `/internal/reminders/reconcile` |
+| **i18n** | `core/i18n.py` | `t()` — key lookup with zh-TW fallback |
+| **Config** | `config.py` | Settings dataclass + env loading; loads `apps/backend/.env` then repo-root `.env` |
 
-Add new **LINE** behavior in `channels/line/`; extend **app-only** REST in `channels/mobile/`. Shared assistant logic belongs in **`application/`** or **`agents/`** so channels never duplicate LLM or drug steps.
+Add new **LINE** behavior in `channels/line/`; extend **app-only** REST in `channels/api/`. Shared assistant logic belongs in **`application/`** or **`agents/`** so channels never duplicate LLM or drug steps.
 
 ---
 
@@ -198,7 +198,7 @@ Adding a language: add matching `*.json` in both trees and register in backend s
 | **Real LINE (tunnel)** | `make be-dev-real` + set `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `PUBLIC_BASE_URL`. Expose via [ngrok](https://ngrok.com/) or Cloudflare Tunnel; set webhook URL in [LINE Developers Console](https://developers.line.biz/) to `{PUBLIC_BASE_URL}/v1/line/webhook`. |
 | **Hosted** | After deploy, set same webhook URL in LINE console. |
 
-Protocol definitions: [`src/medbuddy/protocols/ports.py`](src/medbuddy/protocols/ports.py).
+Protocol definitions: [`src/medbuddy/protocols/`](src/medbuddy/protocols).
 Intent overrides: [`src/medbuddy/extensibility/intent_hooks.py`](src/medbuddy/extensibility/intent_hooks.py).
 
 ---

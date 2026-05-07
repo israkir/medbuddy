@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from medbuddy.agents.tools.upcoming_doses import ListUpcomingDosesTool
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.integrations.mocks.users import MockUserData
 from medbuddy.models.domain import MedicationDraft
@@ -16,7 +16,7 @@ from medbuddy.reminders.upcoming_display import upcoming_schedule_window_utc
 
 @pytest.mark.asyncio
 async def test_upcoming_doses_tool_lists_ordered_pending() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     assert isinstance(svc.users, MockUserData)
     key = "u-upcoming"
@@ -41,7 +41,7 @@ async def test_upcoming_doses_tool_lists_ordered_pending() -> None:
 
 @pytest.mark.asyncio
 async def test_list_upcoming_dose_events_respects_window() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     assert isinstance(svc.users, MockUserData)
     key = "u-window"

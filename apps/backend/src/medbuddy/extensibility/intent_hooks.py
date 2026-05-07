@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 from medbuddy.models.domain import Intent
 
 IntentHook = Callable[[Intent, AppServices, str], Awaitable[str | None]]

@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.models.domain import Intent
 
 
 @pytest.mark.asyncio
 async def test_assistant_updates_locale_on_request() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
@@ -30,7 +30,7 @@ async def test_assistant_updates_locale_on_request() -> None:
 @pytest.mark.asyncio
 async def test_assistant_locale_llm_fallback_paraphrase() -> None:
     """Classifier returns update_profile; extract_profile_patch supplies target locale."""
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
@@ -47,7 +47,7 @@ async def test_assistant_locale_llm_fallback_paraphrase() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_updates_locale_even_when_classifier_misses() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
@@ -64,7 +64,7 @@ async def test_assistant_updates_locale_even_when_classifier_misses() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_unchanged_when_already_english() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)
@@ -77,7 +77,7 @@ async def test_assistant_unchanged_when_already_english() -> None:
 
 @pytest.mark.asyncio
 async def test_assistant_updates_timezone_via_profile_intent() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     from medbuddy.container import build_app_services
 
     svc = build_app_services(settings)

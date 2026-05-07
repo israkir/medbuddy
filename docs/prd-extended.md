@@ -6,7 +6,7 @@
 
 1. [Introduction](#1-introduction)
 2. [Scope and boundaries](#2-scope-and-boundaries)
-3. [Problem statement](#3-problem-statement)
+3. [Problem statement](#3-problem-statement) — includes [market wedge](#34-market-wedge-and-differentiation), [go-to-market](#35-go-to-market), [alignment with executive summary](#36-alignment-with-executive-summary-prd)
 4. [Strategic goals](#4-strategic-goals)
 5. [Target users and personas](#5-target-users-and-personas)
 6. [User journeys](#6-user-journeys)
@@ -62,6 +62,32 @@ Most drug-reference tools are English-only or use clinical language inaccessible
 
 Existing tools are app-centric, English-only, or disconnected from the conversational channels embedded in daily life in Taiwan.
 
+### 3.4 Market wedge and differentiation
+
+MedBuddy’s wedge is the overlap of **LINE as daily infrastructure in Taiwan**, **chronic polypharmacy with a comprehension/adherence gap**, and **Traditional Chinese–first plain language**—delivered **without a separate install**.
+
+| Lever | What it means for us |
+|-------|---------------------|
+| **Channel** | LINE removes adoption friction versus standalone med apps; reminders and Q&A land where family chat already happens. |
+| **Job to be done** | Combined **med list + explain/interaction/side-effect framing (non-diagnostic) + dose reminders and confirm/miss in chat**—not “alerts only.” |
+| **Locale** | **zh-TW** and **en**, including mid-session switch; many drug tools remain English-heavy or clinically opaque. |
+| **Architecture** | **One assistant core** on LINE and the **HTTP API**—partners and CI validate the same product surface patients use. |
+| **Trust** | **G5** / [privacy.md](privacy.md): redaction and narrow model context versus pasting health text into a generic chatbot. |
+
+### 3.5 Go-to-market
+
+| Element | Direction |
+|---------|-----------|
+| **Beachhead** | Taiwan; LINE-forward; adults and caregivers on **2–6 chronic meds** (**Section 5.1**). |
+| **Distribution** | Primary: **LINE** official account / bot. **HTTP API** enables tests, integrations, and future **B2B2C**—not the first mass consumer channel. |
+| **Pilot** | **Small, controlled cohort**; recruitment specifics (community vs. clinical vs. partner-led) remain **operational choices**—not commitments in this PRD. |
+| **Positioning** | Wellness-oriented **medication companion**; no certified **medical device** claims (**R-6**); emergencies → fixed safety copy, not generative triage. |
+| **Growth gate** | **Section 10** met; **OD-1** (Taiwan regulatory classification) and stakeholder appetite before scaled acquisition or institutional packaging (**OD-4**). |
+
+### 3.6 Alignment with executive summary PRD
+
+The executive summary **[`prd.md`](prd.md)** carries the same **wedge**, **go-to-market**, and **roadmap sequencing rationale** in short form. Sections **3.4–3.5** and **Section 14** (including sequencing preamble) here are authoritative for tables, requirement IDs, and exit criteria; **`prd.md`** should stay in lockstep on narrative—if positioning or phase order changes, update both files in the same change.
+
 ---
 
 ## 4. Strategic goals
@@ -99,11 +125,15 @@ The last column is **“does the codebase support it + CI”**—not “pilot pa
 - Pharmacy consultations are short; follow-up questions have no easy channel.
 - Reminder apps feel like extra work to set up and maintain.
 
-### 5.2 Secondary persona: API integrator
+### 5.2 Secondary users: Doctors, institutions, API integrators
 
-**Who:** Developers or clinical partners building on top of the medication assistant — through direct API calls, scripts, or a mobile integration.
+Aligned with **[`prd.md`](prd.md)** (“Who it’s for”): secondary users are **doctors**, **health care institutions**, and **teams integrating via the HTTP API**—not a second “chat patient” cohort for the LINE pilot, but audiences who benefit from or deliver the same core assistant.
 
-**What they need:** "I need to embed the same medication assistant core into my integration or test environment without depending on LINE."
+**Doctors and clinical staff** — They may receive **visit-prep summaries** and structured med context from patients (exported from chat or via API). The assistant does **not** diagnose, prescribe, or change doses (**Section 9**); clinical decisions stay with licensed professionals.
+
+**Health care institutions** — Hospitals, clinics, or programs that **pilot or embed** the product through integrations, partnerships, or future B2B2C paths (**Growth**, **OD-4**), subject to **OD-1** (Taiwan regulatory classification) and institutional agreements.
+
+**API integrators** — Developers and vendor teams using **direct HTTP API** calls, scripts, tests, or mobile wrappers to run the same assistant pipeline as LINE—without forking behavior (**C-3**, **C-4**, **A-1**).
 
 ### 5.3 Anti-persona
 
@@ -288,43 +318,60 @@ We score the pilot **when it ends**, using the table below. **Owners:** product 
 
 | ID | Question | Owner | When needed | Notes |
 |----|----------|-------|-------------|-------|
-| OD-1 | Regulatory classification for Taiwan: general wellness app vs. regulated software | Legal / Product | Before Growth phase | Determines what the product can claim and whether TFDA registration is required |
-| OD-2 | Long-term identity model for HTTP API users | Engineering | Growth phase | Options include per-user tokens, OAuth, or device attestation |
-| OD-3 | Criteria to promote voice from "implemented" to a fully supported, signed-off product feature | Product | Growth phase | Requires accuracy targets, cost model, failure fallback behavior, and updated PRD acceptance criteria |
-| OD-4 | Clinician-facing summary formats for institutional partners | Product | Growth phase | Depends on whether a clinical partner enters the pilot |
-| OD-5 | Data residency requirements for Taiwan regulations and future markets | Legal | Before international expansion | Relevant for the Global phase |
+| OD-1 | Regulatory classification for Taiwan: general wellness app vs. regulated software | Legal / Product | Before Growth phase | Determines what the product can claim and whether TFDA registration is required. Also the gate for all T3 features and T2 B2B2C contracts. |
+| OD-2 | Long-term identity model for HTTP API users | Engineering | Growth phase | Options include per-user tokens, OAuth, or device attestation. Gate for T2.3 API hardening. |
+| OD-3 | Criteria to promote voice from "implemented" to a fully supported, signed-off product feature | Product | Growth phase | Requires accuracy targets, cost model, failure fallback behavior, and updated PRD acceptance criteria. Gate for T3.5 (voice-first / smart-speaker). |
+| OD-4 | Clinician-facing summary formats for institutional partners | Product | Growth phase | Depends on whether a clinical partner enters the pilot. T2.1 (clinician summary handoff) builds directly on this decision. |
+| OD-5 | Data residency requirements for Taiwan regulations and future markets | Legal | Before international expansion | Relevant for the Global phase and required before T3.1 (NHI PharmaCloud) and T3.3 (channel expansion). |
+
+### Feature-tier trigger signals (complement to open decisions)
+
+Each tier of future feature directions has explicit pilot-phase signals that must be observed before building. These are not timelines — they are evidence gates.
+
+| Tier | Signal required to unlock |
+|------|--------------------------|
+| **T1 — Adjacent depth** | Pilot exit criteria met (≥95% reminder delivery, ≥80% grounded Q&A, 0 data-loss, 0 privacy violations). Each T1 feature additionally has its own named signal (e.g. ≥30% of users mention a family member at onboarding → T1.1; ≥20% funnel drop-off at "build the list" → T1.2). |
+| **T2 — Platform & B2B2C** | First paying clinic, pharmacy chain, or pharma partner LOI. OD-1 and OD-2 resolved. |
+| **T3 — Frontier bets** | OD-1 and OD-5 resolved. Series A funding secured. T3-specific sub-gates listed per feature (e.g. NHI pilot program for T3.1; clean adherence delta measurable from T1.5 + T2.2 for T3.2; psychiatry clinic partner + clinical advisor sign-off for T3.4). |
 
 ---
 
 ## 14. Phased roadmap
 
-Each phase ends with an explicit **go / no-go** against exit criteria before spending on the next horizon. Durations below are **planning defaults**; adjust per team capacity.
+Each phase ends with an explicit **go / no-go** against exit criteria before spending on the next horizon. Prototype completed in **April 2026**; MVP + Taiwan pilot are in flight with a target pilot-exit window around **Q3 2026**. Later phases remain gate-based.
+
+**Sequencing rationale (aligned with [`prd.md`](prd.md))**
+
+1. **Prototype** — **Time-boxed** de-risking of the hardest integration slice (e.g. LINE + assistant + thin persistence) before committing to full MVP + pilot execution. Cheap **no-go** if the stack or scope is wrong.
+2. **MVP + Taiwan Pilot** — Follows only a **go** from Prototype: live infra, pilot **Section 7** intents, **Section 10** metrics (**NG-1** still exempts formal voice SLAs), bilingual UX, and governance. Validates **add → remind → confirm** with real users at small **N**.
+3. **Growth (Japan-first)** — Assumes MVP pilot exit under **Section 10** and clearer **OD-1**: harden **voice** (**OD-3**), retention, cost/latency, API identity (**OD-2**), and regional drug data—**without** global regulatory or residency promises.
+4. **Regional / Global** — Only after **Growth** evidence and **legal/clinical** sign-off: **OD-5**, **OD-4**, and multi-region posture. This is a direction, not a worldwide launch commitment.
 
 | Phase | Horizon | Purpose |
 |-------|---------|---------|
-| **Prototype** | **2 days** | Fast **time-box**: cut a minimal vertical slice (scope agreed up front — e.g. LINE text turn + one med add + staging config). Decide whether to fund MVP. |
-| **MVP** | **~3 months** | Small **controlled pilot** with **text and voice** on LINE; live database, reminders, governance, **Section 10** metrics (**NG-1** still excludes formal voice bars). |
-| **Growth** | **3–12 months** | Hardening and scale toward a wider audience — not full regulatory product claims. |
-| **Global** | **1 year+** | Serious multi-market expansion only after **Growth** results and **legal/clinical** review. |
+| **Prototype** | **Completed (Apr 2026)** | Fast **time-box** slice completed; outcome was a go decision for MVP. |
+| **MVP + Taiwan Pilot** | **In flight (~Q3 2026 pilot-exit target)** | Controlled pilot with **text and voice** on LINE; live database, reminders, governance, **Section 10** metrics (**NG-1** still excludes formal voice bars). |
+| **Growth (Japan-first)** | **Post-pilot gate** | Hardening and scale after pilot exit, OD-1 clarity, and cost/MAU proof; not full regulatory product claims. |
+| **Regional / Global** | **Post-growth, gate-based** | Multi-market expansion only after **Growth** results and **legal/clinical** review. |
 
 ---
 
-### Phase 1: Prototype (2 days)
+### Phase 1: Prototype
 
-**Objective:** De-risk the core loop under a **fixed calendar** (two working days). Scope must be **pre-negotiated** so the team does not attempt full **Section 7** coverage in 48 hours.
+**Objective:** De-risk the core loop under a fixed time-box. Scope must be **pre-negotiated** so the team does not attempt full **Section 7** coverage in one short prototype cycle.
 
-| Theme | Exit criteria (end of day 2) |
+| Theme | Exit criteria (end of prototype cycle) |
 |-------|------------------------------|
 | **Slice** | At least one path works end-to-end in a **defined** environment (e.g. mock or staging): user message → assistant reply → optional persistence sanity check |
 | **Channel** | If LINE is in scope: webhook receives and responds OR documented blocker with owner |
 | **Decision** | Written **go / no-go** for MVP: agree MVP scope, owners, and start date; or pivot/stop |
 | **Honesty** | No marketing or patient promises beyond what was actually demoed |
 
-**Go criteria:** Stakeholders agree the prototype met its **predefined** success checks; **MVP** phase is chartered with a **~3 month** target.
+**Go criteria:** Stakeholders agree the prototype met its **predefined** success checks; MVP + pilot phase is formally chartered.
 
 ---
 
-### Phase 2: MVP (~3 months)
+### Phase 2: MVP + Taiwan Pilot
 
 **Objective:** A credible medication companion on LINE and the HTTP API, with a small controlled pilot using **text and voice** (same assistant after speech-to-text) — honest disclaimers and a stable set of user intents. **Section 10** still omits formal voice **service levels** (**NG-1**).
 
@@ -340,34 +387,37 @@ Each phase ends with an explicit **go / no-go** against exit criteria before spe
 
 ---
 
-### Phase 3: Growth (3–12 months)
+### Phase 3: Growth (Japan-first)
 
-**Objective:** Move from "works in a pilot" toward "could serve a broader audience" — without claiming regulatory readiness.
+**Objective:** Move from “works in a pilot” toward “could serve a broader audience” — without claiming regulatory readiness.
 
 | Theme | Goals |
 |-------|-------|
 | **Voice (hardening)** | Voice is already **live**; Growth adds **agreed targets** (accuracy, fallbacks like “please type”), cost/latency budgets, and updates **Section 10** (**OD-3**) |
-| **Retention and adherence** | Users can adjust reminder preferences conversationally. Richer adherence history. Caregiver read-only summaries (requires policy review) |
+| **Retention and adherence** | Users can adjust reminder preferences conversationally. Richer adherence history. Caregiver read-only summaries (requires policy review — **T1.1**) |
 | **Regional drug data** | Taiwan drug registry or equivalent where legally and technically viable. Improved data caching strategy |
 | **Mobile** | Reference mobile app hardened beyond prototype: stronger auth, cost controls, optional local notifications if the product expands beyond LINE |
 | **Operations** | Cost and latency targets per AI call. Basic product analytics (active users, intent breakdown). Incident response playbook. Content safety review loop for new prompts |
+| **T1 features (if pilot-signal met)** | Adjacent-depth features that earned their trigger: blister-pack photo recognition (**T1.2**), missed-dose pattern reflection (**T1.5**), vitals trend deltas (**T1.6**). Each requires its named pilot signal before scoping. |
+| **T2 features (if first LOI signed)** | Clinician summary handoff (**T2.1**), pharma-sponsored PSP overlay (**T2.2**), API hardening for integrators (**T2.3**). OD-1 and OD-2 must resolve before B2B2C contracts are signed. |
 
-**Go criteria:** Monthly cost per active user modeled and acceptable. Any promoted voice feature meets an agreed error-rate threshold. Compliance review roadmap in place before moving past informal pilots.
+**Go criteria:** Monthly cost per active user modeled and acceptable (targeting **< US$0.05 / MAU / month at MVP-level operation** and **< US$0.02 at Growth maturity** as caching/ops improve). Any promoted voice feature meets an agreed error-rate threshold. Compliance review roadmap in place before moving past informal pilots.
 
 ---
 
-### Phase 4: Global (1 year+)
+### Phase 4: Regional / Global
 
-**Objective:** Only pursue after **Growth** validates demand and **legal / clinical** review clears the path. **1 year+** is a minimum planning horizon for material international expansion, not a commitment to launch.
+**Objective:** Only pursue after **Growth** validates demand and **legal / clinical** review clears the path. Regional/global expansion is a later-stage planning horizon, not a commitment to launch.
 
 | Theme | Direction |
 |-------|-----------|
-| **Markets** | Multi-region deployment with data residency options. Additional languages based on market research |
+| **Markets** | Multi-region deployment with data residency options. Additional languages based on market research. **Mainland China is excluded from this roadmap and treated as a separate product/JV decision.** |
 | **Compliance** | Regulatory classification per country. Privacy impact assessments if handling health data at scale |
 | **Ecosystem** | Export formats compatible with electronic medical records. Institutional pilots. Optional B2B packaging |
 | **UX** | Native apps and richer LINE interfaces as primary channels. Accessibility standards |
+| **T3 features (if gates cleared)** | NHI PharmaCloud / My Health Bank import (**T3.1**, Taiwan moat — requires OD-1 + OD-5 + HPA pilot program); insurer / NHI value-based adherence contracts (**T3.2** — requires measurable adherence delta from T1.5 + T2.2); KakaoTalk and WhatsApp channel expansion (**T3.3** — requires Series A + country drug-data source); voice-first elderly / smart-speaker bridge (**T3.5** — requires OD-3 closed + Japan launch readiness). Psychiatric specialty (**T3.4**) and RWD aggregates (**T3.6**) are separately gated by clinical sign-off and ethics board respectively — see feature-directions companion. |
 
-> **Guardrail:** "Global" describes a capability direction, not a committed worldwide launch.
+> **Guardrail:** "Global" describes a capability direction, not a committed worldwide launch. T3 features are options that open when regulatory and market conditions are met — not a committed feature set. Mainland China remains a separate product path because it requires a distinct channel/regulatory stack (for example WeChat delivery, approved domestic LLMs, and on-shore compliance posture).
 
 ---
 
@@ -376,7 +426,7 @@ Each phase ends with an explicit **go / no-go** against exit criteria before spe
 | Document | Purpose |
 |----------|---------|
 | [`prd.md`](prd.md) | Short PRD (~2–3 pages) — executive / partner summary |
-| [`features.md`](features.md) | Capability catalog — product and engineering alignment on each feature |
+| [`features.md`](features.md) | Capability catalog — product and engineering alignment on each feature, including future feature directions (T1/T2/T3) |
 | [`use-cases.md`](use-cases.md) | Narrated flows and example user conversations |
 | [`tdd.md`](tdd.md) | Condensed Technical Design Document (~2–3 pages): architecture diagrams and rationale |
 | [`tdd-extended.md`](tdd-extended.md) | Full technical design — API contracts, data schema, system internals |

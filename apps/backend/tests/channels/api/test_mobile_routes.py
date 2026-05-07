@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from medbuddy.container import build_app_services
 from medbuddy.main import app
+from tests.helpers import make_mock_settings
 
 
 def _mobile_headers(*, user: str = "app-test-user", bearer: str | None = None) -> dict[str, str]:
@@ -33,11 +34,10 @@ async def test_app_channel_info_includes_version_key():
 
 
 @pytest.mark.asyncio
-async def test_app_me_requires_app_user_id(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_me_requires_app_user_id():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.get("/v1/app/me")
     assert r.status_code == 400
@@ -45,11 +45,10 @@ async def test_app_me_requires_app_user_id(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_app_me_ok(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_me_ok():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.get("/v1/app/me", headers=_mobile_headers())
     assert r.status_code == 200
@@ -62,25 +61,20 @@ async def test_app_me_ok(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_app_bearer_rejects_wrong_token(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = "good"
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_bearer_rejects_wrong_token():
+    ms = make_mock_settings(MEDBUDDY_MOBILE_BEARER_TOKEN="good")
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.get(
-                "/v1/app/me",
-                headers=_mobile_headers(bearer="bad"),
-            )
+            r = await client.get("/v1/app/me", headers=_mobile_headers(bearer="bad"))
     assert r.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_app_messages_ok(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_messages_ok():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.post(
                 "/v1/app/messages",
@@ -92,11 +86,10 @@ async def test_app_messages_ok(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_app_messages_voice_ok(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_messages_voice_ok():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.post(
                 "/v1/app/messages/voice",
@@ -111,11 +104,10 @@ async def test_app_messages_voice_ok(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_app_messages_voice_empty_file(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_messages_voice_empty_file():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.post(
                 "/v1/app/messages/voice",
@@ -126,11 +118,10 @@ async def test_app_messages_voice_empty_file(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_app_messages_validation_empty_text(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_messages_validation_empty_text():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.post(
                 "/v1/app/messages",
@@ -141,11 +132,10 @@ async def test_app_messages_validation_empty_text(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_app_onboarding_saves_profile(mock_settings):
-    mock_settings.mock_external_services = True
-    mock_settings.mobile_bearer_token = ""
-    app.state.services = build_app_services(mock_settings)
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+async def test_app_onboarding_saves_profile():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r = await client.post(
                 "/v1/app/onboarding",
@@ -169,7 +159,7 @@ async def test_app_onboarding_saves_profile(mock_settings):
     assert data["timezone"] == "Asia/Taipei"
     assert data["locale"] == "zh-TW"
 
-    with patch("medbuddy.channels.mobile.auth.get_settings", return_value=mock_settings):
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             r2 = await client.get("/v1/app/me", headers=_mobile_headers(user="onboarding-user-1"))
     assert r2.status_code == 200

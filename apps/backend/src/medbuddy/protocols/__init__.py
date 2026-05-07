@@ -1,14 +1,10 @@
+from medbuddy.protocols.conversation import ConversationStorePort
 from medbuddy.protocols.drug_caches import DrugCachesPort
-from medbuddy.protocols.ports import (
-    ConversationStorePort,
-    DrugDataPort,
-    LineAudioBlobStorePort,
-    LineMessagingPort,
-    LLMPort,
-    SpeechToTextPort,
-    TextToSpeechPort,
-    UserDataPort,
-)
+from medbuddy.protocols.drugs import DrugDataPort
+from medbuddy.protocols.line import LineAudioBlobStorePort, LineMessagingPort
+from medbuddy.protocols.llm import LLMPort, ProfilePatch
+from medbuddy.protocols.speech import SpeechToTextPort, TextToSpeechPort
+from medbuddy.protocols.user_data import UserDataPort
 
 __all__ = [
     "ConversationStorePort",
@@ -17,6 +13,7 @@ __all__ = [
     "LineAudioBlobStorePort",
     "LineMessagingPort",
     "LLMPort",
+    "ProfilePatch",
     "SpeechToTextPort",
     "TextToSpeechPort",
     "UserDataPort",

@@ -1,6 +1,6 @@
 """Stable keys for drug reference and personalization caches."""
 
-from medbuddy.drug_cache_keys import (
+from medbuddy.integrations.caching_drugs import (
     normalize_query_key,
     personalization_fingerprint,
     resolve_medication_id_for_personalization,

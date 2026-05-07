@@ -6,9 +6,9 @@ import pytest
 
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.application.vital_log_build import vital_payload_and_summary
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
-from medbuddy.exceptions import VitalExtractionError
+from medbuddy.core.errors import VitalExtractionError
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.llm.schemas import VitalLogExtraction
 from medbuddy.models.domain import Intent
@@ -32,7 +32,7 @@ def test_vital_payload_rejects_invalid_bp() -> None:
 
 @pytest.mark.asyncio
 async def test_log_vital_end_to_end_blood_pressure() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-log-vital-bp"
     await svc.users.get_or_create_user(key)
@@ -54,7 +54,7 @@ async def test_log_vital_end_to_end_blood_pressure() -> None:
 
 @pytest.mark.asyncio
 async def test_log_vital_extraction_failure_user_message() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-log-vital-fail"
     await svc.users.get_or_create_user(key)

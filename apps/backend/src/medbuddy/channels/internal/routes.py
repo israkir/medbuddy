@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Header, Request
 from fastapi.responses import PlainTextResponse
 
 from medbuddy.config import get_settings
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 from medbuddy.reminders.enqueue import enqueue_reminder_jobs_now
 
 router = APIRouter(tags=["infrastructure"])
@@ -32,6 +32,8 @@ async def reminders_reconcile(
         raise HTTPException(status_code=503, detail="redis not configured")
 
     svc: AppServices = request.app.state.services
-    ids = await svc.users.list_dose_event_ids_for_reconcile(before_utc=datetime.now(UTC))
+    now = datetime.now(UTC)
+    await svc.users.mark_stale_dose_events_missed(before_utc=now)
+    ids = await svc.users.list_dose_event_ids_for_reconcile(before_utc=now)
     await enqueue_reminder_jobs_now(settings.redis_url, ids)
     return {"enqueued": len(ids), "status": "ok"}

@@ -35,6 +35,8 @@
 
 MedBuddy helps patients manage medications and ask medication-related questions. The **primary product** (this document's focus) is **LINE Messaging** plus the **FastAPI** backend — webhooks, dose reminder push, and an **HTTP API** for integrations and tests. A **reference Expo app** (`apps/frontend/`) exists as a future surface; it is not a co-equal channel in this phase (see [`frontend-expo.md`](frontend-expo.md)).
 
+This TDD documents the **current prototype runtime** (Python/FastAPI). The MVP/Growth production target is a Go/Fiber runtime on the same hexagonal contracts; see [`go-port-mapping.md`](go-port-mapping.md) for the mechanical mapping plan.
+
 **Prototype scope:** The deployment supports **text and voice** on LINE (STT → same assistant; outbound optional text+audio per `MEDBUDDY_LINE_VOICE_REPLIES`) and **HTTP** `POST /v1/app/messages/voice` (transcript + text reply). **§10** / **NG-1**: pilot **sign-off** does not require voice WER, TTS quality, or per-voice-turn cost targets until **OD-3**.
 
 | Channel | Entry point | Role |
@@ -58,7 +60,7 @@ MedBuddy helps patients manage medications and ask medication-related questions.
 │                      FastAPI backend                            │
 │                                                                 │
 │  /v1/line/webhook             /v1/app/*                         │
-│  channels/line/               channels/mobile/                  │
+│  channels/line/               channels/api/                     │
 │        │                            │                           │
 │        └──────────────┬─────────────┘                           │
 │                       ▼                                         │
@@ -75,7 +77,7 @@ MedBuddy helps patients manage medications and ask medication-related questions.
 │          │            │                 │                       │
 │          └────────────┴─────────────────┘                       │
 │                       │                                         │
-│              protocols/ports.py  ← hexagonal boundary           │
+│              protocols/  ← hexagonal boundary                   │
 │          ┌────────────┼─────────────────┐                       │
 │          ▼            ▼                 ▼                       │
 │   LLM (Gemini/OpenAI) Supabase     OpenFDA HTTP                 │
@@ -96,8 +98,8 @@ MedBuddy helps patients manage medications and ask medication-related questions.
 **Decision:** Business logic lives in `application/` and `agents/`. These layers depend only on `protocols/` interfaces (Python `Protocol` classes). `container.py` wires concrete adapters at startup.
 
 ```
-application/  ──► protocols/ports.py  ◄──  integrations/
-agents/             (abstract)               (concrete or mock)
+application/  ──► protocols/  ◄──  integrations/
+agents/          (per-port files)     (concrete or mock)
 ```
 
 **Rationale:**
@@ -141,22 +143,29 @@ agents/             (abstract)               (concrete or mock)
 apps/backend/src/medbuddy/
 │
 ├── main.py                      # FastAPI app; mounts routers; lifespan setup
-├── config.py                    # Pydantic Settings; .env loading; Render safety overrides
-├── container.py                 # build_app_services() — wires all adapters from config
+├── config.py                    # load_settings() + frozen Settings dataclass; IntegrationMode/LlmProvider/Locale enums
+├── container.py                 # build_app_services() — wires all adapters from config; raises ConfigError on missing keys
+├── services.py                  # AppServices dataclass — dependency injection container
 ├── deps.py                      # FastAPI get_services() dependency injection
-├── exceptions.py                # MedBuddyError, LLMParseError (domain exceptions)
-├── i18n.py                      # t() — key lookup with zh-TW fallback
-├── logging_config.py            # configure_logging() — structured logging setup
+│
+├── core/                        # Cross-cutting utilities
+│   ├── errors.py                # Error base, MedBuddyError alias, ConfigError, LLMParseError
+│   ├── i18n.py                  # t() — key lookup with zh-TW fallback
+│   ├── locale.py                # effective_user_locale(), normalize_locale_patch()
+│   ├── timezone.py              # IANA timezone helpers for scheduling
+│   └── logging.py               # configure_logging() — structured logging setup
 │
 ├── channels/                    # ← Inbound adapters (Layer: Driving/Primary)
 │   ├── line/
-│   │   ├── routes.py            # POST /v1/line/webhook
+│   │   ├── routes.py            # POST /v1/line/webhook, GET /v1/line/media/audio/:id
 │   │   ├── orchestrator.py      # handle_line_event() — event dispatch and reply
 │   │   └── signature.py         # X-Line-Signature HMAC-SHA256 verification
-│   └── mobile/
-│       ├── routes.py            # GET/POST /v1/app/*
-│       ├── auth.py              # MobileAuthContext, require_mobile_auth()
-│       └── schemas.py           # Pydantic I/O models
+│   ├── api/
+│   │   ├── routes.py            # GET/POST /v1/app/*
+│   │   ├── auth.py              # AppAuthContext, require_app_auth()
+│   │   └── schemas.py           # Pydantic I/O models
+│   └── internal/
+│       └── routes.py            # /health, /internal/reminders/reconcile
 │
 ├── application/                 # ← Application core (Layer: Use Cases)
 │   ├── assistant_turn.py        # run_assistant_text_turn() — delegates to MedicationAgent
@@ -165,7 +174,8 @@ apps/backend/src/medbuddy/
 │   ├── locale_intents.py        # try_locale_change_reply — quick locale switch from user text
 │   ├── medication_add_confirm_resolve.py  # pending yes/no after add-medication preview
 │   ├── dose_clarification_resolve.py      # pending dose / adherence clarification
-│   └── reminder_horizon_resolve.py        # pending “how many days of reminders?” answer
+│   ├── reminder_horizon_resolve.py        # pending “how many days of reminders?” answer
+│   └── vital_log_build.py                  # parses BP/glucose/etc. into VitalLogRecord
 │
 ├── agents/                      # ← Domain logic (Layer: Domain)
 │   ├── medication_agent.py      # MedicationAgent — intent→tool dispatch
@@ -184,34 +194,48 @@ apps/backend/src/medbuddy/
 ├── models/
 │   └── domain.py                # Intent enum, MedicationDraft/Record, ConversationTurn
 │
-├── protocols/                   # ← Port interfaces (Layer: Ports)
-│   ├── ports.py                 # LLMPort, UserDataPort, LineMessagingPort, DrugDataPort, etc.
+├── protocols/                   # ← Port interfaces (Layer: Ports) — one file per port
+│   ├── llm.py                   # LLMPort, ProfilePatch
+│   ├── user_data.py             # UserDataPort
+│   ├── line.py                  # LineMessagingPort, LineAudioBlobStorePort
+│   ├── speech.py                # SpeechToTextPort, TextToSpeechPort
+│   ├── drugs.py                 # DrugDataPort
+│   ├── conversation.py          # ConversationStorePort
 │   └── drug_caches.py           # DrugCachesPort
-│
-├── engine/
-│   └── types.py                 # AppServices dataclass — dependency injection container
 │
 ├── integrations/                # ← Outbound adapters (Layer: Driven/Secondary)
 │   ├── llm/
+│   │   ├── _common.py           # language_lock(), strip_json_fence() — shared LLM helpers
 │   │   ├── gemini_llm.py        # GeminiLLM (google-genai)
 │   │   └── openai_llm.py        # OpenAILLM (Chat Completions)
+│   ├── persistence/
+│   │   ├── supabase_client.py       # create_supabase_client()
+│   │   ├── supabase_profile.py      # SupabaseProfileMixin — profile/vitals/pending state
+│   │   ├── supabase_medications.py  # SupabaseMedicationMixin — medication CRUD
+│   │   ├── supabase_dose_events.py  # SupabaseDoseEventMixin — dose events + nudges
+│   │   ├── supabase_conversations.py # SupabaseConversationStore
+│   │   ├── supabase_stores.py       # SupabaseUserData (combines mixins), re-export shim
+│   │   └── supabase_drug_caches.py  # SupabaseDrugCaches
 │   ├── line_client.py           # LineHttpClient (line-bot-sdk)
-│   ├── supabase_stores.py       # SupabaseUserData, SupabaseConversationStore
-│   ├── supabase_drug_caches.py  # SupabaseDrugCaches
+│   ├── line_audio_blob_store.py # LineAudioBlobStore (ephemeral m4a blobs for LINE)
 │   ├── drugs_http.py            # HttpDrugData (OpenFDA + TFDA stub)
-│   ├── caching_drugs.py         # CachingDrugData (cache wrapper around DrugDataPort)
-│   ├── stt_google.py            # GoogleSpeechToText (engineering exploratory, not prototype)
-│   └── mocks/                   # MockLLM, MockLineClient, MockUserData, etc.
+│   ├── caching_drugs.py         # CachingDrugData + drug cache key helpers
+│   ├── stt/
+│   │   └── stt_google.py        # GoogleSpeechToText (Speech-to-Text V2, ADC)
+│   ├── tts/
+│   │   └── tts_google.py        # GoogleTextToSpeech (m4a via ffmpeg)
+│   └── mocks/                   # llm.py, stt.py, tts.py, line.py, drugs.py, users.py, conversation.py (MockLLM, MockLineClient, MockUserData, etc.)
 │
 ├── privacy/
 │   └── redact.py                # redact_pii_text(), redact_conversation_turns_for_llm()
 │
-├── prompts/
-│   └── persona.py               # get_system_persona(), build_patient_context_for_llm() (+ optional upcoming block)
-│
 ├── llm/
+│   ├── prompts/
+│   │   └── persona.py           # get_system_persona()
 │   ├── schemas.py               # Pydantic models for structured LLM outputs
 │   ├── intent_classification_prompt.py  # Shared intent classification prompt
+│   ├── intent_map.py            # classifier string labels → domain Intent
+│   ├── medication_draft_build.py # MedicationExtraction → MedicationDraft
 │   └── turn_interpretation.py   # IntentClassification → TurnInterpretation mapping
 │
 ├── reminders/
@@ -220,13 +244,11 @@ apps/backend/src/medbuddy/
 │   ├── enqueue.py               # enqueue_reminder_jobs()
 │   ├── dose_schedule.py         # iter_scheduled_dose_times_utc — local HH:MM → UTC instants
 │   ├── upcoming_display.py      # upcoming window + user/LLM formatting for dose_events
-│   └── lifecycle.py             # sync_and_enqueue_reminders() — called after add/remove
+│   ├── prefs.py                 # ReminderPrefs + nudge_window_allows()
+│   └── lifecycle.py             # sync_and_enqueue_reminders() — called after add/update/remove
 │
 ├── extensibility/
 │   └── intent_hooks.py          # try_intent_hooks() — pilot feature hook registry
-│
-├── http/
-│   └── shared_routes.py         # /health, /internal/reminders/reconcile
 │
 └── locales/
     ├── zh-TW.json               # Primary locale (Traditional Chinese, Taiwan)
@@ -275,15 +297,15 @@ HTTP client
     │ X-App-User-Id: <stable-id>
     │ Body: {"text": "..."}
     ▼
-channels/mobile/routes.py
-    │ require_mobile_auth()  ← 401 if token mismatch or header missing
+channels/api/routes.py
+    │ require_app_auth()  ← 401 if token mismatch or header missing
     │ validate body (1–8000 chars)
     ▼
 application/assistant_turn.py
     │ run_assistant_text_turn → MedicationAgent.run
     │   (same pipeline as LINE text — §4.1)
     ▼
-channels/mobile/routes.py
+channels/api/routes.py
     │ return {"reply": reply_text}
     ▼
 HTTP client
@@ -298,7 +320,7 @@ HTTP client
     │ POST /v1/app/messages/voice  (multipart file)
     │ X-App-User-Id, optional Bearer
     ▼
-channels/mobile/routes.py
+channels/api/routes.py
     │ read bytes (max 10 MiB)
     │ effective_user_locale(user profile)
     │ stt.transcribe_m4a(bytes, language_code=locale)
@@ -315,7 +337,7 @@ TTS for the reply is **client-side** (e.g. **expo-speech**) using profile/UI lan
 ### 4.3 Dose reminder delivery (background)
 
 ```
-AddMedicationTool / RemoveMedicationTool success
+AddMedicationTool / UpdateMedicationTool / RemoveMedicationTool success
     │ sync_and_enqueue_reminders()
     ▼
 reminders/lifecycle.py
@@ -338,6 +360,46 @@ reminders/deliver.py
     │ get_dose_event_for_reminder(dose_id)  ← skip if already sent or taken
     │ line_client.push_message(line_user_id, reminder_text)
     │ try_mark_reminder_sent(dose_id)        ← idempotency guard
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as LINE/Mobile Channel
+    participant A as assistant_turn.run_assistant_text_turn
+    participant M as MedicationAgent
+    participant T as Medication CRUD Tool
+    participant L as reminders.lifecycle.sync_and_enqueue_reminders
+    participant DB as SupabaseUserData
+    participant Q as Redis + arq queue
+    participant W as reminders.worker
+    participant D as reminders.deliver
+    participant P as LINE Push API
+
+    U->>C: Send medication command (add/update/remove)
+    C->>A: run_assistant_text_turn(...)
+    A->>M: MedicationAgent.run(...)
+    M->>T: Execute medication tool
+    T->>L: sync_and_enqueue_reminders(user_key)
+    L->>DB: sync_upcoming_dose_events(user_key)
+    DB-->>L: Return (dose_event_id, scheduled_at)[]
+    L->>Q: enqueue send_reminder_for_dose jobs
+
+    Note over Q,W: At scheduled_at (UTC)
+    Q->>W: send_reminder_for_dose(dose_event_id)
+    W->>D: deliver_dose_reminder(...)
+    D->>DB: get_dose_event_for_reminder(...)
+    D->>P: push_message_batch(line_user_id, reminder_text)
+    D->>DB: try_mark_reminder_sent(dose_event_id)
+
+    opt Nudge intervals configured
+        D->>Q: enqueue send_reminder_nudge(...)
+        Q->>W: send_reminder_nudge(dose_event_id, expected_nudge_count)
+        W->>D: deliver_dose_reminder_nudge(...)
+        D->>DB: get_dose_event_for_nudge(...)
+        D->>P: push_message_batch(line_user_id, nudge_text)
+        D->>DB: try_increment_reminder_nudge(...)
+    end
 ```
 
 **Reconcile safety net:** `POST /internal/reminders/reconcile` (cron-triggered) re-enqueues any `dose_events` where `scheduled_at <= now()`, `reminder_sent_at IS NULL`, and `taken_at IS NULL`. Covers cases where the arq worker was down when the job was due.
@@ -424,7 +486,7 @@ TurnInterpretation (intent + adherence slots)
 ### 5.3 Tool interface
 
 ```python
-# protocols/ports.py (authoritative)
+# protocols/ (authoritative — per-port files)
 class AgentTool(Protocol):
     name: str
     description: str
@@ -451,11 +513,11 @@ Schema lives in `apps/backend/supabase/schema.sql`. All tables use UUIDs, UTC ti
 patients (1) ──────────────────────── (many) medications
     │                                          │
     │ (many)                                   │ (many)
-    ▼                                          ▼
-conversation_turns                         dose_events
-                                               │
-drug_personalization_cache (per-patient)       │ (many)
-    │                                          │
+    ├── conversation_turns                     └── dose_events
+    └── vital_logs (many)
+
+drug_personalization_cache (per-patient)
+    │
     └── (optional FK) ──► drug_reference_cache (shared)
 ```
 
@@ -477,6 +539,7 @@ End-user profile rows. `users` is reserved in Supabase; `patients` allows other 
 | `timezone` | `text` | IANA timezone; default `Asia/Taipei`; drives scheduling and push copy |
 | `locale` | `text` | `en` or `zh-TW`; default `zh-TW` |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
+| `pending_agent_clarification` | `jsonb` | Optional persisted agent/UI state (`MedicationAddConfirmationPending`, `DoseClarificationPending`, `ReminderHorizonPending`); nullable |
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
 
@@ -521,6 +584,20 @@ End-user profile rows. `users` is reserved in Supabase; `patients` allows other 
 | `last_nudge_at` | `timestamptz` | Last nudge push time (UTC) |
 | `notes` | `text` | Optional note when marking taken |
 | `created_at` | `timestamptz` | |
+
+#### `vital_logs`
+
+Patient-reported vitals (`LogVitalTool` persists via `UserDataPort.add_vital_log`). Index: `vital_logs_patient_recorded_at_idx` on `(patient_id, recorded_at desc)`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `patient_id` | `uuid` FK → `patients` | |
+| `kind` | `text` | e.g. BP, glucose, weight |
+| `display_summary` | `text` | Short locale summary at save time for list/display |
+| `payload` | `jsonb` | Structured fields (e.g. systolic, diastolic, weight kg) |
+| `notes` | `text` | Optional free-text note |
+| `recorded_at` | `timestamptz` | When the measurement applies (defaults to insert time) |
 
 #### `drug_reference_cache`
 
@@ -607,7 +684,7 @@ Re-enqueues arq jobs for dose events that are due (`scheduled_at <= now()`), `re
 |------------|---------|
 | `follow` | Create user record; send localized welcome message with disclaimer |
 | `message` (text) | Run assistant pipeline; reply with text |
-| `message` (audio) | Engineering exploratory only — see §4.4 |
+| `message` (audio) | Download audio → Speech-to-Text → same assistant pipeline on the transcript. Reply is text by default; optional **text + m4a** when `MEDBUDDY_LINE_VOICE_REPLIES != off` (see §4.4). |
 
 **Response:** `200 OK` (empty body — LINE requires a 200 ACK immediately; reply is sent asynchronously after acknowledgment).
 
@@ -622,7 +699,7 @@ All authenticated endpoints require:
 - `X-App-User-Id: <stable-id>` — 4–128 character string, stable per install or account.
 - `Authorization: Bearer <MEDBUDDY_MOBILE_BEARER_TOKEN>` — required in production.
 
-When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MOCK_EXTERNAL_SERVICES=true`, the Bearer header is optional (development mode only).
+When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, the Bearer header is optional (development mode only).
 
 **Common error responses:**
 
@@ -734,7 +811,7 @@ Auth required. Multipart form with one part **`file`** (audio bytes; e.g. m4a). 
 
 #### `GET /v1/app/summary`
 
-Auth required. Returns a structured doctor-ready health summary (see `HealthSummaryResponse` in `channels/mobile/schemas.py`).
+Auth required. Returns a structured doctor-ready health summary (see `HealthSummaryResponse` in `channels/api/schemas.py`).
 
 ```json
 {
@@ -775,7 +852,7 @@ Both real providers implement the same `LLMPort` contract. Install: `pip install
 
 ### 8.2 `LLMPort` interface
 
-Authoritative method signatures and return types are in **`apps/backend/src/medbuddy/protocols/ports.py`** (`LLMPort`). Do not duplicate them here — this table is a navigational index only:
+Authoritative method signatures and return types are in **`apps/backend/src/medbuddy/protocols/llm.py`** (`LLMPort`). Do not duplicate them here — this table is a navigational index only:
 
 | Area | Methods |
 |------|---------|
@@ -879,7 +956,7 @@ Pydantic models in `llm/schemas.py` back provider JSON extraction. Domain wrappe
 
 ### 10.2 LINE webhook authentication
 
-`channels/line/signature.py` implements HMAC-SHA256 verification of the `X-Line-Signature` header using `LINE_CHANNEL_SECRET`. Verification is bypassed **only** when `LINE_CHANNEL_SECRET` is empty **and** `MOCK_EXTERNAL_SERVICES=true` (local development). In production (`RENDER=true`), mock mode is always forced off.
+`channels/line/signature.py` implements HMAC-SHA256 verification of the `X-Line-Signature` header using `LINE_CHANNEL_SECRET`. Verification is bypassed **only** when `LINE_CHANNEL_SECRET` is empty and `MEDBUDDY_INTEGRATION=mock` (local development). In production (`RENDER=true`), mock mode is always forced off.
 
 ### 10.3 Mobile API authentication
 
@@ -889,7 +966,7 @@ Two-factor check on `/v1/app/*` protected routes:
 
 > **Limitation:** This is a single shared bearer token, not per-user credentials. For production beyond a controlled pilot, rotate to per-user tokens or OAuth (tracked in `prd-extended.md` §13 OD-2).
 
-When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MOCK_EXTERNAL_SERVICES=true`, the Bearer header is optional (development mode only).
+When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, the Bearer header is optional (development mode only).
 
 ### 10.4 Supabase access
 
@@ -901,10 +978,9 @@ The backend uses `SUPABASE_PUBLISHABLE_KEY` (anon key) — never the `service_ro
 
 ### 10.6 Production safeguards
 
-When `RENDER=true` (Render web service), `config.py` enforces:
-- `MOCK_EXTERNAL_SERVICES = false`
-- `DEBUG = false`
+When `RENDER=true` (Render web service), `load_settings()` enforces:
 - `MEDBUDDY_INTEGRATION` forced to `real`
+- `DEBUG = false`
 
 This prevents accidental mock mode in production regardless of dashboard environment variable mistakes.
 
@@ -979,7 +1055,7 @@ Application exceptions are caught at the channel layer and produce user-visible 
 |--------|--------|-------|
 | **Liveness** | `GET /health` (plain text) | Docker / Render health checks |
 | **JSON health** | `GET /v1/app/health` | Mobile client and monitoring |
-| **Structured logs** | `configure_logging()` in `logging_config.py` | `medbuddy.*` namespace; level from `LOG_LEVEL` |
+| **Structured logs** | `configure_logging()` in `core/logging.py` | `medbuddy.*` namespace; level from `LOG_LEVEL` |
 | **Webhook logs** | `channels/line/orchestrator.py` | Event type, step, reply size — no raw text |
 | **Turn logs** | `agents/medication_agent.py` | `user_key`, `intent`, `med_count` (no raw user text) |
 
@@ -1002,12 +1078,12 @@ Application exceptions are caught at the channel layer and produce user-visible 
 
 ### 13.1 Test layers
 
-Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). There is no separate `tests/e2e/` tree today; LINE and mobile HTTP are covered with `TestClient` and mocks alongside application and tool tests.
+Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). There is no separate `tests/e2e/` tree today; LINE and API HTTP are covered with `AsyncClient`/`ASGITransport` and mocks alongside application and tool tests.
 
 | Layer | What is tested | Typical location |
 |-------|---------------|------------------|
 | **Tools / application** | `MedicationAgent` dispatch, resolver flows, individual `AgentTool.run` paths | `tests/application/`, `tests/agents/tools/` |
-| **Channels** | LINE webhook pipeline, mobile routes, signature verification | `tests/channels/` |
+| **Channels** | LINE webhook pipeline, API routes, signature verification | `tests/channels/` |
 | **Integrations** | Supabase stores, drugs HTTP, optional OpenAI smoke tests | `tests/integrations/` |
 | **Reminders** | Materialization, enqueue, deliver, nudges | `tests/reminders/` |
 | **LLM / privacy** | Draft build, redaction, persona shaping | `tests/llm/`, `tests/privacy/`, `tests/prompts/` |
@@ -1034,7 +1110,7 @@ make be-lint       # ruff + black --check
 make be-check      # tests then lint (recommended before push)
 ```
 
-**GitHub Actions** (`.github/workflows/ci.yml`): installs `apps/backend[dev]`, runs **Black** and **Ruff** on `apps/backend/src` and `apps/backend/tests`, then **`pytest -q`** from `apps/backend` with `MEDBUDDY_INTEGRATION=mock` and `MOCK_EXTERNAL_SERVICES=true`.
+**GitHub Actions** (`.github/workflows/ci.yml`): installs `apps/backend[dev]`, runs **Black** and **Ruff** on `apps/backend/src` and `apps/backend/tests`, then **`pytest -q`** from `apps/backend` with `MEDBUDDY_INTEGRATION=mock`.
 
 ---
 
@@ -1103,14 +1179,13 @@ REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build
 
 ## 15. Configuration reference
 
-All settings are in `config.py` (Pydantic `BaseSettings`). Priority order: `MEDBUDDY_INTEGRATION` env → `apps/backend/.env` → working directory `.env`.
+All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]` (defaults to `os.environ`) and returns a frozen `Settings` dataclass. `get_settings()` is an `lru_cache`-wrapped singleton. Priority order: environment variables → `apps/backend/.env` → working directory `.env` (loaded via `python-dotenv`).
 
 ### 15.1 Integration mode
 
 | Variable | Values | Default | Notes |
 |----------|--------|---------|-------|
-| `MEDBUDDY_INTEGRATION` | `mock` / `real` | (unset) | Overrides `MOCK_EXTERNAL_SERVICES`. Aliases: `local`/`dev` → mock; `live`/`production` → real. |
-| `MOCK_EXTERNAL_SERVICES` | `true` / `false` | `false` | Fallback when `MEDBUDDY_INTEGRATION` is unset. |
+| `MEDBUDDY_INTEGRATION` | `mock` / `real` | `mock` | Aliases: `local`/`dev` → mock; `live`/`production` → real. Raises `ConfigError` on unrecognised values. |
 
 ### 15.2 LINE
 
@@ -1197,7 +1272,7 @@ Use cases:
 
 1. Implement a channel module under `channels/<name>/`.
 2. Mount it in `main.py`.
-3. Call `run_assistant_text_turn(svc, user_key=..., user_text=...)` — same as LINE and mobile.
+3. Call `run_assistant_text_turn(svc, user_key=..., user_text=...)` — same as LINE and the API channel.
 4. Implement channel-specific auth and reply formatting in the channel module.
 
 ### 16.4 Adding a new agent tool

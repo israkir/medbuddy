@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from medbuddy.i18n import t
+from medbuddy.core.i18n import t
 from medbuddy.models.domain import MedicationDraft, MedicationRecord
 from medbuddy.reminders.dose_schedule import iter_scheduled_dose_times_utc, parse_hhmm
 
@@ -92,13 +93,14 @@ def iter_dose_instants_for_medication(
     default_local_hhmm: str,
     default_horizon_days: int,
     now_utc: datetime,
+    skip_first_reminder: bool = False,
 ) -> list[datetime]:
     """UTC instants for one medication: optional first relative reminder + optional daily grid."""
     now = now_utc if now_utc.tzinfo else now_utc.replace(tzinfo=UTC)
     out: list[datetime] = []
 
     fm = prefs.first_reminder_in_minutes
-    if isinstance(fm, int) and fm > 0:
+    if not skip_first_reminder and isinstance(fm, int) and fm > 0:
         first_at = now + timedelta(minutes=fm)
         if first_at > now:
             out.append(first_at)
@@ -168,3 +170,12 @@ def reminder_compose_appendix(saved: MedicationRecord, locale: str) -> str:
     if not lines:
         return ""
     return "\n\n" + "\n".join(lines)
+
+
+def nudge_window_allows(scheduled_at: datetime, user_tz: str, *, now_utc: datetime) -> bool:
+    """Allow nudges until the end of the local calendar day of ``scheduled_at`` (in ``user_tz``)."""
+    tz = ZoneInfo(user_tz)
+    local_sched = scheduled_at.astimezone(tz)
+    end_of_day = local_sched.replace(hour=23, minute=59, second=59, microsecond=999999)
+    end_utc = end_of_day.astimezone(UTC)
+    return now_utc <= end_utc

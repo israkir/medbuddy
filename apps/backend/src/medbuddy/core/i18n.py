@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-_LOCALES_DIR = Path(__file__).resolve().parent / "locales"
+_LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
 
 _FALLBACK = "zh-TW"
 

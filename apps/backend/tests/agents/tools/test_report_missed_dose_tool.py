@@ -7,14 +7,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from medbuddy.agents.tools.report_missed_dose import ReportMissedDoseTool
-from medbuddy.config import Settings
+from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.models.domain import MedicationDraft
 
 
 @pytest.mark.asyncio
 async def test_report_missed_dose_marks_latest_pending_window() -> None:
-    settings = Settings(mock_external_services=True)
+    settings = make_mock_settings()
     svc = build_app_services(settings)
     key = "U-missed-dose"
     await svc.users.get_or_create_user(key)

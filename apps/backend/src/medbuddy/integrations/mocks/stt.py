@@ -1,7 +1,7 @@
 import asyncio
 
-from medbuddy.i18n import t
-from medbuddy.protocols.ports import SpeechToTextPort
+from medbuddy.core.i18n import t
+from medbuddy.protocols import SpeechToTextPort
 
 
 class MockSpeechToText(SpeechToTextPort):

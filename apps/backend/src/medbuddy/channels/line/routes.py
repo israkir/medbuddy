@@ -13,7 +13,7 @@ from linebot.v3.exceptions import InvalidSignatureError
 from medbuddy.channels.line.orchestrator import handle_line_event
 from medbuddy.config import Settings, get_settings
 from medbuddy.deps import get_services
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ async def line_tts_audio_asset(
 
 def _skip_line_signature_verification(settings: Settings) -> bool:
     """Allow local mock runs without a channel secret (matches previous behavior)."""
-    return bool(settings.mock_external_services and not settings.line_channel_secret)
+    return bool(settings.is_mock and not settings.line_channel_secret)
 
 
 @router.post("/webhook")

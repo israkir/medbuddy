@@ -18,7 +18,7 @@ import logging
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
-from medbuddy.engine.types import AppServices
+from medbuddy.services import AppServices
 from medbuddy.models.domain import MedicationRecord
 from medbuddy.application.patient_llm_context import patient_context_for_llm
 

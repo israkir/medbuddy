@@ -1,8 +1,11 @@
-"""LLM_PROVIDER and OpenAI-related settings."""
+"""LLM_PROVIDER setting — defaults, accepted values, and error on invalid."""
+
+from __future__ import annotations
 
 import pytest
 
-from medbuddy.config import Settings, get_settings
+from medbuddy.config import LlmProvider, get_settings, load_settings
+from medbuddy.core.errors import ConfigError
 
 
 @pytest.fixture(autouse=True)
@@ -12,21 +15,16 @@ def _clear_settings_lru_cache() -> None:
     get_settings.cache_clear()
 
 
-def test_llm_provider_defaults_to_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    s = Settings()
-    assert s.llm_provider == "gemini"
+def test_llm_provider_defaults_to_gemini() -> None:
+    s = load_settings({})
+    assert s.llm_provider == LlmProvider.GEMINI
 
 
-def test_llm_provider_openai_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MOCK_EXTERNAL_SERVICES", "true")
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
-    s = Settings()
-    assert s.llm_provider == "openai"
+def test_llm_provider_openai_is_accepted() -> None:
+    s = load_settings({"LLM_PROVIDER": "openai"})
+    assert s.llm_provider == LlmProvider.OPENAI
 
 
-def test_invalid_llm_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "cohere")
-    with pytest.raises(ValueError, match="LLM_PROVIDER"):
-        Settings()
+def test_invalid_llm_provider_raises_config_error() -> None:
+    with pytest.raises(ConfigError, match="LLM_PROVIDER"):
+        load_settings({"LLM_PROVIDER": "cohere"})
