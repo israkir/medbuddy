@@ -152,6 +152,31 @@ async def test_messages_remove_medication(mock_settings) -> None:
 
 
 @pytest.mark.asyncio
+async def test_messages_emergency_contact_line_saved_despite_add_intent(mock_settings) -> None:
+    """Taiwan mobile + family wording persists when intent classifier misroutes to add_medication."""
+    uid = "user-ec-fast-1"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(intent=Intent.ADD_MEDICATION)
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "my son, David, 0900111111"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    row = await svc.users.get_or_create_user(uid)
+    assert row.get("emergency_contact")
+    assert "0900111111" in row["emergency_contact"]
+    assert "David" in row["emergency_contact"]
+
+
+@pytest.mark.asyncio
 async def test_messages_update_profile(mock_settings) -> None:
     uid = "user-profile-1"
     transport = ASGITransport(app=app)

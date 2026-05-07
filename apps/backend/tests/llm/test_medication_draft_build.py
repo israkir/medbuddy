@@ -1,6 +1,7 @@
 """MedicationExtraction → MedicationDraft mapping."""
 
 from medbuddy.llm.medication_draft_build import (
+    apply_one_off_reminder_dose_default,
     dose_or_schedule_display,
     medication_draft_from_extraction,
     medication_draft_needs_add_confirmation,
@@ -65,3 +66,51 @@ def test_needs_add_confirmation_when_model_infers_from_name_only() -> None:
     assert medication_draft_needs_add_confirmation(
         d, unspecified_label="Unspecified", user_text="add aspirin"
     )
+
+
+def test_one_off_reminder_a_pill_counts_as_dose_cue() -> None:
+    un = "Unspecified"
+    d = MedicationDraft(
+        name="Aspirin",
+        dosage=un,
+        schedule=un,
+        first_reminder_in_minutes=1,
+        materialize_daily_reminders=False,
+    )
+    d = apply_one_off_reminder_dose_default(d, unspecified_label=un, locale="en")
+    assert not medication_draft_needs_add_confirmation(
+        d,
+        unspecified_label=un,
+        user_text="remind me take a pill of aspirin after 1 minute",
+    )
+
+
+def test_one_off_reminder_minute_phrase_without_pill_word() -> None:
+    un = "未註明"
+    d = MedicationDraft(
+        name="阿斯匹靈",
+        dosage=un,
+        schedule=un,
+        first_reminder_in_minutes=1,
+        materialize_daily_reminders=False,
+    )
+    d = apply_one_off_reminder_dose_default(d, unspecified_label=un, locale="zh-TW")
+    assert not medication_draft_needs_add_confirmation(
+        d,
+        unspecified_label=un,
+        user_text="一分鐘後提醒我吃阿斯匹靈",
+    )
+
+
+def test_apply_one_off_reminder_dose_default_fills_placeholder() -> None:
+    un = "Unspecified"
+    d = MedicationDraft(
+        name="Aspirin",
+        dosage=un,
+        schedule=un,
+        first_reminder_in_minutes=5,
+        materialize_daily_reminders=False,
+    )
+    out = apply_one_off_reminder_dose_default(d, unspecified_label=un, locale="en")
+    assert out.dosage != un
+    assert "pill" in out.dosage.lower()

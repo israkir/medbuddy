@@ -223,7 +223,8 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
         "function": {
             "name": "update_profile",
             "description": (
-                "Update durable profile fields from natural language (name, age, emergency contact, allergies, locale)."
+                "Update durable profile fields from natural language (name, age, emergency/family contact "
+                "with phone, allergies, locale). Use when they share who to call in an emergency — not add_medication."
             ),
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },

@@ -105,7 +105,7 @@ flowchart LR
 
 ## 3. One conversation pipeline
 
-**Idea:** Whether the user typed on LINE, spoke (after transcription), or called the HTTP API, the same **turn runner** loads context, applies **fast routing** (`interpret_user_turn`), then **`run_tool_agent_loop`** so the model can call **registered tools** (possibly several per turn), persists turns, and returns **`AgentTurnResult`** (reply + optional metadata).
+**Idea:** Whether the user typed on LINE, spoke (after transcription), or called the HTTP API, the same **turn runner** loads context, applies **fast routing** (`interpret_user_turn`), then **`run_tool_agent_loop`** so the model can call **registered tools** (possibly several per turn). The first orchestrator hop includes a **redacted prior thread** (capped per **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) plus the current line. The pipeline persists turns and returns **`AgentTurnResult`** (reply + optional metadata).
 
 **Why:** Predictable ordering of safety checks, pending confirmations, and persistence; no “special HTTP path” that bypasses redaction or emergency handling.
 
@@ -132,7 +132,7 @@ sequenceDiagram
     alt Emergency or boundary intent
       PL->>PL: Use fixed safe response pattern
     else Standard request
-      PL->>AG: complete_chat_with_tools loop (tool calls + replies)
+      PL->>AG: complete_chat_with_tools loop (prior thread + tool calls + replies)
       AG-->>PL: Final reply (+ optional metadata)
     end
   end
@@ -146,7 +146,7 @@ sequenceDiagram
 
 ## 4. Registered tools instead of a free-form agent loop
 
-**Idea:** The LLM chooses **named tools** from a fixed registry (`complete_chat_with_tools`) — list meds, add, bulk remove, explain drug, confirm dose, summary, … — possibly **multiple calls** before the final natural-language reply. Tools return structured results; many paths use deterministic i18n or **`compose_reply`** inside the tool.
+**Idea:** The LLM chooses **named tools** from a fixed registry (`complete_chat_with_tools`) — list meds, add, bulk remove, explain drug, confirm dose, summary, … — possibly **multiple calls** before the final natural-language reply. The **first** hop receives **system**, **redacted prior** user/assistant messages (when enabled), and the **current** user message; later hops add assistant/tool traffic from the same turn. Tools return structured results; many paths use deterministic i18n or **`compose_reply`** inside the tool.
 
 **Why:**
 

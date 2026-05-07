@@ -13,6 +13,7 @@ def make_mock_settings(**overrides: str) -> Settings:
         "LOG_LEVEL": "INFO",
         "LINE_CHANNEL_SECRET": "testsecret",
         "PUBLIC_BASE_URL": "http://test",
+        "MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS": "0",
     }
     base.update(overrides)
     return load_settings(base)

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
+from medbuddy.core.i18n import t
 from medbuddy.llm.schemas import MedicationExtraction
 from medbuddy.models.domain import MedicationDraft
 from medbuddy.reminders.dose_schedule import parse_hhmm
@@ -31,8 +33,19 @@ _PLACEHOLDER_TOKENS = frozenset(
 
 _DOSE_EVIDENCE = re.compile(
     r"(?ix)\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug|ml|cc|units?|iu|tablets?|caps?(?:ule)?s?)\b|"
+    r"(?:\b(?:a|an|one|1)\s+pills?\b|\bpills?\b)|"
     r"(?:\d+\s*(?:顆|粒|錠|片|包|毫克|公克|毫升|單位))|"
     r"(?:[一二兩三四五六七八九十百]\s*(?:顆|粒|錠|片|包|毫克|公克|毫升|單位|瓶|支|粉包))"
+)
+
+# User asked for a soon / one-off reminder (English + Chinese) — counts as intent for quick reminders.
+_TIME_FIRST_REMINDER_CUE = re.compile(
+    r"(?ix)"
+    r"\b(?:in|after|within|about)\s+\d+\s*(?:minute|minutes|min)\b|"
+    r"\b\d+\s*(?:minute|minutes|min)\s*(?:later|from\s+now)?\b|"
+    r"(?:過|再)?\s*\d+\s*(?:分鐘|分)(?:後|內)?|"
+    r"(?:[一二兩三四五六七八九十百]+\s*(?:分鐘|分)(?:後|內)?)|"
+    r"(?:馬上|立刻|稍後|等一下)"
 )
 _SCHEDULE_EVIDENCE = re.compile(
     r"(?ix)\b(?:daily|once|twice|three\s+times|qid|tid|bid|qd|qhs|q\d+h|every)\b|"
@@ -92,6 +105,26 @@ def dose_or_schedule_display(value: str | None, *, unspecified_label: str) -> st
     return raw
 
 
+def apply_one_off_reminder_dose_default(
+    draft: MedicationDraft,
+    *,
+    unspecified_label: str,
+    locale: str,
+) -> MedicationDraft:
+    """When a one-off reminder has no extracted dose, store a simple unit so saves are not blocked."""
+    is_one_time_only = (
+        draft.first_reminder_in_minutes is not None and not draft.materialize_daily_reminders
+    )
+    if not is_one_time_only:
+        return draft
+    if not _is_placeholder_dose_or_schedule(draft.dosage, unspecified_label=unspecified_label):
+        return draft
+    return replace(
+        draft,
+        dosage=t("medication.default_one_unit_dose", locale=locale),
+    )
+
+
 def medication_draft_fields_complete(draft: MedicationDraft, *, unspecified_label: str) -> bool:
     """True when dosage and schedule are both non-placeholder values.
 
@@ -125,6 +158,9 @@ def medication_draft_needs_add_confirmation(
     Exception: for pure one-time reminders (first_reminder_in_minutes set,
     materialize_daily_reminders=False), a recurring schedule is not required —
     "未指定" schedule is correct and expected in that case.
+
+    One-off guardrail: accept plain-language cues (pill/tablet, \"after N minutes\", 分鐘後)
+    without forcing mg confirmation — recurring adds still require dose+schedule signals.
     """
     if not medication_draft_fields_complete(draft, unspecified_label=unspecified_label):
         return True
@@ -138,6 +174,9 @@ def medication_draft_needs_add_confirmation(
     has_dose_signal = bool(_DOSE_EVIDENCE.search(src))
     # For one-time reminders the "schedule signal" is the first_reminder_in_minutes itself.
     has_schedule_signal = is_one_time_only or bool(_SCHEDULE_EVIDENCE.search(src))
+    if is_one_time_only:
+        has_quick_cue = has_dose_signal or bool(_TIME_FIRST_REMINDER_CUE.search(src))
+        return not (has_quick_cue and has_schedule_signal)
     return not (has_dose_signal and has_schedule_signal)
 
 

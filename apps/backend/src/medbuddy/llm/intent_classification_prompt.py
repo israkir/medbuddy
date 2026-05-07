@@ -33,7 +33,7 @@ Return one intent, your reasoning, and two adherence fields used mechanically by
 - **interaction_check** — Combining drugs, food, or supplements: safety, interactions, "can I take A with B".
 - **log_vital** — Logging blood pressure, blood sugar, weight, or similar vitals.
 - **request_summary** — Summary for a doctor visit or health recap.
-- **update_profile** — Durable profile fields: how to address the user, age, gender, emergency contact, allergies, long-term health notes, and user preferences like reply language (`en`/`zh-TW`) or timezone. One-off symptoms **not** meant as a dose log belong here or **general_question**, not confirm_dose, unless they explicitly tie it to a dose log (then use confirm_dose + **dose_adherence_note**).
+- **update_profile** — Durable profile fields: how to address the user, age, gender, emergency contact, allergies, long-term health notes, and user preferences like reply language (`en`/`zh-TW`) or timezone. One-off symptoms **not** meant as a dose log belong here or **general_question**, not confirm_dose, unless they explicitly tie it to a dose log (then use confirm_dose + **dose_adherence_note**). Include lines that **only** give an emergency/family contact with a phone (e.g. "my son David 0912345678",「我兒子大明 0922333444」) — **not** add_medication.
 - **off_topic** — No health, medication, or care angle (e.g. weather, sports, coding). Rare for this app.
 - **general_question** — Health-related chat that does not fit a tool above: vague symptoms, general advice, or clarification — use only when no more specific intent applies.
 

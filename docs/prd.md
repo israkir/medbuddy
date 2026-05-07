@@ -52,7 +52,7 @@ Privacy posture (redacted model inputs, documented context—see [privacy.md](ht
 
 ## Privacy & data
 
-Health and chat data are sensitive. We limit what goes to third‑party LLMs: a **narrowed, mostly de-identified** patient context (age band — not exact age — no raw notes) and **redacted** user text on most assistant calls. Redaction today is pattern-based (emails, phone numbers, long digit runs); full NER-based clinical de-identification is a Growth-phase investment — see [`privacy.md`](privacy.md). Stored messages may stay verbatim for the product while the model sees narrower slices; a few flows (e.g. profile extraction, health summaries) can send more raw text — see [llm-context.md](https://github.com/israkir/medbuddy/blob/main/docs/llm-context.md). Operators still need safe logging and provider agreements.
+Health and chat data are sensitive. We limit what goes to third‑party LLMs: a **narrowed, mostly de-identified** patient context (age band — not exact age — no raw notes), **redacted** user text on most assistant calls, and a **capped redacted tail** of recent user/assistant lines for the tool orchestrator so short follow-ups stay coherent. Redaction today is pattern-based (emails, phone numbers, long digit runs); full NER-based clinical de-identification is a Growth-phase investment — see [`privacy.md`](privacy.md). Stored messages may stay verbatim for the product while the model sees narrower slices; a few flows (e.g. profile extraction, health summaries) can send more raw text — see [llm-context.md](https://github.com/israkir/medbuddy/blob/main/docs/llm-context.md). Operators still need safe logging and provider agreements.
 
 ## Core journeys
 

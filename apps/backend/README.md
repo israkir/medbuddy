@@ -164,6 +164,9 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` |
 | `MEDBUDDY_LOCALE` | Server locale (`zh-TW` default) |
 | `LOG_LEVEL` | `INFO` (default) or `DEBUG` |
+| `CONVERSATION_HISTORY_TURNS` | Max turns loaded from storage for routing context (default `5`) |
+| `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | Max **prior** user/assistant turns injected into the tool orchestrator LLM per message (default **12**; `0` disables prior-turn injection) |
+| `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | When profile gaps remain (name, age, gender, emergency contact, health notes), append a gentle footer every **N** user messages on the main assistant path (default **12**; **`0`** disables) |
 
 ---
 
