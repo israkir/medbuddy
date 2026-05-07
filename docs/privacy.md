@@ -23,7 +23,11 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 | **Tool orchestration rounds** | Yes | The **first** `complete_chat_with_tools` request per user line sends **system prompt**, **patient catalog/context**, **redacted prior** `user` / `assistant` messages from storage (tail capped by **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, `0` = none), then the **current redacted** user line. **Later rounds** in the same turn append **assistant** tool-call lines and **`tool`** result messages. Tool **results** are JSON/text echoed back to the model in those follow-on rounds. |
 | **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
 | **Profile fields from chat** | Yes, for extraction (**often raw user message**) | **`update_profile`** tool in **`run_tool_agent_loop`** → `LLMPort.extract_profile_patch` → **`patch_user_profile`** (`application/profile_intents.py`). |
-| **Health summary** | Yes | Structured prompt includes **unredacted** recent conversation turns in adapters today—see **[llm-context.md](./llm-context.md)**. |
+| **Health summary** | Yes | Structured prompt includes **unredacted** recent conversation turns **and** a formatted block from persisted **`health_issue_events`** (classifier routing intents and structured vital rows), capped by **`MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT`**—see **[llm-context.md](./llm-context.md)** and **Persistence: `health_issue_events`** below. |
+
+## Persistence: `health_issue_events`
+
+The backend stores selected user turns in **`public.health_issue_events`** (Postgres): **`routing_intent`** mirrors the **`Intent`** classifier string; **`user_message`** holds the user line (used for doctor-summary synthesis); **`locale`** the effective UI locale; structured vital tool saves use **`routing_intent = log_vital`** with **`payload`**, **`kind`**, and **`display_summary`**. This is queryable health timeline data separate from full **`conversation_turns`**. Operators can narrow what gets logged via **`MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS`** (comma-separated allowlist) or the sentinel **`all_non_off_topic`**—see `application/health_issue_event_log.py`.
 
 ## What is not sent to an LLM (by design)
 

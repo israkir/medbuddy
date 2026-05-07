@@ -86,6 +86,7 @@ class MockLLM(LLMPort):
         self._vital_log = vital_log
         self._locale_intent = locale_intent
         self.last_interpret_user_turn_input: str | None = None
+        self.last_health_issue_events_block: str | None = None
         self._orch_step = 0
 
     @property
@@ -226,8 +227,10 @@ class MockLLM(LLMPort):
         recent_conversation: list[ConversationTurn],
         patient_context: str,
         locale: str,
+        health_issue_events_block: str = "",
     ) -> HealthSummary:
         await asyncio.sleep(0)
+        self.last_health_issue_events_block = health_issue_events_block
         med_items = [
             MedicationSummaryItem(
                 name=m.name,

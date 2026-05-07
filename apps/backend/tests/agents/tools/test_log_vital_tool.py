@@ -11,7 +11,7 @@ from medbuddy.container import build_app_services
 from medbuddy.core.errors import VitalExtractionError
 from medbuddy.integrations.mocks.llm import MockLLM
 from medbuddy.llm.schemas import VitalLogExtraction
-from medbuddy.models.domain import Intent
+from medbuddy.models.domain import HEALTH_ROUTING_INTENT_VITAL, Intent
 
 
 def test_vital_payload_blood_pressure() -> None:
@@ -52,6 +52,7 @@ async def test_log_vital_end_to_end_blood_pressure() -> None:
     assert len(vitals) == 1
     assert vitals[0].payload["systolic"] == 118
     assert vitals[0].kind == "blood_pressure"
+    assert vitals[0].routing_intent == HEALTH_ROUTING_INTENT_VITAL
 
 
 @pytest.mark.asyncio

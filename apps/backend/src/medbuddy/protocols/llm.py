@@ -118,6 +118,7 @@ class LLMPort(Protocol):
         recent_conversation: list[ConversationTurn],
         patient_context: str,
         locale: str,
+        health_issue_events_block: str = "",
     ) -> HealthSummary:
         """Generate a doctor-ready health summary for the patient."""
         ...

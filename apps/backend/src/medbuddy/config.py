@@ -86,6 +86,10 @@ class Settings:
     reminder_default_local_time: str
     reminder_horizon_days: int
     profile_completion_nudge_every_n_user_turns: int
+    # Optional comma-separated allowlist; ``None`` = built-in defaults; ``all_non_off_topic`` alone = capture mode.
+    health_issue_log_intents: tuple[str, ...] | None
+    health_issue_summary_events_limit: int
+
     reminder_nudge_intervals_minutes: tuple[int, ...] = field(default_factory=tuple)
 
     @property
@@ -138,6 +142,16 @@ def _int(
         msg = f"Env var {key!r} must be <= {le}; got {val}"
         raise ConfigError(msg)
     return val
+
+
+def _optional_health_issue_log_intents(env: Mapping[str, str]) -> tuple[str, ...] | None:
+    raw = env.get("MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS", "").strip()
+    if not raw:
+        return None
+    if raw.lower() == "all_non_off_topic":
+        return ("all_non_off_topic",)
+    parts = tuple(p.strip() for p in raw.split(",") if p.strip())
+    return parts if parts else None
 
 
 def _nudge_intervals(env: Mapping[str, str], key: str) -> tuple[int, ...]:
@@ -251,6 +265,14 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
             default=12,
             ge=0,
             le=500,
+        ),
+        health_issue_log_intents=_optional_health_issue_log_intents(env),
+        health_issue_summary_events_limit=_int(
+            env,
+            "MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT",
+            default=60,
+            ge=1,
+            le=200,
         ),
         reminder_nudge_intervals_minutes=_nudge_intervals(
             env, "MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES"

@@ -39,6 +39,8 @@ class LogVitalTool:
             display_summary=summary,
             payload=payload,
             notes=notes,
+            user_message=safe_text,
+            locale=locale,
         )
         log.info(
             "log_vital: user_key=%s id=%s kind=%s",

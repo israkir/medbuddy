@@ -36,7 +36,7 @@ class SupabaseUserData(
     """Users + medications backed by Supabase Postgres.
 
     Methods are organised across three mixins:
-    - SupabaseProfileMixin     — profile, vital-log and pending-state methods
+    - SupabaseProfileMixin     — profile, health-issue events, and pending-state methods
     - SupabaseMedicationMixin  — medication CRUD
     - SupabaseDoseEventMixin   — dose event scheduling and status methods
     """

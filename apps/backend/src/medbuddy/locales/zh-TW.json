@@ -112,6 +112,7 @@
   },
   "journal": {
     "vitals_header": "近期生理數值紀錄：",
+    "health_timeline_header": "健康相關紀錄時間軸（症狀／數值等）：",
     "chat_header": "近期對話摘要：",
     "med_notes_header": "藥物備註／指示：",
     "empty": "尚無可用紀錄——開始記錄血壓血糖或服藥備註後會顯示在這裡。"
