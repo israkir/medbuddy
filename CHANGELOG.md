@@ -94,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LLM/output consistency**: Improved locale locking and corrected conflicting English prompt scaffolding.
 - **Drug cache resolution**: Improved medication-name matching so personalization cache rows retain `medication_id` and grounding provenance more reliably.
 - **LINE audio STT resilience**: Webhook audio handling now catches STT HTTP failures and sends a localized fallback reply instead of returning HTTP 500.
+- **Emergency intent vs. saved emergency contact**: When `Intent.emergency` matches (fixed localized reply, no tool loop), users who already have **`emergency_contact`** now get the same **simulated** notify line as **`simulate_notify_emergency_contact`**, plus **`metadata.simulated_emergency_notification`** for the app banner; copy avoids asking them to add a contact “for next time.” Added **`agent.emergency_with_saved_contact`** (`en`, **`zh-TW`**) and API tests.
 
 ### Removed
 

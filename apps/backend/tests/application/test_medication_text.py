@@ -224,3 +224,58 @@ async def test_messages_explain_medication_replies(mock_settings) -> None:
         app.dependency_overrides.pop(get_services, None)
     assert r.status_code == 200
     assert len(r.json()["reply"].strip()) > 0
+
+
+@pytest.mark.asyncio
+async def test_messages_emergency_with_saved_contact_simulates_notify(mock_settings) -> None:
+    """EMERGENCY intent short-circuits the tool loop; still surface simulated contact notify + metadata."""
+    uid = "user-emergency-notify"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(
+        uid,
+        {"locale": "en", "emergency_contact": "daughter 0912345678"},
+    )
+    svc.llm = MockLLM(intent=Intent.EMERGENCY, locale="en")
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "i am fainting"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["metadata"].get("simulated_emergency_notification") is True
+    assert "0912345678" in body["reply"]
+    assert "Simulation" in body["reply"]
+
+
+@pytest.mark.asyncio
+async def test_messages_emergency_without_saved_contact_no_notify_metadata(mock_settings) -> None:
+    uid = "user-emergency-no-contact"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(uid, {"locale": "en", "emergency_contact": None})
+    svc.llm = MockLLM(intent=Intent.EMERGENCY, locale="en")
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "i am fainting"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["metadata"].get("simulated_emergency_notification") is not True
+    assert "Simulation" not in body["reply"]
