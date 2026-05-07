@@ -29,6 +29,28 @@
       background: #0f1f1d;
       font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
       color: var(--mb-ink);
+      height: 100vh;
+    }
+
+    .remark-container,
+    .remark-slide-container,
+    .remark-slide-area {
+      height: 100vh;
+    }
+
+    #boot-error {
+      display: none;
+      margin: 72px auto 0;
+      max-width: 820px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid #7f1d1d;
+      background: #1f1212;
+      color: #fecaca;
+      font-size: 14px;
+      line-height: 1.5;
+      font-family: 'Inter', system-ui, sans-serif;
+      box-sizing: border-box;
     }
 
     /* Remark reads slide markdown from this textarea; it must not be visible. */
@@ -1489,6 +1511,7 @@
     <button id="mode-full" class="active">Full deck</button>
     <span class="label" style="margin-left:8px;">Press <b>V</b> / <b>A</b></span>
   </div>
+  <div id="boot-error" role="alert" aria-live="polite"></div>
 
   <textarea id="source">
 
@@ -3784,7 +3807,7 @@ count: false
 
   </textarea>
 
-  <script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+  <script src="./vendor/remark-latest.min.js" onerror="this.onerror=null;this.src='https://remarkjs.com/downloads/remark-latest.min.js';"></script>
   <!-- Mermaid for flow / sequence / architecture diagrams -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <!-- Chart.js for forecast / cost / capacity charts -->
@@ -3820,6 +3843,15 @@ count: false
     // the textarea synchronously at create time and some bundles cache the
     // initial DOM textContent, so writing .value alone isn't always enough.
     sourceEl.value = sourceText;
+
+    if (!window.remark || typeof window.remark.create !== 'function') {
+      var bootError = document.getElementById('boot-error');
+      if (bootError) {
+        bootError.textContent = 'Failed to load remark.js. Check CDN/network access or ensure ./vendor/remark-latest.min.js is present.';
+        bootError.style.display = 'block';
+      }
+      throw new Error('remark.js did not load');
+    }
 
     var slideshow = remark.create({
       source: sourceText,
