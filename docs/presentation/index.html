@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>MedBuddy — Investor &amp; Engineering Deck</title>
-  <meta name="viewport" content="width=1024">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="MedBuddy — LINE-first medication companion with channel adapters for regional expansion. Investor pitch, product roadmap and engineering design.">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap');
@@ -29,13 +29,7 @@
       background: #0f1f1d;
       font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
       color: var(--mb-ink);
-      height: 100vh;
-    }
-
-    .remark-container,
-    .remark-slide-container,
-    .remark-slide-area {
-      height: 100vh;
+      height: 100%;
     }
 
     #boot-error {
@@ -1067,11 +1061,8 @@
       text-transform: uppercase;
     }
     .remark-slide-content.title .title-parts {
-      position: absolute;
-      left: 50%;
-      bottom: 3.6em;
-      transform: translateX(-50%);
-      margin: 0;
+      position: static;
+      margin: auto 0 0;
       /* Wide enough for one-line appendices strip; anchored bottom-center */
       max-width: calc(100% - 4.5em);
       font-size: 0.58em;
@@ -1116,11 +1107,8 @@
       white-space: nowrap;
     }
     .remark-slide-content.section .title-parts.title-parts--appendix {
-      position: absolute;
-      left: 50%;
-      bottom: 3.6em;
-      transform: translateX(-50%);
-      margin: 0;
+      position: static;
+      margin: auto 0 0;
       max-width: calc(100% - 4.5em);
       font-size: 0.58em;
       letter-spacing: 0.04em;
