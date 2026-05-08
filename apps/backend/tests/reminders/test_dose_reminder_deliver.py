@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from medbuddy.core.i18n import t
 from tests.helpers import make_mock_settings
 from medbuddy.container import build_app_services
 from medbuddy.models.domain import MedicationDraft
@@ -12,7 +13,7 @@ from medbuddy.reminders.deliver import deliver_dose_reminder
 
 @pytest.mark.asyncio
 async def test_deliver_sends_line_push_and_marks_sent() -> None:
-    settings = make_mock_settings()
+    settings = make_mock_settings(MEDBUDDY_REMINDER_EDUCATION_CTA_EVERY_N_DAYS="1")
     svc = build_app_services(settings)
     key = "U-test-line"
     await svc.users.get_or_create_user(key)
@@ -28,7 +29,9 @@ async def test_deliver_sends_line_push_and_marks_sent() -> None:
     assert sent is True
     assert len(svc.line.pushes) == 1
     assert svc.line.pushes[0]["to_user_id"] == key
-    assert "Aspirin" in svc.line.pushes[0]["messages"][0]["text"]
+    push_text = svc.line.pushes[0]["messages"][0]["text"]
+    assert "Aspirin" in push_text
+    assert t("reminder.education_cta", locale="zh-TW") in push_text
 
     again = await deliver_dose_reminder(svc, dose_id)
     assert again is False

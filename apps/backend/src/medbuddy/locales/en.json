@@ -97,7 +97,12 @@
     "upcoming_time_other_day": "{date} {time}",
     "upcoming_due_suffix": " (due)",
     "incomplete_setup_notice": "The following medication record(s) have an incomplete name — you may want to re-add them with the correct details: {names}",
-    "pending_horizon_notice": "Also, the following medication(s) have no daily reminder schedule yet — let me know how many days you'd like reminders for: {names}"
+    "pending_horizon_notice": "Also, the following medication(s) have no daily reminder schedule yet — let me know how many days you'd like reminders for: {names}",
+    "education_purpose_line": "{name} is commonly used for: {purpose}",
+    "education_uncertain_line": "I may not have complete reference data for {name}; please confirm purpose and cautions with your pharmacist or clinician.",
+    "education_deep_dive_cta": "Want a quick note on common side effects or interaction cautions?",
+    "education_boundary": "This is general information and does not replace your doctor or pharmacist's instructions.",
+    "list_education_cta": "If you want, I can explain what each medicine is commonly used for — for example: \"What is Metformin for?\""
   },
   "vital": {
     "logged": "Got it — I’ve saved that for you: {summary}.",
@@ -121,6 +126,7 @@
   "reminder": {
     "line_push": "Reminder ({time_local}): time for {name} ({dosage}). On your schedule: {schedule}. If unsure, check with your pharmacist or clinician.",
     "line_push_nudge": "Follow-up ({time_local}): still time for {name} ({dosage}) if you haven’t taken it yet. Schedule: {schedule}. If unsure, check with your pharmacist or clinician.",
+    "education_cta": "Need a quick refresher on what this medicine is for?",
     "horizon_confirmed": "Got it — I’ve set daily reminders for {name} for {days} day(s). You’ll receive reminders at the scheduled time each day. Reply any time to check your schedule or mark a dose as taken.",
     "horizon_confirmed_generic": "Got it — I’ve set daily reminders for {days} day(s). You’ll receive reminders at the scheduled times.",
     "horizon_still_needed": "(By the way: I’m still waiting to know how many days you’d like daily reminders for {name}. Just reply with a number — for example \"7 days\" or \"2 weeks\".)"

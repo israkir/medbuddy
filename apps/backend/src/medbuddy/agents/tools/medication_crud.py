@@ -50,6 +50,55 @@ async def _drug_grounding_text(svc: AppServices, drug_name: str) -> str | None:
     return "\n\n".join(parts) if parts else None
 
 
+def _purpose_from_grounding(grounding: str | None) -> str | None:
+    """Best-effort one-liner from grounding text for quick education cues."""
+    if not grounding:
+        return None
+    for raw in grounding.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        lowered = line.lower()
+        if lowered.startswith("tfda(") or lowered.startswith("openfda("):
+            continue
+        for sep in (":", "："):
+            if sep in line:
+                _, tail = line.split(sep, 1)
+                line = tail.strip()
+                break
+        if not line:
+            continue
+        trimmed = line[:140].rstrip(".,;: ")
+        return trimmed
+    return None
+
+
+def _education_lines_for_medication(
+    *,
+    locale: str,
+    medication_name: str,
+    purpose: str | None,
+) -> tuple[list[str], bool]:
+    if purpose:
+        lines = [
+            t(
+                "medication.education_purpose_line",
+                locale=locale,
+                name=medication_name,
+                purpose=purpose,
+            ),
+            t("medication.education_deep_dive_cta", locale=locale),
+            t("medication.education_boundary", locale=locale),
+        ]
+        return lines, True
+    lines = [
+        t("medication.education_uncertain_line", locale=locale, name=medication_name),
+        t("medication.education_deep_dive_cta", locale=locale),
+        t("medication.education_boundary", locale=locale),
+    ]
+    return lines, False
+
+
 async def persist_medication_add_from_draft(
     svc: AppServices,
     *,
@@ -90,6 +139,7 @@ async def persist_medication_add_from_draft(
     )
     drug_grounding = await _drug_grounding_text(svc, saved.name)
 
+    purpose: str | None = _purpose_from_grounding(drug_grounding)
     try:
         reply = await svc.llm.compose_medication_added_reply(
             patient_context=patient_ctx,
@@ -108,13 +158,27 @@ async def persist_medication_add_from_draft(
             dosage=dose_or_schedule_display(saved.dosage, unspecified_label=un),
             schedule=dose_or_schedule_display(saved.schedule, unspecified_label=un),
         )
+    education_lines, grounded = _education_lines_for_medication(
+        locale=locale,
+        medication_name=saved.name,
+        purpose=purpose,
+    )
+    reply = f"{reply}\n" + "\n".join(education_lines)
     log.info(
         "add_medication: user_key=%s med_id=%s name_len=%d (from_draft)",
         user_key,
         saved.id,
         len(saved.name or ""),
     )
-    return ToolResult(reply=reply, structured=saved)
+    return ToolResult(
+        reply=reply,
+        structured=saved,
+        metadata={
+            "education_cue_shown": "add",
+            "education_grounding_available": grounded,
+            "education_fallback_uncertain": not grounded,
+        },
+    )
 
 
 class ListMedicationsTool:
@@ -134,8 +198,32 @@ class ListMedicationsTool:
         if not medications:
             return ToolResult(reply=t("medication.list_empty", locale=locale))
         body = format_patient_medication_context(medications, locale=locale)
+        purpose_tags: list[str] = []
+        for med in medications[:2]:
+            grounding = await _drug_grounding_text(svc, med.name)
+            purpose = _purpose_from_grounding(grounding)
+            if purpose:
+                purpose_tags.append(
+                    t(
+                        "medication.education_purpose_line",
+                        locale=locale,
+                        name=med.name,
+                        purpose=purpose,
+                    )
+                )
         intro = t("medication.list_intro", locale=locale)
-        return ToolResult(reply=f"{intro}\n{body}")
+        parts = [f"{intro}\n{body}"]
+        if purpose_tags:
+            parts.append("\n".join(purpose_tags))
+        parts.append(t("medication.list_education_cta", locale=locale))
+        return ToolResult(
+            reply="\n".join(parts),
+            metadata={
+                "education_cue_shown": "list",
+                "education_grounding_available": bool(purpose_tags),
+                "education_fallback_uncertain": not bool(purpose_tags),
+            },
+        )
 
 
 class AddMedicationTool:
@@ -294,7 +382,23 @@ class UpdateMedicationTool:
         )
         if "dosage" in fields or "schedule" in fields:
             reply = f"{reply}\n{t('medication.update_reminder_followup', locale=locale)}"
-        return ToolResult(
-            reply=reply,
-            structured=updated,
-        )
+        material_change = any(k in fields for k in ("name", "dosage", "schedule"))
+        grounded = False
+        uncertain = False
+        if material_change:
+            grounding = await _drug_grounding_text(svc, updated.name)
+            purpose = _purpose_from_grounding(grounding)
+            education_lines, grounded = _education_lines_for_medication(
+                locale=locale,
+                medication_name=updated.name,
+                purpose=purpose,
+            )
+            uncertain = not grounded
+            reply = f"{reply}\n" + "\n".join(education_lines)
+        metadata: dict[str, Any] = {
+            "education_grounding_available": grounded,
+            "education_fallback_uncertain": uncertain,
+        }
+        if material_change:
+            metadata["education_cue_shown"] = "update"
+        return ToolResult(reply=reply, structured=updated, metadata=metadata)

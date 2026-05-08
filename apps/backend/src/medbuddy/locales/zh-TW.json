@@ -97,7 +97,12 @@
     "upcoming_time_other_day": "{date} {time}",
     "upcoming_due_suffix": "（應服用）",
     "incomplete_setup_notice": "以下藥物資料不完整（藥名未清楚紀錄），建議重新設定：{names}",
-    "pending_horizon_notice": "另外，以下藥物尚未設定每日提醒週期，請告訴我您想提醒幾天：{names}"
+    "pending_horizon_notice": "另外，以下藥物尚未設定每日提醒週期，請告訴我您想提醒幾天：{names}",
+    "education_purpose_line": "{name} 常用於：{purpose}",
+    "education_uncertain_line": "目前我對 {name} 的參考資料可能不完整；用途與注意事項請再和藥師或醫師確認。",
+    "education_deep_dive_cta": "要我補充常見副作用或交互作用重點嗎？",
+    "education_boundary": "這是一般用藥資訊，不能取代醫師或藥師指示。",
+    "list_education_cta": "如果你願意，我可以逐一說明每個藥常見用途，例如：「Metformin 是做什麼用的？」"
   },
   "vital": {
     "logged": "好的，已幫你記下：{summary}。",
@@ -121,6 +126,7 @@
   "reminder": {
     "line_push": "用藥提醒（{time_local}）：該吃 {name}（{dosage}）。你存的吃法：{schedule}。若有不確定請問藥師或醫師。",
     "line_push_nudge": "再次提醒（{time_local}）：若尚未服用，請記得 {name}（{dosage}）。你存的吃法：{schedule}。若有不確定請問藥師或醫師。",
+    "education_cta": "需要我快速提醒這個藥是做什麼用的嗎？",
     "horizon_confirmed": "好的，已幫您設定 {name} 的每日提醒，共 {days} 天。每天到了時間我會通知您。您可以隨時回覆查看時程或記錄服藥狀況。",
     "horizon_confirmed_generic": "好的，已設定 {days} 天的每日提醒。",
     "horizon_still_needed": "（補充：我還在等您告訴我「{name}」要提醒幾天——回覆一個數字就可以，例如「7 天」或「兩週」。）"

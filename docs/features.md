@@ -277,6 +277,18 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Same assistant persona without forcing everything into medication CRUD. |
 | **Capabilities** | **`request_summary`** uses the health-summary tool. **`log_vital`** and general chat: chosen by the orchestrator model; **`log_vital`** uses **`LogVitalTool`**; open questions may use **`compose_reply`** inside tools when applicable. No automatic drug API prefetch unless the tool path requests it. |
 
+### 4.12 Just-in-time medication understanding cues
+
+| Field | Content |
+|-------|---------|
+| **Summary** | Add short, contextual education cues after medication changes and occasional reminders so users understand what each medicine is for without increasing baseline chat friction. |
+| **User value** | Reinforces medication purpose at the moment of action (save/update/reminder), which supports adherence and helps users ask better follow-up questions. |
+| **Capabilities** | Progressive disclosure: default cue is one sentence; deeper guidance is opt-in via a short CTA. Reuses existing explain/interaction/side-effect tool paths rather than adding a separate education mode. |
+| **Event hooks** | **`add_medication` success:** append purpose cue + optional CTA. **`update_medication` success:** append cue when medication name, dose, schedule, or reminder metadata changes. **`list_medications`:** optional compact purpose tag per item when reference summary is already available; otherwise keep list concise and prompt for on-demand explanation. **Reminder delivery:** primary reminder remains short; optional refresher CTA can be appended only when cadence gate passes. |
+| **Cadence controls** | Purpose cue is shown on every successful add/update by default. Reminder refresher CTA is rate-limited per user+medication and disabled when a recent explain/interaction turn already occurred. Suggested default: at most once per medication every 3-7 days. |
+| **Safety boundaries** | Copy stays non-diagnostic and keeps existing boundary language (not replacing clinician/pharmacist advice). If grounding is weak or missing, response must say uncertainty directly and suggest pharmacist/doctor confirmation. |
+| **Bilingual microcopy templates** | **Add/update cue (EN):** `Saved. <med_name> is commonly used for <plain_purpose>.` **CTA (EN):** `Want a quick note on common side effects or interaction cautions?` **Boundary (EN):** `This is general information and does not replace your doctor or pharmacist's instructions.` **Add/update cue (zh-TW):** `已更新。<med_name> 常用於 <plain_purpose>。` **CTA (zh-TW):** `要我補充常見副作用或交互作用重點嗎？` **Boundary (zh-TW):** `這是一般用藥資訊，不能取代醫師或藥師指示。` **Reminder refresher (EN):** `Need a quick refresher on what this medicine is for?` **Reminder refresher (zh-TW):** `需要我快速提醒這個藥是做什麼用的嗎？` |
+
 ---
 
 ## 5. Privacy and LLM data shaping
@@ -367,6 +379,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 | Nudges (optional) | If **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is non-empty (comma-separated minutes), after the primary push the worker may enqueue **`send_reminder_nudge`** jobs for follow-up LINE pushes until intervals are exhausted, the user marks doses taken, or the local day of the scheduled dose ends. Copy: **`reminder.line_push_nudge`**. |
 | Chat adherence | Orchestrator **`confirm_dose`** tool — when arguments indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.8). |
 | Copy | Primary: **`reminder.line_push`** (`zh-TW`, `en`); welcome and pushes respect **`patients.locale`**. |
+| Education CTA (optional) | When just-in-time education is enabled, reminder copy may append a short refresher CTA only if cadence gate passes (per user+medication cooldown, no duplicate on same local day, suppressed after recent explain/interaction turn). |
 | Scope | LINE push only for LINE `userId` keys; no local notifications for standalone HTTP-app users in this slice. No Flex cards or “mark taken” postback in v1. |
 | Reconcile | `POST /internal/reminders/reconcile` with `X-Cron-Secret`. |
 
@@ -412,6 +425,9 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 |-------|----------|
 | Logging | `LOG_LEVEL` (default `INFO`) for `medbuddy.*` and `uvicorn.error`. Webhook/orchestrator logs structured INFO (event types, steps, reply sizes) without raw user message text. |
 | Assistant turn logs | `run_assistant_text_turn` logs `user_key`, `med_count`, per-medication flat lines (`id`, name, dosage, schedule, `instructions`). |
+| Just-in-time education telemetry | Track: `education_cue_shown` (source: add/update/list/reminder), `education_cta_shown`, `education_cta_clicked` (follow-up explain/interaction within 1 turn), `education_cadence_suppressed` (cooldown hit), `education_grounding_available` (yes/no), and `education_fallback_uncertain` (explicit low-confidence copy used). |
+| Outcome metrics | Monitor pre/post by cohort: explain+interaction follow-up rate after add/update, confirm-dose rate within 24h of reminder, missed-dose rate, and negative-sentiment/off-topic signals after reminder CTA insertion. |
+| Guardrail thresholds | Initial rollout target: +10% relative increase in explain/interactions after med changes, no >2% absolute drop in reminder confirmation, no >1% absolute rise in negative feedback signals. |
 | Repo automation | Root Makefile (`be-*`, `fe-*`), pre-commit, `CHANGELOG.md` for notable changes. |
 
 ---

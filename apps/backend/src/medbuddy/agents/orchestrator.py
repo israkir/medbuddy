@@ -145,6 +145,14 @@ async def execute_agent_tool(
     user_key = ctx.user_key
     locale = ctx.locale
 
+    def _capture_metadata(result: ToolResult, tool_name: str) -> None:
+        if result.metadata:
+            ctx.metadata.update(result.metadata)
+        ctx.metadata["last_tool_name"] = tool_name
+        cue = str(ctx.metadata.get("education_cue_shown") or "").strip()
+        if cue and tool_name in {"explain_medication", "interaction_check"}:
+            ctx.metadata["education_cta_clicked"] = True
+
     if name == "list_medications":
         r = await _run_tool_safe(
             _list_tool,
@@ -154,6 +162,7 @@ async def execute_agent_tool(
             user_row=ctx.user_row,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "list_upcoming_doses":
@@ -165,6 +174,7 @@ async def execute_agent_tool(
             medications=ctx.medications,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "add_medication":
@@ -176,6 +186,7 @@ async def execute_agent_tool(
             user_row=ctx.user_row,
             locale=locale,
         )
+        _capture_metadata(r, name)
         await ctx.reload_medications()
         return r.reply
 
@@ -199,6 +210,7 @@ async def execute_agent_tool(
             medications=ctx.medications,
             locale=locale,
         )
+        _capture_metadata(r, name)
         await ctx.reload_medications()
         return r.reply
 
@@ -217,6 +229,7 @@ async def execute_agent_tool(
             medications=ctx.medications,
             locale=locale,
         )
+        _capture_metadata(r, name)
         await ctx.reload_medications()
         return r.reply
 
@@ -245,6 +258,7 @@ async def execute_agent_tool(
             record_pending_dose_as_taken=bool(args.get("record_pending_dose_as_taken", False)),
             dose_adherence_note=args.get("dose_adherence_note"),
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "report_missed_dose":
@@ -255,6 +269,7 @@ async def execute_agent_tool(
             user_text=ctx.user_text,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "explain_medication":
@@ -268,6 +283,7 @@ async def execute_agent_tool(
             history=ctx.history,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "report_side_effects":
@@ -281,6 +297,7 @@ async def execute_agent_tool(
             history=ctx.history,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "interaction_check":
@@ -294,6 +311,7 @@ async def execute_agent_tool(
             history=ctx.history,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "log_vital":
@@ -304,6 +322,7 @@ async def execute_agent_tool(
             user_text=ctx.user_text,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "generate_health_summary":
@@ -315,6 +334,7 @@ async def execute_agent_tool(
             medications=ctx.medications,
             locale=locale,
         )
+        _capture_metadata(r, name)
         return r.reply
 
     if name == "export_health_journal":

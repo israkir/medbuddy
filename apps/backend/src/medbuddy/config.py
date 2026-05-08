@@ -86,6 +86,7 @@ class Settings:
     reminder_default_local_time: str
     reminder_horizon_days: int
     profile_completion_nudge_every_n_user_turns: int
+    reminder_education_cta_every_n_days: int
     # Optional comma-separated allowlist; ``None`` = built-in defaults; ``all_non_off_topic`` alone = capture mode.
     health_issue_log_intents: tuple[str, ...] | None
     health_issue_summary_events_limit: int
@@ -265,6 +266,13 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
             default=12,
             ge=0,
             le=500,
+        ),
+        reminder_education_cta_every_n_days=_int(
+            env,
+            "MEDBUDDY_REMINDER_EDUCATION_CTA_EVERY_N_DAYS",
+            default=5,
+            ge=0,
+            le=30,
         ),
         health_issue_log_intents=_optional_health_issue_log_intents(env),
         health_issue_summary_events_limit=_int(
