@@ -8,10 +8,10 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 
 | Document | Audience | What you'll find |
 |----------|----------|-----------------|
-| [`tdd.md`](tdd.md) | Engineers, security reviewers | **Primary TDD** (~2–3 pages): architecture concepts and diagrams; extended doc for API/schema |
-| [`tdd-extended.md`](tdd-extended.md) | Engineers, operators | **Full TDD** (18 sections): request flows, full API reference, schema, config, extension points |
+| [`tdd.md`](tdd.md) | Engineers, security reviewers | **Primary TDD** (~2–3 pages): architecture concepts and diagrams; includes engineering principles for performance/reliability (§9) |
+| [`tdd-extended.md`](tdd-extended.md) | Engineers, operators | **Full TDD** (18 sections): request flows, full API reference, schema, config, extension points, and quality KPI set (§17) |
 | [`prd.md`](prd.md) | Product managers, executives | **Primary PRD** (~2–3 pages): vision, goals, scope, how we measure success |
-| [`prd-extended.md`](prd-extended.md) | Product, legal, engineering leads | **Full PRD**: numbered sections, complete requirement tables, risks, assumptions, roadmap |
+| [`prd-extended.md`](prd-extended.md) | Product, legal, engineering leads | **Full PRD**: numbered sections, complete requirement tables, non-functional posture/KPI language (§8.1), risks, assumptions, roadmap |
 | [`features.md`](features.md) | Product managers, engineers | Feature catalog — LINE channel, HTTP API, agent intents, reminders, caching; spec-style with capabilities, implementation, and limitations |
 | [`use-cases.md`](use-cases.md) | Engineers, product managers | Narrated scenarios — entry points, every implemented intent, example utterances, step-by-step assistant pipeline |
 | [`reminders.md`](reminders.md) | Engineers, operators | LINE dose reminders — data model, arq/Redis job queue, Compose setup, Render deploy, reconcile cron |
@@ -27,6 +27,8 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 ### New backend engineer
 1. [`../README.md`](../README.md) — project overview and quick start
 2. [`tdd.md`](tdd.md) — architecture overview (diagrams); then [`tdd-extended.md`](tdd-extended.md) for full API, schema, and ops detail
+   - Principles lens: [`tdd.md` §9 Engineering principles](tdd.md#9-engineering-principles-for-performance-and-reliability)
+   - KPI lens: [`tdd-extended.md` §17 Quality attributes](tdd-extended.md#17-quality-attributes-and-prototype-slos)
 3. [`../apps/backend/README.md`](../apps/backend/README.md) — package layout, env vars, mock vs real
 4. [`features.md`](features.md) — what the product does
 5. [`use-cases.md`](use-cases.md) — how flows actually run
@@ -35,6 +37,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 1. [`../README.md`](../README.md) — project overview
 2. [`prd.md`](prd.md) — vision, goals, personas, scope (start here)
 3. [`prd-extended.md`](prd-extended.md) — full requirement IDs, tables, legal-adjacent detail
+   - Shared KPI language: [`prd-extended.md` §8.1 Non-functional posture](prd-extended.md#81-non-functional-posture-shared-kpi-language)
 4. [`features.md`](features.md) — capability catalog
 5. [`use-cases.md`](use-cases.md) — user journeys with example utterances
 
@@ -75,3 +78,4 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | How do I add a new LLM adapter? | [`tdd-extended.md`](tdd-extended.md) §16 Extension points |
 | How do I add a new orchestrator tool? | [`tdd-extended.md`](tdd-extended.md) §16.4, [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How does Python map to Go/Fiber modules? | [`go-port-mapping.md`](go-port-mapping.md) |
+| Where are architecture principles tied to speed/availability/KPIs? | [`tdd.md` §9](tdd.md#9-engineering-principles-for-performance-and-reliability), [`tdd-extended.md` §17](tdd-extended.md#17-quality-attributes-and-prototype-slos), [`prd-extended.md` §8.1](prd-extended.md#81-non-functional-posture-shared-kpi-language) |

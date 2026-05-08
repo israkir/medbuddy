@@ -26,13 +26,22 @@ class AppLocale(str, Enum):
     ZH_TW = "zh-TW"
 
 
+class EmergencyContactInput(BaseModel):
+    contact_name: str | None = Field(None, max_length=80)
+    relationship: str | None = Field(None, max_length=40)
+    channel_type: str = Field(default="phone", max_length=20)
+    channel_value: str = Field(..., min_length=1, max_length=120)
+    is_primary: bool = False
+    notes: str | None = Field(None, max_length=200)
+
+
 class OnboardingSubmit(BaseModel):
     """First-run profile for the standalone app (large-type friendly fields)."""
 
     preferred_name: str = Field(..., min_length=1, max_length=80)
     age_years: int | None = Field(None, ge=0, le=120)
     gender: ProfileGender | None = None
-    emergency_contact: str | None = Field(None, max_length=200)
+    emergency_contacts: list[EmergencyContactInput] = Field(default_factory=list)
     health_notes: str | None = Field(None, max_length=1000)
     locale: AppLocale = Field(
         default=AppLocale.ZH_TW,
@@ -84,7 +93,7 @@ class MeResponse(BaseModel):
     preferred_name: str | None = None
     age_years: int | None = None
     gender: str | None = None
-    emergency_contact: str | None = None
+    emergency_contacts: list[EmergencyContactInput] = Field(default_factory=list)
     health_notes: str | None = None
     timezone: str = Field(
         default="Asia/Taipei",

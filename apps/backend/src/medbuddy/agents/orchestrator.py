@@ -44,6 +44,7 @@ from medbuddy.models.domain import AgentTurnResult, ConversationTurn, Medication
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 from medbuddy.services import AppServices
+from medbuddy.application.profile.emergency_contacts import emergency_contact_hint
 
 log = logging.getLogger(__name__)
 
@@ -347,8 +348,7 @@ async def execute_agent_tool(
     if name == "simulate_notify_emergency_contact":
         reason = (args.get("reason") or "").strip() or "urgent symptoms"
         ctx.metadata["simulated_emergency_notification"] = True
-        contact = ctx.user_row.get("emergency_contact")
-        hint = contact.strip() if isinstance(contact, str) and contact.strip() else ""
+        hint = emergency_contact_hint(ctx.user_row.get("emergency_contacts"))
         return t(
             "agent.simulated_emergency_notify",
             locale=locale,

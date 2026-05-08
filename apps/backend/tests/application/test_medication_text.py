@@ -171,9 +171,55 @@ async def test_messages_emergency_contact_line_saved_despite_add_intent(mock_set
         app.dependency_overrides.pop(get_services, None)
     assert r.status_code == 200
     row = await svc.users.get_or_create_user(uid)
-    assert row.get("emergency_contact")
-    assert "0900111111" in row["emergency_contact"]
-    assert "David" in row["emergency_contact"]
+    contacts = row.get("emergency_contacts") or []
+    assert contacts
+    assert contacts[0]["channel_type"] == "phone"
+    assert "0900111111" in str(contacts[0]["channel_value"])
+
+
+@pytest.mark.asyncio
+async def test_messages_update_profile_multi_contacts_from_patch(mock_settings) -> None:
+    uid = "user-profile-multi-contact"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(
+        intent=Intent.UPDATE_PROFILE,
+        profile_patch={
+            "emergency_contacts": [
+                {
+                    "contact_name": "David",
+                    "relationship": "son",
+                    "channel_type": "phone",
+                    "channel_value": "0900111222",
+                    "is_primary": True,
+                },
+                {
+                    "contact_name": "Amy",
+                    "relationship": "daughter",
+                    "channel_type": "line",
+                    "channel_value": "amy_line_id",
+                    "is_primary": False,
+                },
+            ]
+        },
+    )
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "Add my son David 0900111222 and daughter Amy LINE amy_line_id"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    row = await svc.users.get_or_create_user(uid)
+    contacts = row.get("emergency_contacts") or []
+    assert len(contacts) == 2
+    assert contacts[0]["channel_type"] == "phone"
+    assert contacts[1]["channel_type"] == "line"
 
 
 @pytest.mark.asyncio
@@ -235,7 +281,17 @@ async def test_messages_emergency_with_saved_contact_simulates_notify(mock_setti
     await svc.users.get_or_create_user(uid)
     await svc.users.patch_user_profile(
         uid,
-        {"locale": "en", "emergency_contact": "daughter 0912345678"},
+        {
+            "locale": "en",
+            "emergency_contacts": [
+                {
+                    "relationship": "daughter",
+                    "channel_type": "phone",
+                    "channel_value": "0912345678",
+                    "is_primary": True,
+                }
+            ],
+        },
     )
     svc.llm = MockLLM(intent=Intent.EMERGENCY, locale="en")
     app.dependency_overrides[get_services] = lambda: svc
@@ -262,7 +318,7 @@ async def test_messages_emergency_without_saved_contact_no_notify_metadata(mock_
     transport = ASGITransport(app=app)
     svc = build_app_services(mock_settings)
     await svc.users.get_or_create_user(uid)
-    await svc.users.patch_user_profile(uid, {"locale": "en", "emergency_contact": None})
+    await svc.users.patch_user_profile(uid, {"locale": "en", "emergency_contacts": []})
     svc.llm = MockLLM(intent=Intent.EMERGENCY, locale="en")
     app.dependency_overrides[get_services] = lambda: svc
     try:

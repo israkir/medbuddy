@@ -15,6 +15,9 @@ from medbuddy.models.domain import (
     ReminderHorizonPending,
     parse_pending_agent_clarification,
 )
+from medbuddy.application.profile.emergency_contacts import (
+    normalize_emergency_contacts,
+)
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 from medbuddy.core.timezone import effective_user_timezone, normalize_timezone_patch
 
@@ -24,7 +27,7 @@ def _default_profile_fields() -> dict[str, Any]:
         "preferred_name": None,
         "age_years": None,
         "gender": None,
-        "emergency_contact": None,
+        "emergency_contacts": [],
         "health_notes": None,
         "onboarding_completed_at": None,
         "locale": "zh-TW",
@@ -64,7 +67,7 @@ class MockProfileMixin:
         preferred_name: str,
         age_years: int | None,
         gender: str | None,
-        emergency_contact: str | None,
+        emergency_contacts: list[dict[str, Any]] | None,
         health_notes: str | None,
         timezone: str | None = None,
         locale: str = "zh-TW",
@@ -74,7 +77,7 @@ class MockProfileMixin:
         row["preferred_name"] = preferred_name.strip()
         row["age_years"] = age_years
         row["gender"] = gender
-        row["emergency_contact"] = (emergency_contact or "").strip() or None
+        row["emergency_contacts"] = normalize_emergency_contacts(emergency_contacts or [])
         row["health_notes"] = (health_notes or "").strip() or None
         row["onboarding_completed_at"] = datetime.now(UTC)
         row["timezone"] = effective_user_timezone(timezone)
@@ -107,13 +110,16 @@ class MockProfileMixin:
                 allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
                 if g in allowed:
                     row["gender"] = g
-        for key in ("emergency_contact", "health_notes"):
+        for key in ("health_notes",):
             if key in fields:
                 raw = fields[key]
                 if raw is None:
                     row[key] = None
                 elif isinstance(raw, str):
                     row[key] = raw.strip() or None
+        if "emergency_contacts" in fields:
+            contacts = normalize_emergency_contacts(fields["emergency_contacts"])
+            row["emergency_contacts"] = contacts
         if "timezone" in fields:
             norm = normalize_timezone_patch(fields["timezone"])
             if norm is not None:

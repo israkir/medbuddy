@@ -232,13 +232,11 @@ class ProfilePatchExtraction(BaseModel):
             "One of: female, male, non_binary, other, prefer_not_say — null if not stated"
         ),
     )
-    emergency_contact: str | None = Field(
+    emergency_contacts: list["EmergencyContactExtraction"] | None = Field(
         default=None,
-        max_length=200,
         description=(
-            "Single free-text line for who to call in an emergency if clearly given — combine relationship, "
-            "name, and phone (e.g. 'Son David 0912345678',「女兒小雅 0922111333」). Null if not stated. "
-            "Do not put the user's own preferred_name here."
+            "Structured emergency contacts. Include one entry per contact/channel the user provided. "
+            "Supports multiple contacts in one message."
         ),
     )
     health_notes: str | None = Field(
@@ -263,6 +261,40 @@ class ProfilePatchExtraction(BaseModel):
             "Reply language preference: en for English, zh-TW for Traditional Chinese; "
             "null if not changing language"
         ),
+    )
+
+
+class EmergencyContactExtraction(BaseModel):
+    """One structured emergency contact and a communication channel."""
+
+    contact_name: str | None = Field(
+        default=None,
+        max_length=80,
+        description="Contact person's name if explicitly provided; null otherwise",
+    )
+    relationship: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Relationship (e.g. daughter, spouse, friend) if given",
+    )
+    channel_type: Literal["phone", "email", "line", "whatsapp", "other"] = Field(
+        default="phone",
+        description="Communication channel type",
+    )
+    channel_value: str = Field(
+        max_length=120,
+        description=(
+            "Channel value for the type: phone number, email, LINE ID, WhatsApp number/ID, etc."
+        ),
+    )
+    is_primary: bool = Field(
+        default=False,
+        description="True when this should be the primary emergency contact channel",
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optional short note copied from user text",
     )
 
 

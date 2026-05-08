@@ -5,6 +5,10 @@ from typing import Any
 
 from medbuddy.core.i18n import t
 from medbuddy.llm.medication_draft_build import dose_or_schedule_display
+from medbuddy.application.profile.emergency_contacts import (
+    emergency_contact_hint,
+    normalize_emergency_contacts,
+)
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +38,18 @@ def _age_band_label(age: int, *, locale: str) -> str:
     low = (age // 10) * 10
     high = min(low + 9, 89)
     return t("prompts.llm_signal_age_band_range", locale=locale, low=low, high=high)
+
+
+def _profile_contact_hint(user_row: dict[str, Any]) -> str:
+    """Return structured contact hint, falling back to legacy single-string field."""
+    contacts = normalize_emergency_contacts(user_row.get("emergency_contacts"))
+    hint = emergency_contact_hint(contacts)
+    if hint.strip():
+        return hint
+    legacy = user_row.get("emergency_contact")
+    if isinstance(legacy, str):
+        return legacy.strip()
+    return ""
 
 
 def get_system_persona(*, locale: str) -> str:
@@ -72,7 +88,7 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
     notes = user_row.get("health_notes")
-    contact = user_row.get("emergency_contact")
+    contact = _profile_contact_hint(user_row)
     parts: list[str] = []
     if isinstance(name, str) and name.strip():
         parts.append(t("prompts.demographics_name", locale=locale, name=name.strip()))
@@ -113,7 +129,7 @@ def format_patient_profile_signals_for_llm(
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
     notes = user_row.get("health_notes")
-    contact = user_row.get("emergency_contact")
+    contact = _profile_contact_hint(user_row)
     parts: list[str] = []
     if isinstance(name, str) and name.strip():
         parts.append(t("prompts.llm_preferred_address_form", locale=locale, name=name.strip()))
@@ -154,7 +170,7 @@ def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
     notes = user_row.get("health_notes")
-    contact = user_row.get("emergency_contact")
+    contact = _profile_contact_hint(user_row)
     gaps: list[str] = []
     if not (isinstance(name, str) and name.strip()):
         gaps.append(t("prompts.gap_preferred_name", locale=locale))

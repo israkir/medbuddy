@@ -59,7 +59,7 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
         "preferred_name",
         "age_years",
         "gender",
-        "emergency_contact",
+        "emergency_contacts",
         "health_notes",
         "onboarding_completed_at",
         "timezone",
@@ -67,6 +67,7 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
     }
     assert d["timezone"] == "Asia/Taipei"
     assert d["locale"] == "zh-TW"
+    assert d["emergency_contacts"] == []
 
 
 def test_parse_ts_iso_z() -> None:
@@ -95,7 +96,7 @@ async def test_get_or_create_user_uses_existing_row() -> None:
     ud = SupabaseUserData(client, load_settings({}))
     out = await ud.get_or_create_user("ext-1")
     assert out["id"] == "00000000-0000-0000-0000-000000000001"
-    client.table.assert_called_with("patients")
+    client.table.assert_any_call("patients")
     builder.insert.assert_not_called()
 
 
@@ -266,7 +267,9 @@ async def test_save_onboarding_profile_updates_row() -> None:
         preferred_name="May",
         age_years=72,
         gender="female",
-        emergency_contact="son 0912",
+        emergency_contacts=[
+            {"relationship": "son", "channel_type": "phone", "channel_value": "0912"}
+        ],
         health_notes="DM",
         locale="en",
     )

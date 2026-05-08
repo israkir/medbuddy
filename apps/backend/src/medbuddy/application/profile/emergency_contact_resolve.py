@@ -8,6 +8,10 @@ from .profile_intents import apply_profile_update_from_extracted_patch
 from medbuddy.models.domain import ConversationTurn, Intent
 from medbuddy.protocols import ProfilePatch
 from medbuddy.services import AppServices
+from medbuddy.application.profile.emergency_contacts import (
+    extract_contacts_from_text,
+    normalize_emergency_contacts,
+)
 
 _TW_MOBILE = re.compile(r"\b09\d{8}\b")
 
@@ -40,6 +44,16 @@ def _compact_contact_line(text: str) -> str:
     if len(line) > _MAX_CONTACT_LEN:
         return line[:_MAX_CONTACT_LEN].rstrip()
     return line
+
+
+def _merge_contacts_with_patch(patch: ProfilePatch, user_text: str) -> ProfilePatch:
+    out = dict(patch)
+    parsed = normalize_emergency_contacts(out.get("emergency_contacts"))
+    if not parsed:
+        parsed = extract_contacts_from_text(user_text or "")
+    if parsed:
+        out["emergency_contacts"] = parsed
+    return out
 
 
 def _has_tw_mobile(text: str) -> bool:
@@ -108,12 +122,11 @@ async def try_resolve_emergency_contact_from_message(
     patch = await svc.llm.extract_profile_patch(user_text, locale=locale)
     patch = _strip_conflicting_fields_for_contact_line(patch, user_text)
 
-    em = patch.get("emergency_contact") if isinstance(patch.get("emergency_contact"), str) else None
-    if em and em.strip():
-        merged = dict(patch)
-        merged["emergency_contact"] = _compact_contact_line(em)
-    else:
-        merged = {"emergency_contact": _compact_contact_line(user_text)}
+    merged = _merge_contacts_with_patch(patch, user_text)
+    if "emergency_contacts" not in merged:
+        parsed = extract_contacts_from_text(_compact_contact_line(user_text))
+        if parsed:
+            merged["emergency_contacts"] = parsed
 
     return await apply_profile_update_from_extracted_patch(
         svc, user_key=user_key, patch=merged, baseline_locale=locale

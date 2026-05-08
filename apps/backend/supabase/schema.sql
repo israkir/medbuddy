@@ -13,13 +13,32 @@ create table if not exists public.patients (
     external_user_id text not null unique,
     preferred_name text,
     age_years integer,
-    emergency_contact text,
     health_notes text,
     onboarding_completed_at timestamptz,
     gender text,
     timezone text default 'Asia/Taipei',
     locale text default 'zh-TW'
 );
+
+create table if not exists public.emergency_contacts (
+    id uuid primary key default gen_random_uuid(),
+    patient_id uuid not null references public.patients (id) on delete cascade,
+    contact_name text,
+    relationship text,
+    channel_type text not null default 'phone',
+    channel_value text not null,
+    is_primary boolean not null default false,
+    notes text,
+    source text not null default 'user',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists emergency_contacts_patient_id_idx
+    on public.emergency_contacts (patient_id, created_at);
+
+create unique index if not exists emergency_contacts_patient_channel_unique_idx
+    on public.emergency_contacts (patient_id, channel_type, channel_value);
 
 comment on column public.patients.timezone is
     'IANA timezone name; default Asia/Taipei; used for medication reminder local times and push copy.';
@@ -170,6 +189,7 @@ alter table public.dose_events enable row level security;
 alter table public.health_issue_events enable row level security;
 alter table public.drug_reference_cache enable row level security;
 alter table public.drug_personalization_cache enable row level security;
+alter table public.emergency_contacts enable row level security;
 
 -- Permissive policies for ``anon`` (publishable / legacy anon key). Tighten when you attach
 -- Supabase Auth and can scope rows (e.g. ``auth.uid()``).
@@ -224,6 +244,14 @@ create policy "medbuddy_drug_reference_cache_anon_rw"
 drop policy if exists "medbuddy_drug_personalization_cache_anon_rw" on public.drug_personalization_cache;
 create policy "medbuddy_drug_personalization_cache_anon_rw"
     on public.drug_personalization_cache
+    for all
+    to anon
+    using (true)
+    with check (true);
+
+drop policy if exists "medbuddy_emergency_contacts_anon_rw" on public.emergency_contacts;
+create policy "medbuddy_emergency_contacts_anon_rw"
+    on public.emergency_contacts
     for all
     to anon
     using (true)

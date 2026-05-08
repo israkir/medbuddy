@@ -48,6 +48,9 @@ from medbuddy.protocols import LLMPort, ProfilePatch
 from medbuddy.reminders.prefs import reminder_compose_appendix
 from medbuddy.core.locale import normalize_locale_patch
 from medbuddy.core.timezone import normalize_timezone_patch
+from medbuddy.application.profile.emergency_contacts import (
+    normalize_emergency_contacts,
+)
 from google import genai as _genai
 from google.genai import types as _genai_types
 
@@ -222,9 +225,9 @@ class GeminiLLM(LLMPort):
             "stated. Use null for anything not explicitly given. "
             "Profile fields may include preferred name, age, gender, emergency contact, health notes, "
             "timezone, and reply language (en/zh-TW). "
-            "For emergency_contact: when they give a family/emergency contact with a phone number "
-            "(e.g. my son David 0912345678), store ONE line with relationship/name/number — do NOT "
-            "set preferred_name to the contact's first name unless they are clearly renaming themselves. "
+            "For emergency contacts: extract all contacts/channels they mention (phone/email/LINE/WhatsApp). "
+            "Populate emergency_contacts as a list and mark the first one as primary when implied. "
+            "Do NOT set preferred_name to a contact's first name unless they are clearly renaming themselves. "
             "Do not treat one-off medication side effects or dose comments as health_notes — "
             "those belong in conversation, not the long-term profile unless they say they want "
             "it saved on their profile or as allergies.\n\n"
@@ -243,7 +246,6 @@ class GeminiLLM(LLMPort):
             "preferred_name",
             "age_years",
             "gender",
-            "emergency_contact",
             "health_notes",
             "timezone",
             "locale",
@@ -275,6 +277,9 @@ class GeminiLLM(LLMPort):
                     out[key] = normalized_tz
             elif isinstance(val, str) and val.strip():
                 out[key] = val.strip()
+        contacts = normalize_emergency_contacts(data.get("emergency_contacts"))
+        if contacts:
+            out["emergency_contacts"] = contacts
         return out
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
