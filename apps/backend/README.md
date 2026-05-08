@@ -42,10 +42,11 @@ gemini_llm    supabase_stores  drugs_http
 | | `application/pending/` | Early-turn resolvers that short-circuit before the orchestrator (`locale_intents`, `medication_add_confirm_resolve`, `dose_clarification_resolve`, `reminder_horizon_resolve`) |
 | | `application/health_events/` | `health_issue_event_log` (classifier-intent allowlist policy) and `health_issue_events_format` (chronological block for the doctor-summary prompt) |
 | | `application/profile/` | `profile_intents.apply_profile_update_from_extracted_patch` (orchestrator `update_profile`), `emergency_contact_resolve` (capture TW-mobile contact lines pre-orchestrator), `profile_completion_nudge` (optional onboarding reminder footer) |
+| | `application/post_add_medication_reply.py` | **`build_post_add_patient_reply`** — primary LLM segment, optional **`post_add_interaction_crosscheck`**, education footer only when compose falls back to i18n |
 | **Agents** | `agents/medication_agent.py` | `MedicationAgent` — fast routing (`interpret_user_turn`) + pending/locale/emergency/contact gates, then `run_tool_agent_loop` |
 | | `agents/orchestrator.py` | `run_tool_agent_loop` — `LLMPort.complete_chat_with_tools` with prior-thread injection and registered tool execution |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
-| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `UpdateMedicationTool`, `RemoveMedicationTool`; **`persist_medication_add_from_draft`** runs a structured **post-add interaction cross-check** (`check_interactions_structured`) when the patient’s list has **2+** medications after save |
+| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `UpdateMedicationTool`, `RemoveMedicationTool`; **`persist_medication_add_from_draft`** delegates patient-facing copy to **`application/post_add_medication_reply`** (**`post_add_interaction_crosscheck`** when the list has **2+** meds — not chat **`interaction_check`**) |
 | | `agents/tools/upcoming_doses.py` | `ListUpcomingDosesTool` (`upcoming_doses` intent) |
 | | `agents/tools/drug_lookup.py` | `ExplainMedicationTool` (grounding + LLM compose + cache) |
 | | `agents/tools/interaction_check.py` | `InteractionCheckTool` |

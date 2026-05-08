@@ -102,6 +102,16 @@ class LLMPort(Protocol):
         locale: str,
     ) -> str: ...
 
+    async def compose_medication_added_primary(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str: ...
+
     async def check_interactions_structured(
         self,
         *,
@@ -110,9 +120,17 @@ class LLMPort(Protocol):
         patient_context: str,
         drug_grounding: str | None,
         locale: str,
-    ) -> InteractionResult:
-        """Structured drug-interaction analysis.  Default impl returns a text-only stub."""
-        ...
+    ) -> InteractionResult: ...
+
+    async def post_add_interaction_crosscheck(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+    ) -> InteractionResult: ...
 
     async def generate_health_summary(
         self,

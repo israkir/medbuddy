@@ -63,3 +63,29 @@ async def test_post_add_interaction_appended_when_second_medication() -> None:
     assert bridge in result.reply
     ix_query = t("medication.post_add_interaction_user_query", locale="en", name="Aspirin")
     assert ix_query in result.reply
+    assert svc.llm.last_interaction_call_kind == "post_add"
+    boundary = t("medication.education_boundary", locale="en")
+    assert boundary not in result.reply
+
+
+@pytest.mark.asyncio
+async def test_post_add_single_med_success_has_no_stacked_education_footer() -> None:
+    """Full compose path does not append purpose/CTA/boundary lines (those duplicate the LLM turn)."""
+    settings = make_mock_settings()
+    svc = build_app_services(settings)
+    key = "U-post-ix-single-compose"
+    await svc.users.get_or_create_user(key)
+    await svc.users.patch_user_profile(key, {"locale": "en"})
+    svc.llm = MockLLM(locale="en")
+    draft = MedicationDraft(
+        name="Aspirin",
+        dosage="100mg",
+        schedule="once daily",
+        instructions=None,
+    )
+    result = await persist_medication_add_from_draft(
+        svc, user_key=key, user_text="add aspirin", draft=draft, locale="en"
+    )
+    boundary = t("medication.education_boundary", locale="en")
+    assert boundary not in result.reply
+    assert t("medication.education_deep_dive_cta", locale="en") not in result.reply

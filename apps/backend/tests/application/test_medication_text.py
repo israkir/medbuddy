@@ -96,7 +96,9 @@ async def test_messages_add_medication(mock_settings) -> None:
         reply = body["reply"]
         assert "阿斯匹靈" in reply
         assert "每天飯後" in reply
-        assert "常見用途" in reply
+        # Post-add no longer stacks education_purpose_line after successful compose
+        # (only after i18n medication.added fallback); mock compose still embeds grounding.
+        assert "參考摘錄" in reply or "TFDA" in reply
     assert body["metadata"].get("education_cue_shown") == "add"
     meds = await svc.users.list_medications(uid)
     assert len(meds) == 1
