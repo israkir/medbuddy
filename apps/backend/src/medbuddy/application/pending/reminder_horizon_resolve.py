@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import Any
 
 from medbuddy.services import AppServices
 from medbuddy.core.i18n import t
@@ -100,29 +99,28 @@ async def try_resolve_pending_reminder_horizon(
         # any other question the user asked.
         return None
 
-    # Clear the pending state before mutating data so a retry is idempotent.
-    await svc.users.set_reminder_horizon_pending(user_key, None)
-
-    # Merge updated reminder prefs into the medication's raw_metadata.
+    # Resolve target medication first.
     medications = await svc.users.list_medications(user_key)
     target = next((m for m in medications if m.id == pending.medication_id), None)
     if target is None:
         # Medication was removed in the meantime — just confirm gracefully.
+        await svc.users.set_reminder_horizon_pending(user_key, None)
         return t("reminder.horizon_confirmed_generic", locale=locale, days=days)
 
-    existing_meta: dict[str, Any] = dict(target.raw_metadata or {})
-    existing_rem: dict[str, Any] = dict(existing_meta.get("reminder") or {})
-    existing_rem.update(
+    updated = await svc.users.merge_medication_raw_metadata(
+        user_key,
+        pending.medication_id,
         {
             "needs_horizon_confirmation": False,
             "materialize_daily": True,
             "horizon_days": days,
-        }
+        },
     )
-    existing_meta["reminder"] = existing_rem
-    await svc.users.patch_medication(
-        user_key, pending.medication_id, {"raw_metadata": existing_meta}
-    )
+    if updated is None:
+        # Keep pending so the user can retry.
+        return None
+
+    await svc.users.set_reminder_horizon_pending(user_key, None)
     await sync_and_enqueue_reminders(svc, user_key)
 
     return t(

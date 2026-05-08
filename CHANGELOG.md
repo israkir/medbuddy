@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Reminder horizon confirmation persistence:** `try_resolve_pending_reminder_horizon` now persists `raw_metadata.reminder` updates through `merge_medication_raw_metadata` (instead of unsupported `patch_medication({"raw_metadata": ...})`), clears pending horizon state only after a successful metadata write, and keeps pending on write failure to avoid false “confirmed” replies when `dose_events` were not actually materialized.
 - **Dose confirmation detail + side-effect capture guidance**: Confirm-dose success replies now include the specific medication and dose when a single event is resolved, and intent-classification guidance/schema now explicitly captures dose-linked symptom notes across intents so adherence context is preserved for clinicians.
 - **Dose confirmation targeting + note persistence**: Confirm-dose now auto-targets the most recently nudged pending dose within a short window, filters placeholder medication candidates from disambiguation, and preserves adherence taken/note slots detected during non-confirm intents via side-channel persistence.
 - **One-time reminder extraction/confirmation flow**: Medication parsing now treats Chinese quantity words (e.g. `一顆`/`兩片`/`三粒`) as valid dosage evidence, clarifies dosage/schedule schema guidance for one-off reminders, and skips recurring-schedule confirmation requirements when only `first_reminder_in_minutes` is requested.
