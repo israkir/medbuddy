@@ -55,6 +55,16 @@ flowchart LR
 
 The assistant **`upcoming_doses`** intent (`ListUpcomingDosesTool`) and the LLM **`patient_context_for_llm`** block read the **same** **`dose_events`** rows (after **`sync_upcoming_dose_events`**) to answer time-ordered questions (“later today,” “this week”) in **`patients.timezone`**. That is separate from LINE push delivery but uses one calendar source of truth.
 
+## Pending reminder-horizon confirmation behavior
+
+When a medication is saved with `needs_horizon_confirmation=true`, the assistant stores a pending follow-up in `patients.pending_agent_clarification` (`ReminderHorizonPending`). A later user message like `7 days` or `2 weeks` resolves that state and updates reminder metadata under `medications.raw_metadata.reminder`:
+
+- `needs_horizon_confirmation=false`
+- `materialize_daily=true`
+- `horizon_days=<parsed_days>`
+
+The resolver persists this metadata via `merge_medication_raw_metadata(...)` and only clears pending state after a successful write, then calls `sync_and_enqueue_reminders`. This ordering prevents false success messages where horizon appears confirmed but `dose_events` were not actually materialized.
+
 ## Schema (Supabase)
 
 Defined and extended in [`apps/backend/supabase/schema.sql`](../apps/backend/supabase/schema.sql):
