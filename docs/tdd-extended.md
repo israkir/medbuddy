@@ -170,13 +170,22 @@ apps/backend/src/medbuddy/
 ├── application/                 # ← Application core (Layer: Use Cases)
 │   ├── assistant_turn.py        # run_assistant_text_turn() — delegates to MedicationAgent
 │   ├── patient_llm_context.py   # patient_context_for_llm() — dose sync + upcoming schedule blob
-│   ├── profile_intents.py       # apply_profile_update_from_extracted_patch (orchestrator update_profile)
-│   ├── locale_intents.py        # try_locale_change_reply — quick locale switch from user text
-│   ├── medication_add_confirm_resolve.py  # pending yes/no after add-medication preview
-│   ├── dose_clarification_resolve.py      # pending dose / adherence clarification
-│   ├── reminder_horizon_resolve.py        # pending “how many days of reminders?” answer
-│   ├── health_issue_event_log.py          # classifier-intent logging policy + doctor-summary block formatting
-│   └── vital_log_build.py                  # parses BP/glucose/etc. into payloads for HealthIssueEventRecord
+│   ├── vital_log_build.py       # parses BP/glucose/etc. into payloads for HealthIssueEventRecord
+│   │
+│   ├── pending/                 # Early-turn resolvers (run before the orchestrator)
+│   │   ├── locale_intents.py    # try_locale_change_reply — quick locale switch from user text
+│   │   ├── medication_add_confirm_resolve.py  # pending yes/no after add-medication preview
+│   │   ├── dose_clarification_resolve.py      # pending dose / adherence clarification
+│   │   └── reminder_horizon_resolve.py        # pending “how many days of reminders?” answer
+│   │
+│   ├── health_events/           # Doctor-summary timeline + classifier policy
+│   │   ├── health_issue_event_log.py     # classifier-intent logging policy (allowlist + sentinel)
+│   │   └── health_issue_events_format.py # chronological block for generate_health_summary
+│   │
+│   └── profile/                 # Profile patches and onboarding nudges
+│       ├── profile_intents.py             # apply_profile_update_from_extracted_patch (orchestrator update_profile)
+│       ├── emergency_contact_resolve.py   # capture TW-mobile + relationship lines pre-orchestrator
+│       └── profile_completion_nudge.py    # optional post-reply footer when profile fields are missing
 │
 ├── agents/                      # ← Domain logic (Layer: Domain)
 │   ├── medication_agent.py      # MedicationAgent — routing gates + orchestrator entry
@@ -438,11 +447,13 @@ LINE platform
 2. **`try_resolve_pending_medication_add_confirmation`** — user answering yes/no to a pending add-medication preview (state in `UserDataPort`, not a separate intent).
 3. **`try_resolve_pending_dose_clarification`** — user answering a pending adherence/dose clarification.
 4. **`try_resolve_pending_reminder_horizon`** — user supplying how many days ahead to materialize reminders (after `add_medication` requested it).
-5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** orchestrator.
-6. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
-7. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no orchestrator for the reply body.
-8. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) where configured; model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, … Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
-9. **`_maybe_append_pending_reminder`** — if add-confirmation or reminder-horizon is still pending, append a one-line nudge after the orchestrator reply.
+5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** orchestrator. When `patients.emergency_contact` is **already saved**, the reply also appends the same simulated outreach line as the **`simulate_notify_emergency_contact`** tool and sets **`metadata.simulated_emergency_notification`** for the app banner (i18n key `agent.emergency_with_saved_contact`).
+6. **`try_resolve_emergency_contact_from_message`** — when the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for a contact), call **`extract_profile_patch`** and persist as **`emergency_contact`** before the medication tool loop. Prevents misclassified lines like “my son David, 0900111111” from hitting `add_medication` as a drug.
+7. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
+8. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no orchestrator for the reply body.
+9. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) where configured; model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, … Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
+10. **`_maybe_append_pending_reminder`** — if add-confirmation or reminder-horizon is still pending, append a one-line nudge after the orchestrator reply.
+11. **`append_profile_completion_nudge_if_due`** — when onboarding-style profile fields are still missing, append a short footer every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages (default **12**, **`0`** disables); cadence is staggered per user via a stable hash so the reminder stays occasional.
 
 Returns **`AgentTurnResult`** (`reply` + optional **`metadata`**, e.g. simulated caregiver notification).
 
@@ -450,12 +461,15 @@ Returns **`AgentTurnResult`** (`reply` + optional **`metadata`**, e.g. simulated
 TurnInterpretation (routing hint)
     │
     ├── locale / pending resolvers (steps 1–4) — may return early
-    ├── emergency (step 5)
-    ├── try_intent_hooks (step 6)
-    ├── off_topic (step 7)
-    └── run_tool_agent_loop (step 8)
+    ├── emergency (step 5; saved-contact branch may simulate notify + set metadata)
+    ├── emergency_contact_resolve (step 6; capture TW-mobile contact lines)
+    ├── try_intent_hooks (step 7)
+    ├── off_topic (step 8)
+    └── run_tool_agent_loop (step 9)
             │
             └── complete_chat_with_tools (prior thread + current line) ⟷ registered tools (multi-step) → final reply
+            │
+            └── pending-state nudge (step 10) → profile-completion nudge (step 11)
 ```
 
 ### 5.2 Tool registry
@@ -1208,6 +1222,9 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | `OPENAI_API_KEY` | — | Required when `LLM_PROVIDER=openai` |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | |
 | `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | `12` | Prior **redacted** user/assistant turns prepended to `complete_chat_with_tools`; `0` disables |
+| `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | `12` | When onboarding-style profile fields (name, age, gender, emergency contact, health notes) are still missing, append a short footer every **N** user messages on the orchestrator reply path; `0` disables. Cadence is staggered per user via a stable hash. |
+| `MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS` | (built-in defaults) | Optional comma-separated **`Intent`** values to persist into **`health_issue_events`**; the sentinel **`all_non_off_topic`** logs every classifier outcome except **`off_topic`**. Structured vital rows are written separately by `LogVitalTool`. |
+| `MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT` | `60` | Cap (max **200**) on rows pulled from **`health_issue_events`** into the doctor-summary prompt. |
 
 ### 15.4 Speech (STT) and public URL
 

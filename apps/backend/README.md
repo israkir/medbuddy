@@ -1,6 +1,6 @@
 # MedBuddy backend
 
-FastAPI service with **two delivery channels** sharing a single assistant core: **LINE** (`/v1/line/...`) and the **standalone mobile client** (`/v1/app/...`). The backend follows **hexagonal architecture** (ports & adapters) with an **agent-dispatch** pattern: **`LLMPort.interpret_user_turn`** yields **`TurnInterpretation`** (intent + adherence slots), then tools run.
+FastAPI service with **two delivery channels** sharing a single assistant core: **LINE** (`/v1/line/...`) and the **standalone mobile client** (`/v1/app/...`). The backend follows **hexagonal architecture** (ports & adapters) with an **LLM tool-orchestration** pattern: **`LLMPort.interpret_user_turn`** yields **`TurnInterpretation`** for fast routing (emergency, off_topic, classifier logging), then **`run_tool_agent_loop`** drives **`LLMPort.complete_chat_with_tools`** so the model selects **registered tools** over multiple steps as needed.
 
 Paths below are relative to **`apps/backend/`**.
 
@@ -13,9 +13,11 @@ channels/line/   channels/api/
       ↓                 ↓
    application/assistant_turn.py    ← single entry point for both channels
           ↓
-   agents/MedicationAgent           ← interpret_user_turn → tool dispatch
+   agents/MedicationAgent           ← routing gates (locale/pending/emergency/contact/hooks/off_topic)
           ↓
-   agents/tools/                    ← medication CRUD, drug lookup, interactions, summary
+   agents/orchestrator.py           ← run_tool_agent_loop → complete_chat_with_tools
+          ↓
+   agents/tools/                    ← medication CRUD, drug lookup, interactions, summary, vitals, …
           ↓
   protocols/                       ← abstract interfaces (hexagonal boundary)
     ↓           ↓         ↓
@@ -36,8 +38,12 @@ gemini_llm    supabase_stores  drugs_http
 | | `channels/api/` | App REST API: auth (`Bearer` + `X-App-User-Id`), schemas, routes |
 | **Application** | `application/assistant_turn.py` | `run_assistant_text_turn()` — entry point shared by LINE and mobile |
 | | `application/patient_llm_context.py` | `patient_context_for_llm()` — de-identified context plus materialized upcoming `dose_events` for LLM prompts |
-| | `application/profile_intents.py` | `apply_profile_update_from_extracted_patch` — persist profile after orchestrator `extract_profile_patch` |
-| **Agents** | `agents/medication_agent.py` | `MedicationAgent` — `interpret_user_turn` → maps `TurnInterpretation` to tools (adherence slots → `ConfirmDoseTool`) |
+| | `application/vital_log_build.py` | Parses BP / glucose / etc. into payloads for `HealthIssueEventRecord` |
+| | `application/pending/` | Early-turn resolvers that short-circuit before the orchestrator (`locale_intents`, `medication_add_confirm_resolve`, `dose_clarification_resolve`, `reminder_horizon_resolve`) |
+| | `application/health_events/` | `health_issue_event_log` (classifier-intent allowlist policy) and `health_issue_events_format` (chronological block for the doctor-summary prompt) |
+| | `application/profile/` | `profile_intents.apply_profile_update_from_extracted_patch` (orchestrator `update_profile`), `emergency_contact_resolve` (capture TW-mobile contact lines pre-orchestrator), `profile_completion_nudge` (optional onboarding reminder footer) |
+| **Agents** | `agents/medication_agent.py` | `MedicationAgent` — fast routing (`interpret_user_turn`) + pending/locale/emergency/contact gates, then `run_tool_agent_loop` |
+| | `agents/orchestrator.py` | `run_tool_agent_loop` — `LLMPort.complete_chat_with_tools` with prior-thread injection and registered tool execution |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
 | | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `UpdateMedicationTool`, `RemoveMedicationTool` |
 | | `agents/tools/upcoming_doses.py` | `ListUpcomingDosesTool` (`upcoming_doses` intent) |

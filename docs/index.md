@@ -61,6 +61,8 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 |----------|-------|
 | What data does each LLM call send? | [`llm-context.md`](llm-context.md) |
 | Does the tool orchestrator see earlier chat turns? | Yes — **redacted** prior user/assistant tail (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) — [`llm-context.md`](llm-context.md) (`complete_chat_with_tools`), [`features.md`](features.md) §3 |
+| Does the assistant nudge users to complete onboarding fields? | Yes — optional footer every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages on the orchestrator path — [`features.md`](features.md) §3.3, [`tdd-extended.md`](tdd-extended.md) §5.1 step 11 |
+| What happens on emergency intent if a contact is already saved? | Same fixed safety reply **plus** the simulated outreach line and **`metadata.simulated_emergency_notification`** — [`features.md`](features.md) §4.10, [`use-cases.md`](use-cases.md) §3.14 |
 | What tools does the orchestrator expose? | [`features.md`](features.md) §2 Agent layer · [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How is a LINE voice message handled? | [`use-cases.md`](use-cases.md) §1.1 |
 | How are dose events scheduled? | [`reminders.md`](reminders.md) |

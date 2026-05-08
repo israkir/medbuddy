@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from medbuddy.core.i18n import t
 from medbuddy.llm.medication_draft_build import dose_or_schedule_display
+
+log = logging.getLogger(__name__)
 
 _PROFILE_GENDER_I18N: dict[str, str] = {
     "female": "prompts.gender_option_female",
@@ -99,7 +102,9 @@ def format_patient_profile_signals_for_llm(
     locale: str,
     include_health_notes: bool = False,
 ) -> str:
-    """Coarse cues for the model without names or contact strings.
+    """Coarse cues for the model: preferred form of address when set; age band (not exact age);
+    gender label; health-notes / emergency-contact signals (raw strings omitted unless
+    ``include_health_notes=True``).
 
     When ``include_health_notes=True`` the actual health notes text is included
     so the model can cross-check drug contraindications or allergy conflicts.
@@ -213,5 +218,13 @@ def build_patient_context_for_llm(
     else:
         base = med_part
     if upcoming_doses_context and upcoming_doses_context.strip():
-        return f"{base}\n\n{upcoming_doses_context.strip()}"
-    return base
+        result = f"{base}\n\n{upcoming_doses_context.strip()}"
+    else:
+        result = base
+    log.info(
+        "build_patient_context_for_llm complete locale=%s chars=%d:\n%s",
+        locale,
+        len(result),
+        result,
+    )
+    return result

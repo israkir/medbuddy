@@ -86,12 +86,14 @@ All **chat** turns share this flow (LINE text/voice transcript, **`POST /v1/app/
    - **`try_resolve_pending_medication_add_confirmation`** when an incomplete **add** is waiting for yes/no/corrected details.
    - **`try_resolve_pending_dose_clarification`** when **which dose** is ambiguous.
    - **`try_resolve_pending_reminder_horizon`** when **how many days** of daily reminders is still unanswered.
-6. **`emergency`** — if classified intent is **`emergency`**, return fixed **`agent.emergency`** (**§3.14**) (no LLM reply body).
-7. **Intent hooks** — optional pilot short-circuit (**§5**).
-8. **`off_topic`** — fixed **`agent.off_topic`** (**§3.9**).
-9. **Tool orchestrator** — **`run_tool_agent_loop`** ([`agents/orchestrator.py`](../apps/backend/src/medbuddy/agents/orchestrator.py)): the model receives **system context** (medication id/name catalog, **`patient_context_for_llm`**), **prior redacted user/assistant turns** from storage (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, default 12), plus the **current redacted** user line, then calls **`LLMPort.complete_chat_with_tools`** in a loop (OpenAI native function calling; Gemini structured **`AgentOrchestratorStep`**). The server executes **named tools** (list/add/update/remove meds, **`remove_all_medications`**, **`disable_reminders`**, upcoming doses, confirm/missed dose, explain, side effects, interactions, vitals, health summary, **`export_health_journal`**, **`update_profile`**, **`simulate_notify_emergency_contact`**, …) and feeds **tool results** back until the model returns a final natural-language reply. Multiple tools may run in one user turn. **`AgentTurnResult`** carries **`metadata`** (e.g. **`simulated_emergency_notification`**) for HTTP clients.
-10. **`_maybe_append_pending_reminder`** — if **add-confirm** or **reminder-horizon** is still pending, append a one-line nudge after the main reply.
-11. **Append** the **assistant** turn and return **`AgentTurnResult`**.
+6. **`emergency`** — if classified intent is **`emergency`**, return fixed **`agent.emergency`** (**§3.14**) (no LLM reply body). When **`patients.emergency_contact`** is **already saved**, the same branch additionally appends the simulated outreach line and returns **`metadata.simulated_emergency_notification = true`** for the app banner (i18n key `agent.emergency_with_saved_contact`).
+7. **Emergency-contact capture from chat** — **`try_resolve_emergency_contact_from_message`** persists Taiwan-mobile + relationship lines (or replies after the assistant asked for the contact) as **`emergency_contact`** **before** the tool loop, so lines like “my son David, 0900111111” are not misrouted into `add_medication`.
+8. **Intent hooks** — optional pilot short-circuit (**§5**).
+9. **`off_topic`** — fixed **`agent.off_topic`** (**§3.9**).
+10. **Tool orchestrator** — **`run_tool_agent_loop`** ([`agents/orchestrator.py`](../apps/backend/src/medbuddy/agents/orchestrator.py)): the model receives **system context** (medication id/name catalog, **`patient_context_for_llm`**), **prior redacted user/assistant turns** from storage (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, default 12), plus the **current redacted** user line, then calls **`LLMPort.complete_chat_with_tools`** in a loop (OpenAI native function calling; Gemini structured **`AgentOrchestratorStep`**). The server executes **named tools** (list/add/update/remove meds, **`remove_all_medications`**, **`disable_reminders`**, upcoming doses, confirm/missed dose, explain, side effects, interactions, vitals, health summary, **`export_health_journal`**, **`update_profile`**, **`simulate_notify_emergency_contact`**, …) and feeds **tool results** back until the model returns a final natural-language reply. Multiple tools may run in one user turn. **`AgentTurnResult`** carries **`metadata`** (e.g. **`simulated_emergency_notification`**) for HTTP clients.
+11. **`_maybe_append_pending_reminder`** — if **add-confirm** or **reminder-horizon** is still pending, append a one-line nudge after the main reply.
+12. **`append_profile_completion_nudge_if_due`** — when onboarding-style profile fields (name, age, gender, emergency contact, health notes) are still missing, append a short footer every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages (default **12**, **`0`** disables). Staggered per user.
+13. **Append** the **assistant** turn and return **`AgentTurnResult`**.
 
 **`interpret_user_turn`** sets **`emergency`** and **`off_topic`** (after hooks). All other behavior is **`run_tool_agent_loop`** — tool names, arguments, and reply prose. Adherence is **`confirm_dose`** tool arguments only.
 
@@ -251,7 +253,7 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 |--|--|
 | **Scenario** | User language suggests chest pain, severe bleeding, inability to breathe, or other **immediate** emergency situations (classifier-dependent). |
 | **Examples** | “I can’t breathe” · 「胸口很痛」 · “severe allergic reaction swelling throat” |
-| **Outcome** | Fixed localized **`agent.emergency`** message (call local emergency numbers, seek care). **No** LLM-generated reply body and **no** medication tools on this branch. |
+| **Outcome** | Fixed localized **`agent.emergency`** message (call local emergency numbers, seek care). **No** LLM-generated reply body and **no** medication tools on this branch. **When `patients.emergency_contact` is already saved**, the reply additionally appends the same simulated outreach line as **`simulate_notify_emergency_contact`** (i18n key `agent.emergency_with_saved_contact` + `agent.simulated_emergency_notify`) and the turn metadata sets **`simulated_emergency_notification = true`** so the app can show a banner. The copy avoids asking the user to add a contact "for next time" since one is on file. |
 
 ---
 
