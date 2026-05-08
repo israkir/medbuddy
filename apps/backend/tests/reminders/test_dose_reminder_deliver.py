@@ -56,3 +56,32 @@ async def test_deliver_skips_when_dose_already_marked_missed() -> None:
     sent = await deliver_dose_reminder(svc, dose_id)
     assert sent is False
     assert len(svc.line.pushes) == 0
+
+
+@pytest.mark.asyncio
+async def test_deliver_skips_stale_dose_id_after_second_sync() -> None:
+    """Bare sync replaces dose_events UUIDs; deferred jobs keyed by old ids must no-op."""
+    settings = make_mock_settings()
+    svc = build_app_services(settings)
+    key = "U-test-stale-dose-id"
+    await svc.users.get_or_create_user(key)
+    await svc.users.add_medication(
+        key,
+        MedicationDraft(name="Aspirin", dosage="100mg", schedule="QD"),
+    )
+    jobs1 = await svc.users.sync_upcoming_dose_events(key)
+    assert len(jobs1) >= 1
+    stale_id, _ = jobs1[0]
+
+    jobs2 = await svc.users.sync_upcoming_dose_events(key)
+    assert len(jobs2) >= 1
+    new_id, _ = jobs2[0]
+    assert new_id != stale_id
+
+    skip = await deliver_dose_reminder(svc, stale_id)
+    assert skip is False
+    assert len(svc.line.pushes) == 0
+
+    ok = await deliver_dose_reminder(svc, new_id)
+    assert ok is True
+    assert len(svc.line.pushes) == 1

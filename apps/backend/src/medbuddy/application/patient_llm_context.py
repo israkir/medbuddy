@@ -1,4 +1,9 @@
-"""Build de-identified patient context for external LLMs, including authoritative dose schedule."""
+"""Build de-identified patient context for external LLMs, including upcoming dose schedule.
+
+``dose_events`` rows are materialized by ``sync_and_enqueue_reminders`` on medication/reminder
+mutations. Callers must not run ``sync_upcoming_dose_events`` here by default: that replaces
+future rows with new UUIDs and would orphan deferred ``send_reminder_for_dose`` jobs in Redis.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +27,7 @@ async def patient_context_for_llm(
     medications: list[MedicationRecord],
     *,
     locale: str,
-    sync_dose_events_first: bool = True,
+    sync_dose_events_first: bool = False,
     include_health_notes: bool = False,
 ) -> str:
     tz_name = effective_user_timezone(

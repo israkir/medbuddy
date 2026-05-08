@@ -9,6 +9,7 @@ from medbuddy.agents.base import ToolResult
 from medbuddy.core.i18n import t
 from medbuddy.core.timezone import effective_user_timezone
 from medbuddy.llm.medication_draft_build import is_placeholder_field
+from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 from medbuddy.reminders.prefs import reminder_prefs_from_metadata
 from medbuddy.reminders.upcoming_display import (
     format_upcoming_doses_user_reply,
@@ -34,7 +35,7 @@ class ListUpcomingDosesTool:
             str(user_row.get("timezone")) if user_row.get("timezone") else None
         )
         now = datetime.now(UTC)
-        await svc.users.sync_upcoming_dose_events(user_key)
+        await sync_and_enqueue_reminders(svc, user_key)
         start_utc, end_utc = upcoming_schedule_window_utc(tz_name, now, horizon_days=7)
         rows = await svc.users.list_upcoming_dose_events(
             user_key,
