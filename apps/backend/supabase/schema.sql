@@ -17,7 +17,9 @@ create table if not exists public.patients (
     onboarding_completed_at timestamptz,
     gender text,
     timezone text default 'Asia/Taipei',
-    locale text default 'zh-TW'
+    locale text default 'zh-TW',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 create table if not exists public.emergency_contacts (
@@ -52,7 +54,9 @@ create table if not exists public.medications (
     dosage text not null,
     schedule text not null,
     instructions text,
-    raw_metadata jsonb not null default '{}'::jsonb
+    raw_metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 comment on column public.medications.instructions is
@@ -83,7 +87,9 @@ create table if not exists public.dose_events (
     reminder_sent_at timestamptz,
     reminder_nudge_count integer not null default 0,
     last_nudge_at timestamptz,
-    notes text
+    notes text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 comment on column public.dose_events.notes is
@@ -141,6 +147,8 @@ create table if not exists public.drug_reference_cache (
     warnings text,
     raw_payload jsonb not null default '{}'::jsonb,
     fetched_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     expires_at timestamptz,
     constraint drug_reference_cache_source_query_key unique (source, query_key)
 );
@@ -264,6 +272,26 @@ alter table public.patients add column if not exists pending_agent_clarification
 comment on column public.patients.pending_agent_clarification is
     'Optional JSON: pending dose clarification (option dose_event ids + expires_at).';
 
+-- Row audit timestamps (existing deployments: add columns if missing).
+alter table public.patients add column if not exists created_at timestamptz not null default now();
+alter table public.patients add column if not exists updated_at timestamptz not null default now();
+alter table public.medications add column if not exists created_at timestamptz not null default now();
+alter table public.medications add column if not exists updated_at timestamptz not null default now();
+alter table public.dose_events add column if not exists created_at timestamptz not null default now();
+alter table public.dose_events add column if not exists updated_at timestamptz not null default now();
+
+alter table public.drug_reference_cache add column if not exists created_at timestamptz;
+alter table public.drug_reference_cache add column if not exists updated_at timestamptz;
+update public.drug_reference_cache
+set
+    created_at = fetched_at,
+    updated_at = fetched_at
+where created_at is null or updated_at is null;
+alter table public.drug_reference_cache alter column created_at set default now();
+alter table public.drug_reference_cache alter column updated_at set default now();
+alter table public.drug_reference_cache alter column created_at set not null;
+alter table public.drug_reference_cache alter column updated_at set not null;
+
 -- PostgREST connects as ``anon`` when using the publishable (anon) API key.
 -- RLS policies gate rows; without GRANT on the table, queries fail with
 -- ``permission denied for table …`` (SQLSTATE 42501) before policies apply.
@@ -278,3 +306,45 @@ grant select, insert, update, delete on table public.dose_events to anon, authen
 grant select, insert, update, delete on table public.health_issue_events to anon, authenticated;
 grant select, insert, update, delete on table public.drug_reference_cache to anon, authenticated;
 grant select, insert, update, delete on table public.drug_personalization_cache to anon, authenticated;
+
+-- Keep ``updated_at`` in sync on UPDATE (append-only tables omit ``updated_at``).
+create or replace function public.medbuddy_touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.updated_at := now();
+    return new;
+end;
+$$;
+
+drop trigger if exists patients_touch_updated_at on public.patients;
+create trigger patients_touch_updated_at
+    before update on public.patients
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists medications_touch_updated_at on public.medications;
+create trigger medications_touch_updated_at
+    before update on public.medications
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists dose_events_touch_updated_at on public.dose_events;
+create trigger dose_events_touch_updated_at
+    before update on public.dose_events
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists drug_reference_cache_touch_updated_at on public.drug_reference_cache;
+create trigger drug_reference_cache_touch_updated_at
+    before update on public.drug_reference_cache
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists emergency_contacts_touch_updated_at on public.emergency_contacts;
+create trigger emergency_contacts_touch_updated_at
+    before update on public.emergency_contacts
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists drug_personalization_cache_touch_updated_at
+    on public.drug_personalization_cache;
+create trigger drug_personalization_cache_touch_updated_at
+    before update on public.drug_personalization_cache
+    for each row execute function public.medbuddy_touch_updated_at();
