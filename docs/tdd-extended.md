@@ -162,7 +162,7 @@ apps/backend/src/medbuddy/
 │   │   └── signature.py         # X-Line-Signature HMAC-SHA256 verification
 │   ├── api/
 │   │   ├── routes.py            # GET/POST /v1/app/*
-│   │   ├── auth.py              # AppAuthContext, require_app_auth()
+│   │   ├── auth.py              # MobileAuthContext, require_mobile_auth()
 │   │   └── schemas.py           # Pydantic I/O models
 │   └── internal/
 │       └── routes.py            # /health, /internal/reminders/reconcile
@@ -309,7 +309,7 @@ HTTP client
     │ Body: {"text": "..."}
     ▼
 channels/api/routes.py
-    │ require_app_auth()  ← 401 if token mismatch or header missing
+    │ require_mobile_auth()  ← 401 if token mismatch or header missing
     │ validate body (1–8000 chars)
     ▼
 application/assistant_turn.py
@@ -451,7 +451,7 @@ LINE platform
 6. **`try_resolve_emergency_contact_from_message`** — when the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for a contact), call **`extract_profile_patch`** and persist as **`emergency_contact`** before the medication tool loop. Prevents misclassified lines like “my son David, 0900111111” from hitting `add_medication` as a drug.
 7. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
 8. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no orchestrator for the reply body.
-9. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) where configured; model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `request_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, … Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
+9. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) where configured; model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `generate_health_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, ... Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
 10. **`_maybe_append_pending_reminder`** — if add-confirmation or reminder-horizon is still pending, append a one-line nudge after the orchestrator reply.
 11. **`append_profile_completion_nudge_if_due`** — when onboarding-style profile fields are still missing, append a short footer every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages (default **12**, **`0`** disables); cadence is staggered per user via a stable hash so the reminder stays occasional.
 
@@ -491,7 +491,7 @@ Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equiva
 | `ReportSideEffectsTool` / `report_side_effects` | Side-effect oriented compose with optional drug grounding |
 | `InteractionCheckTool` / `interaction_check` | Drug reference fetch → interaction-focused compose → cache save |
 | `LogVitalTool` / `log_vital` | Structured vital extraction → persist vital log → i18n acknowledgment |
-| `GenerateHealthSummaryTool` / `request_summary` | Aggregate patient context + history → structured LLM summary output |
+| `GenerateHealthSummaryTool` / `generate_health_summary` | Aggregate patient context + history → structured LLM summary output |
 | `export_health_journal` | Structured journal export |
 | `update_profile` | **`extract_profile_patch`** → **`patch_user_profile`** |
 | `simulate_notify_emergency_contact` | Simulated caregiver notify + **metadata** for HTTP clients |
@@ -804,7 +804,7 @@ Auth required. Single assistant chat turn.
 
 **Response:**
 ```json
-{"reply": "..."}
+{"reply": "...", "metadata": {}}
 ```
 
 **Errors:**
@@ -818,7 +818,7 @@ Auth required. Multipart form with one part **`file`** (audio bytes; e.g. m4a). 
 
 **Response:**
 ```json
-{"reply": "...", "transcript": "..."}
+{"reply": "...", "transcript": "...", "metadata": {}}
 ```
 
 **Errors:** `413` if upload too large; `422` empty audio or empty transcription; `503` if STT fails.
@@ -1095,7 +1095,7 @@ Application exceptions are caught at the channel layer and produce user-visible 
 
 ### 13.1 Test layers
 
-Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). There is no separate `tests/e2e/` tree today; LINE and API HTTP are covered with `AsyncClient`/`ASGITransport` and mocks alongside application and tool tests.
+Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). The suite includes an `e2e/` area (for example, `tests/e2e/test_user_journeys.py`) in addition to channel, application, and tool coverage with `AsyncClient`/`ASGITransport` and mocks.
 
 | Layer | What is tested | Typical location |
 |-------|---------------|------------------|
