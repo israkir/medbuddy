@@ -41,7 +41,9 @@ create table public.patients (
     gender text,
     timezone text default 'Asia/Taipei',
     locale text default 'zh-TW',
-    pending_agent_clarification jsonb
+    pending_agent_clarification jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 comment on column public.patients.pending_agent_clarification is
@@ -79,7 +81,9 @@ create table public.medications (
     dosage text not null,
     schedule text not null,
     instructions text,
-    raw_metadata jsonb not null default '{}'::jsonb
+    raw_metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 comment on column public.medications.instructions is
@@ -110,7 +114,9 @@ create table public.dose_events (
     reminder_sent_at timestamptz,
     reminder_nudge_count integer not null default 0,
     last_nudge_at timestamptz,
-    notes text
+    notes text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
 
 comment on column public.dose_events.notes is
@@ -165,6 +171,8 @@ create table public.drug_reference_cache (
     warnings text,
     raw_payload jsonb not null default '{}'::jsonb,
     fetched_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     expires_at timestamptz,
     constraint drug_reference_cache_source_query_key unique (source, query_key)
 );
@@ -200,6 +208,47 @@ create index drug_personalization_cache_patient_updated_idx
 create index drug_personalization_cache_medication_id_idx
     on public.drug_personalization_cache (medication_id)
     where medication_id is not null;
+
+create or replace function public.medbuddy_touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.updated_at := now();
+    return new;
+end;
+$$;
+
+drop trigger if exists patients_touch_updated_at on public.patients;
+create trigger patients_touch_updated_at
+    before update on public.patients
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists medications_touch_updated_at on public.medications;
+create trigger medications_touch_updated_at
+    before update on public.medications
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists dose_events_touch_updated_at on public.dose_events;
+create trigger dose_events_touch_updated_at
+    before update on public.dose_events
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists drug_reference_cache_touch_updated_at on public.drug_reference_cache;
+create trigger drug_reference_cache_touch_updated_at
+    before update on public.drug_reference_cache
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists emergency_contacts_touch_updated_at on public.emergency_contacts;
+create trigger emergency_contacts_touch_updated_at
+    before update on public.emergency_contacts
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists drug_personalization_cache_touch_updated_at
+    on public.drug_personalization_cache;
+create trigger drug_personalization_cache_touch_updated_at
+    before update on public.drug_personalization_cache
+    for each row execute function public.medbuddy_touch_updated_at();
 
 alter table public.patients enable row level security;
 alter table public.medications enable row level security;
