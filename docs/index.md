@@ -68,6 +68,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | What happens on emergency intent if a contact is already saved? | Same fixed safety reply **plus** the simulated outreach line and **`metadata.simulated_emergency_notification`** — [`features.md`](features.md) §4.10, [`use-cases.md`](use-cases.md) §3.14 |
 | What tools does the orchestrator expose? | [`features.md`](features.md) §2 Agent layer · [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How is a LINE voice message handled? | [`use-cases.md`](use-cases.md) §1.1 |
+| How does default reply language get set before onboarding? | LINE **`follow`**: profile **`language`** → **`patients.locale`**; app: **`GET /v1/app/me`** + **`X-MedBuddy-Locale`** — [`use-cases.md`](use-cases.md) §1.1–1.2, [`tdd-extended.md`](tdd-extended.md) §7 (`GET /v1/app/me`), [`features.md`](features.md) §1.1 |
 | How are dose events scheduled? | [`reminders.md`](reminders.md) |
 | What env vars do I need? | [`../apps/backend/README.md`](../apps/backend/README.md) — Key environment variables |
 | What is the Supabase schema? | [`tdd-extended.md`](tdd-extended.md) §6 Data model |

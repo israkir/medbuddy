@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from medbuddy.core.i18n import t
+
 _PHONE_RE = re.compile(r"(?:\+?\d[\d\-\s]{6,}\d)")
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _LINE_RE = re.compile(r"(?:line|lineid|line id|LINE|LINE ID)[:\s@#-]*([A-Za-z0-9_.-]{2,})")
@@ -108,3 +110,81 @@ def emergency_contact_hint(contacts: object) -> str:
     if rel and val:
         return f"{rel} {val}"
     return val
+
+
+def _detail_suffix(value: str, *, locale: str) -> str:
+    if not value:
+        return ""
+    if locale == "zh-TW":
+        return f"（{value}）"
+    return f" ({value})"
+
+
+def _channel_word(channel_type: str, *, locale: str) -> str:
+    ct = (channel_type or "other").strip().lower()
+    key = {
+        "phone": "profile.emergency_channel_phone",
+        "email": "profile.emergency_channel_email",
+        "line": "profile.emergency_channel_line",
+        "whatsapp": "profile.emergency_channel_whatsapp",
+    }.get(ct, "profile.emergency_channel_other")
+    return t(key, locale=locale)
+
+
+def _primary_contact_row(rows: list[dict[str, str | bool]]) -> dict[str, str | bool]:
+    for row in rows:
+        if row.get("is_primary"):
+            return row
+    return rows[0]
+
+
+def emergency_contact_save_ack(rows: list[dict[str, str | bool]], *, locale: str) -> str:
+    """Full sentence(s) acknowledging saved emergency contacts (normalized rows)."""
+    if not rows:
+        return ""
+    primary = _primary_contact_row(rows)
+    rel = str(primary.get("relationship") or "").strip()
+    name = str(primary.get("contact_name") or "").strip()
+    value = str(primary.get("channel_value") or "").strip()
+    ch = _channel_word(str(primary.get("channel_type") or "other"), locale=locale)
+    detail = _detail_suffix(value, locale=locale)
+    if rel and name:
+        clause = t(
+            "profile.ack_emergency_clause_rel_name",
+            locale=locale,
+            relationship=rel,
+            name=name,
+            channel=ch,
+            detail=detail,
+        )
+    elif rel:
+        clause = t(
+            "profile.ack_emergency_clause_rel",
+            locale=locale,
+            relationship=rel,
+            channel=ch,
+            detail=detail,
+        )
+    elif name:
+        clause = t(
+            "profile.ack_emergency_clause_name",
+            locale=locale,
+            name=name,
+            channel=ch,
+            detail=detail,
+        )
+    else:
+        clause = t(
+            "profile.ack_emergency_clause_fallback",
+            locale=locale,
+            channel=ch,
+            detail=detail,
+        )
+    if len(rows) == 1:
+        return t("profile.ack_emergency_single", locale=locale, clause=clause)
+    return t(
+        "profile.ack_emergency_multi",
+        locale=locale,
+        count=len(rows),
+        clause=clause,
+    )

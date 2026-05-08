@@ -8,7 +8,10 @@ from medbuddy.protocols import ProfilePatch
 from medbuddy.llm.prompts.persona import gender_option_label, normalized_profile_gender
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 from medbuddy.core.timezone import normalize_timezone_patch
-from medbuddy.application.profile.emergency_contacts import normalize_emergency_contacts
+from medbuddy.application.profile.emergency_contacts import (
+    emergency_contact_save_ack,
+    normalize_emergency_contacts,
+)
 
 
 def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
@@ -24,17 +27,7 @@ def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
     if "emergency_contacts" in patch:
         contacts = normalize_emergency_contacts(patch.get("emergency_contacts"))
         if contacts:
-            first = contacts[0]
-            hint = f"{first.get('relationship') or ''} {first.get('channel_value') or ''}".strip()
-            if hint:
-                parts.append(
-                    t(
-                        "profile.ack_contacts_count",
-                        locale=locale,
-                        count=len(contacts),
-                        contact=hint,
-                    )
-                )
+            parts.append(emergency_contact_save_ack(contacts, locale=locale))
     if "health_notes" in patch:
         n = patch["health_notes"]
         if isinstance(n, str) and n.strip():

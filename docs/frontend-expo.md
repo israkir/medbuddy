@@ -50,7 +50,7 @@ The repo today centers on LINE and the HTTP API; a **dedicated mobile client** i
 
 | Area | Path / behavior |
 |------|-----------------|
-| **Onboarding** | `app/onboarding.tsx`, gated in `app/_layout.tsx` — name, age, gender, emergency contact, health notes; **`lib/companionApi.ts`** submits **`POST /v1/app/onboarding`** including device IANA **`timezone`** (`Intl.DateTimeFormat().resolvedOptions().timeZone`). |
+| **Onboarding** | `app/onboarding.tsx`, gated in `app/_layout.tsx` — name, age, gender, emergency contact, health notes; **`lib/companionApi.ts`** calls **`GET /v1/app/me`** with **`X-MedBuddy-Locale`** (device **`languageTag`**) so the backend can align **`patients.locale`** before **`POST /v1/app/onboarding`**, which also sends device IANA **`timezone`** (`Intl.DateTimeFormat().resolvedOptions().timeZone`). |
 | **Today** | `app/(tabs)/index.tsx` — greeting, link to companion, **`PendingDoseCard`** |
 | **Medications** | Catalog, **`MedicationListCard`**, visit questions, **`MedicationQuestionsPanel`**, **expo-speech** listen via **`MedicationExplanationContext`** |
 | **Family** | Informational copy; placeholder invite (no backend) |
@@ -65,7 +65,7 @@ The repo today centers on LINE and the HTTP API; a **dedicated mobile client** i
 | Mode | Behavior |
 |------|----------|
 | **`EXPO_PUBLIC_USE_MOCK_DATA=true`** (typical local dev) | No backend required; **`companionApi`** can persist onboarding-shaped data locally; chat returns **i18n-only** mock explanations. |
-| **`EXPO_PUBLIC_USE_MOCK_DATA=false`** | **`companionApi`** calls **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`POST /v1/app/messages/voice`** (multipart), **`GET /v1/app/summary`** with **`X-App-User-Id`** and optional **`Authorization: Bearer`** per backend config. Chat JSON may include **`metadata`** (e.g. **`simulated_emergency_notification`**); **`app/companion.tsx`** surfaces a banner when present. |
+| **`EXPO_PUBLIC_USE_MOCK_DATA=false`** | **`companionApi`** calls **`GET /v1/app/me`** (with **`X-MedBuddy-Locale`** when the device provides a tag), **`POST /v1/app/onboarding`**, **`POST /v1/app/messages`**, **`POST /v1/app/messages/voice`** (multipart), **`GET /v1/app/summary`** with **`X-App-User-Id`** and optional **`Authorization: Bearer`** per backend config. Chat JSON may include **`metadata`** (e.g. **`simulated_emergency_notification`**); **`app/companion.tsx`** surfaces a banner when present. |
 
 **Commands:** `make fe-dev` / `make fe-dev-mock` vs `make fe-dev-api` (live backend) — see frontend README.
 

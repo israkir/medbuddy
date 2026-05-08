@@ -56,7 +56,7 @@ Health and chat data are sensitive. We limit what goes to third‑party LLMs: a 
 
 ## Core journeys
 
-- **Onboard** — Preferred name, language, timezone, disclaimer; on LINE, a fixed welcome (then people can send a one-line intro: contact, allergies, conditions—same as “profile in chat” below, or use the HTTP onboarding form for app clients).
+- **Onboard** — Preferred name, language, timezone, disclaimer; on LINE, a fixed welcome in the user’s language when LINE’s profile **`language`** maps to a supported app locale (`en` / `zh-TW`), otherwise default Traditional Chinese (then people can send a one-line intro: contact, allergies, conditions—same as “profile in chat” below, or use the HTTP onboarding form for app clients). The reference app sends device locale on **`GET /v1/app/me`** until onboarding is saved.
 - **Profile in chat** — Update how you’re called, demographics, emergency contact, health notes, language, or timezone with ordinary sentences (without redoing full onboarding).
 - **Build the list** — Add a med in natural language; yes/no or corrections when the assistant needs confirmation; sometimes answer how many days ahead to schedule reminders after a save.
 - **Adjust the list** — Edit dose, schedule, or notes, or remove a med; reminders resync when the backend is configured for them.
