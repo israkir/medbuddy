@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Profile save replies (emergency contact):** After saving, replies spell out the primary contact in plain language (relationship, name when present, channel, and stored value), e.g. “I’ve set your daughter Kathy’s phone (0912…) as your primary emergency contact,” with matching Traditional Chinese copy and correct handling of multiple contacts (primary row + count).
 - **TDD sync (standalone API docs):** Updated `docs/tdd-extended.md` to match current backend naming and responses (`require_mobile_auth`/`MobileAuthContext`, `generate_health_summary` tool name, `metadata` in `/v1/app/messages*` examples), and corrected the testing note to reflect `tests/e2e/test_user_journeys.py`.
 - **Backend package layout:** `medbuddy.application` is grouped into subpackages **`pending/`** (early-turn resolvers + `locale_intents`), **`health_events/`** (`health_issue_events` policy + summary formatting), and **`profile/`** (profile patches, completion nudge, emergency-contact resolver); **`assistant_turn`**, **`patient_llm_context`**, and **`vital_log_build`** stay at the package root. Import paths under `medbuddy.application.*` changed accordingly.
 - **Persistence (prior release note):** `vital_logs` → `health_issue_events`; greenfield installs use `apps/backend/supabase/schema.sql` (unified `routing_intent` / `created_at` columns).

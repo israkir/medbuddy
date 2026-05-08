@@ -41,7 +41,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 **Capabilities**
 
 - Webhook endpoint accepts verified LINE events when `LINE_CHANNEL_SECRET` is set; mock mode may skip signature verification (see backend README).
-- New followers get a deterministic **welcome** from i18n (`get_or_create_user`); this path does **not** call `run_assistant_text_turn`.
+- New followers: **`get_or_create_user`**, then LINE **`get_user_profile`** — if **`language`** maps to `en` or `zh-TW`, **`patch_user_profile`** updates **`locale`** — then a deterministic **welcome** from i18n (`line.follow_welcome`). This path does **not** call `run_assistant_text_turn`. If the profile call fails, behavior falls back to the stored default locale (`zh-TW`).
 - Text messages map LINE `userId` → `user_key` → `run_assistant_text_turn(user_key, user_text)` → **LINE** reply payload.
 - **Voice** messages: download audio → STT (Google Speech-to-Text V2 or mock) → same assistant pipeline on the transcript. Outbound modality is controlled by **`MEDBUDDY_LINE_VOICE_REPLIES`** (default **`audio_inbound`**): **`off`** = text only; **`audio_inbound`** = text plus **m4a** when the user sent voice; **`always`** = text plus **m4a** for every assistant reply. Audio URLs use **`GET /v1/line/media/audio/{id}`** (requires **`PUBLIC_BASE_URL`** as HTTPS in production so LINE can fetch the file). TTS uses **Google Cloud Text-to-Speech** with the same ADC/project as STT; **ffmpeg** converts to m4a where needed (see repo `Dockerfile`). In full **mock** mode, TTS/STT may be stubbed.
 
@@ -89,7 +89,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 - All routes require `X-App-User-Id` (4–128 chars). When `MEDBUDDY_MOBILE_BEARER_TOKEN` is set and mocks are not forcing open access, clients send `Authorization: Bearer <token>`.
 - **`GET /v1/app/health`** — JSON health for mobile probes.
 - **`GET /v1/app/info`** — Non-secret service metadata.
-- **`GET /v1/app/me`** — `app_user_id` and profile: `preferred_name`, `age_years`, `gender`, `emergency_contact`, `health_notes`, **`locale`** (`en` \| `zh-TW`, default `zh-TW`), **`timezone`** (IANA, default `Asia/Taipei`), `onboarding_completed_at`.
+- **`GET /v1/app/me`** — `app_user_id` and profile: `preferred_name`, `age_years`, `gender`, `emergency_contact`, `health_notes`, **`locale`** (`en` \| `zh-TW`, default `zh-TW`), **`timezone`** (IANA, default `Asia/Taipei`), `onboarding_completed_at`. Until onboarding is completed, optional **`X-MedBuddy-Locale`** or **`Accept-Language`** may sync **`locale`** to the client (see [`tdd-extended.md`](tdd-extended.md) §7 **`GET /v1/app/me`**).
 - **`POST /v1/app/onboarding`** — Persists onboarding via `UserDataPort.save_onboarding_profile`; required `preferred_name`; optional demographics, emergency contact, health notes, optional IANA **`timezone`**, optional **`locale`** (standalone app typically sends device language choice).
 - **`POST /v1/app/messages`** — Body `text` (1–8000 chars); resolves auth → `run_assistant_text_turn` → `{"reply":"…","metadata":{}}` (optional keys such as **`simulated_emergency_notification`**).
 - **`POST /v1/app/messages/voice`** — Multipart **`file`** (short recording); **STT** with user **`locale`** → same assistant turn on transcript → `{"reply":"…","transcript":"…","metadata":{}}` (reply audio left to the client, e.g. **expo-speech**).
@@ -378,7 +378,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 | Delivery | With Redis, `enqueue_reminder_jobs` schedules arq `send_reminder_for_dose` with `_defer_until = scheduled_at`. Worker runs `deliver_dose_reminder` → LINE `push_message`, then `reminder_sent_at`. |
 | Nudges (optional) | If **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is non-empty (comma-separated minutes), after the primary push the worker may enqueue **`send_reminder_nudge`** jobs for follow-up LINE pushes until intervals are exhausted, the user marks doses taken, or the local day of the scheduled dose ends. Copy: **`reminder.line_push_nudge`**. |
 | Chat adherence | Orchestrator **`confirm_dose`** tool — when arguments indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.8). |
-| Copy | Primary: **`reminder.line_push`** (`zh-TW`, `en`); welcome and pushes respect **`patients.locale`**. |
+| Copy | Primary: **`reminder.line_push`** (`zh-TW`, `en`); welcome and pushes respect **`patients.locale`** (LINE follow may seed locale from LINE profile **`language`** first). |
 | Education CTA (optional) | When just-in-time education is enabled, reminder copy may append a short refresher CTA only if cadence gate passes (per user+medication cooldown, no duplicate on same local day, suppressed after recent explain/interaction turn). |
 | Scope | LINE push only for LINE `userId` keys; no local notifications for standalone HTTP-app users in this slice. No Flex cards or “mark taken” postback in v1. |
 | Reconcile | `POST /internal/reminders/reconcile` with `X-Cron-Secret`. |

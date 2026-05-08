@@ -162,7 +162,7 @@ apps/backend/src/medbuddy/
 ├── core/                        # Cross-cutting utilities
 │   ├── errors.py                # Error base, MedBuddyError alias, ConfigError, LLMParseError
 │   ├── i18n.py                  # t() — key lookup with zh-TW fallback
-│   ├── locale.py                # effective_user_locale(), normalize_locale_patch()
+│   ├── locale.py                # effective_user_locale(), normalize_locale_patch(), locale_from_language_hints(), locale_from_client_language_headers()
 │   ├── timezone.py              # IANA timezone helpers for scheduling
 │   └── logging.py               # configure_logging() — structured logging setup
 │
@@ -238,7 +238,7 @@ apps/backend/src/medbuddy/
 │   │   ├── supabase_conversations.py # SupabaseConversationStore
 │   │   ├── supabase_stores.py       # SupabaseUserData (combines mixins), re-export shim
 │   │   └── supabase_drug_caches.py  # SupabaseDrugCaches
-│   ├── line_client.py           # LineHttpClient (line-bot-sdk)
+│   ├── line_client.py           # LineHttpClient (line-bot-sdk + httpx profile GET)
 │   ├── line_audio_blob_store.py # LineAudioBlobStore (ephemeral m4a blobs for LINE)
 │   ├── drugs_http.py            # HttpDrugData (OpenFDA + TFDA stub)
 │   ├── caching_drugs.py         # CachingDrugData + drug cache key helpers
@@ -282,6 +282,8 @@ apps/backend/src/medbuddy/
 ## 4. Request flows
 
 ### 4.1 LINE text message
+
+**`follow` events** (new friend): `handle_line_event` → `get_or_create_user` → **`LineMessagingPort.get_user_profile`** (LINE `GET /v2/bot/profile/{userId}`) → if **`language`** maps to `en` / `zh-TW`, **`patch_user_profile`** → **`reply_text`** with **`line.follow_welcome`** (no `run_assistant_text_turn`). See [`use-cases.md`](use-cases.md) §1.1.
 
 ```
 LINE platform
@@ -561,7 +563,7 @@ End-user profile rows. `users` is reserved in Supabase; `patients` allows other 
 | `emergency_contact` | `text` | Free text — not sent to LLM |
 | `health_notes` | `text` | Patient-entered notes — not sent to LLM |
 | `timezone` | `text` | IANA timezone; default `Asia/Taipei`; drives scheduling and push copy |
-| `locale` | `text` | `en` or `zh-TW`; default `zh-TW` |
+| `locale` | `text` | `en` or `zh-TW`; DB default `zh-TW`. **Seeded** before first scripted welcome: LINE **`follow`** uses LINE profile **`language`**; standalone **`GET /v1/app/me`** (pre-onboarding) uses **`X-MedBuddy-Locale`** / **`Accept-Language`** when present. |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
 | `pending_agent_clarification` | `jsonb` | Optional persisted agent/UI state (`MedicationAddConfirmationPending`, `DoseClarificationPending`, `ReminderHorizonPending`); nullable |
 | `created_at` | `timestamptz` | |
@@ -764,6 +766,8 @@ No auth required. Public service metadata.
 #### `GET /v1/app/me`
 
 Auth required. Returns the current user's profile.
+
+**Optional request headers (pre-onboarding only):** When **`onboarding_completed_at`** is null, the server may update **`patients.locale`** from **`X-MedBuddy-Locale`** (BCP-47 tag, e.g. device language from Expo) or, if that is absent, the **first** value in **`Accept-Language`** (tag only, before `;`). Mapping matches the app: `en*` → `en`, `zh*` → `zh-TW`, other primaries → `zh-TW`. After onboarding completes, headers do **not** overwrite **`locale`**.
 
 ```json
 {

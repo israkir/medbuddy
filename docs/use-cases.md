@@ -17,7 +17,7 @@
 | Kind | Implemented today |
 |------|-------------------|
 | **Assistant chat** | **`run_assistant_text_turn`** → **`AgentTurnResult`** (`reply` + optional **`metadata`**). Used by **LINE** (text + STT transcript from voice), **`POST /v1/app/messages`**, and **`POST /v1/app/messages/voice`** (after STT). Core implementation: [`MedicationAgent`](../apps/backend/src/medbuddy/agents/medication_agent.py) + [`run_tool_agent_loop`](../apps/backend/src/medbuddy/agents/orchestrator.py). |
-| **LINE-only (no full assistant turn)** | **`follow`** → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
+| **LINE-only (no full assistant turn)** | **`follow`** → `get_user_profile` (LINE `language`) may **`patch_user_profile`** (`locale`) → fixed welcome i18n (`line.follow_welcome`). **`postback`** → logged, **no reply** (unhandled). Unsupported **`message`** types (e.g. sticker, image) → logged, **no assistant reply**. |
 | **HTTP without chat pipeline** | **`GET /v1/app/health`**, **`GET /v1/app/info`**, **`GET /v1/app/me`**, **`POST /v1/app/onboarding`**, **`GET /v1/app/summary`** — auth + user store / LLM as documented below. |
 | **Infrastructure** | **`GET /health`**, **`POST /internal/reminders/reconcile`** (cron). |
 | **LINE TTS asset** | **`GET /v1/line/media/audio/{id}`** — ephemeral m4a blob when voice replies are enabled (see `features.md` §1.1). |
@@ -30,7 +30,7 @@
 
 | Event / message | User-visible outcome | Process |
 |-----------------|----------------------|---------|
-| **`follow`** | Fixed **welcome** (i18n `line.follow_welcome`). | `get_or_create_user` → **`run_assistant_text_turn` is not called.** |
+| **`follow`** | Fixed **welcome** (i18n `line.follow_welcome`) in the user’s effective locale. | `get_or_create_user` → optional **`get_user_profile`** → if LINE **`language`** maps to `en` / `zh-TW`, **`patch_user_profile`** → **`run_assistant_text_turn` is not called.** |
 | **`message` · text** | Assistant reply (text). | Webhook verified → `run_assistant_text_turn(user_key=line_user_id, user_text=…)` → `reply_text` to LINE. |
 | **`message` · audio** | Assistant reply: **text** by default; optional **text + audio** when LINE voice replies are enabled. | Download audio → **STT** (`transcribe_m4a`) → same `run_assistant_text_turn` on transcript. Reply mode depends on `MEDBUDDY_LINE_VOICE_REPLIES` (`off` / `audio_inbound` / `always`). |
 | **`postback`** | *(None)* | Parsed `action` is logged; **no user reply** (placeholder for future rich UI). |
@@ -63,7 +63,7 @@ Same **user store** and **`user_key`** model as LINE (`external_user_id`); auth:
 |---------------|---------------------|----------|
 | **`GET /v1/app/health`** | No | JSON health response for HTTP clients. |
 | **`GET /v1/app/info`** | No | Public API metadata (non-secret). |
-| **`GET /v1/app/me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. |
+| **`GET /v1/app/me`** | No | Profile + **`locale`**, **`timezone`**, onboarding timestamp. While **`onboarding_completed_at`** is null, optional **`X-MedBuddy-Locale`** (device tag) or **first** **`Accept-Language`** entry may **`patch_user_profile`** so stored **`locale`** matches the client before onboarding is submitted. |
 | **`POST /v1/app/onboarding`** | No | **`UserDataPort.save_onboarding_profile`** — name, optional age, gender, contacts, notes, **IANA `timezone`**, **`locale`** (`en` \| `zh-TW`). |
 | **`POST /v1/app/messages`** | **Yes** | Body `{"text":"…"}` → **`run_assistant_text_turn`** → JSON **`{"reply":"…","metadata":{}}`** (metadata often empty; e.g. **`simulated_emergency_notification`** when the simulated caregiver-notify tool ran). |
 | **`POST /v1/app/messages/voice`** | **Yes** | Multipart **`file`** → **STT** (`transcribe_m4a`, language from profile **`locale`**) → same assistant pipeline → `{"reply":"…","transcript":"…","metadata":{}}`. |

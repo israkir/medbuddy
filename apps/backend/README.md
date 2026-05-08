@@ -98,7 +98,7 @@ All protected routes require **`X-App-User-Id`** (4–128 chars) and, in product
 |----------|------|-------------|
 | `GET /v1/app/health` | None | JSON health check |
 | `GET /v1/app/info` | None | Public service metadata |
-| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes, **timezone**) |
+| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes, **locale**, **timezone**). Pre-onboarding: optional **`X-MedBuddy-Locale`** or **`Accept-Language`** may update stored **locale**. |
 | `POST /v1/app/onboarding` | Bearer + User-Id | First-run profile save (optional **timezone** IANA; default **Asia/Taipei**) |
 | `POST /v1/app/messages` | Bearer + User-Id | Chat turn — `{"text":"…"}` → `{"reply":"…"}` |
 | `POST /v1/app/messages/voice` | Bearer + User-Id | Multipart **`file`** (audio) → STT (profile **`locale`**) → same assistant as text → `{"reply":"…","transcript":"…"}` |

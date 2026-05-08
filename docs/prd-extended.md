@@ -145,7 +145,7 @@ Users expecting **emergency triage**, **dose optimization**, or a replacement fo
 
 ### 6.1 Onboarding
 
-The user opens or follows the LINE bot (or calls the onboarding API endpoint). The system greets them in the appropriate language, asks for a preferred name, confirms their timezone, and shows the disclaimer before any medical content appears.
+The user opens or follows the LINE bot (or calls the onboarding API endpoint). The system greets them in the appropriate language: on LINE **follow**, **`patients.locale`** may be seeded from LINE’s user profile **`language`** (HTTP API) before the fixed welcome; on the reference app, **`GET /v1/app/me`** may sync locale from the device tag (**`X-MedBuddy-Locale`**) until onboarding is completed. The journey continues with preferred name, timezone, and disclaimer before medical content is emphasized.
 
 **Success state:** The user is greeted by name, their language is set, and they have seen the disclaimer.
 
