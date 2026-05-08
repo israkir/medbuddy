@@ -34,7 +34,10 @@ async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
     """Load the row, push LINE text, then mark sent. Returns True if a push was attempted."""
     payload = await svc.users.get_dose_event_for_reminder(dose_event_id)
     if payload is None:
-        log.debug("reminder skip: no pending row for dose_event_id=%s", dose_event_id)
+        log.info(
+            "reminder skip: no pending row for dose_event_id=%s (stale id or already handled)",
+            dose_event_id,
+        )
         return False
 
     locale = payload.user_locale
