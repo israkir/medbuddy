@@ -147,18 +147,17 @@ class MedicationAgent:
         if intent == Intent.EMERGENCY:
             log.warning("medication_agent: user_key=%s emergency intent matched", user_key)
             contact_raw = user_row.get("emergency_contact")
-            hint = contact_raw.strip() if isinstance(contact_raw, str) and contact_raw.strip() else ""
+            hint = (
+                contact_raw.strip() if isinstance(contact_raw, str) and contact_raw.strip() else ""
+            )
             if hint:
                 reply = t("agent.emergency_with_saved_contact", locale=locale)
                 reason = _preview_text(safe_text, limit=120)
-                reply = (
-                    f"{reply}\n\n"
-                    + t(
-                        "agent.simulated_emergency_notify",
-                        locale=locale,
-                        reason=reason,
-                        contact_hint=hint,
-                    )
+                reply = f"{reply}\n\n" + t(
+                    "agent.simulated_emergency_notify",
+                    locale=locale,
+                    reason=reason,
+                    contact_hint=hint,
                 )
                 meta: dict[str, Any] = {"simulated_emergency_notification": True}
             else:

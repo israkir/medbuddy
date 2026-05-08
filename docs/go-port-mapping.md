@@ -88,17 +88,22 @@ Each Python file in `protocols/` maps 1:1 to a Go interface file in `ports/`.
 
 ### Application layer
 
+The Python package is grouped into subpackages (`pending/`, `health_events/`, `profile/`); the Go target keeps the same grouping under `application/`.
 
-| Python (`application/`)             | Go (`application/`)                             |
-| ----------------------------------- | ----------------------------------------------- |
-| `assistant_turn.py`                 | `application/assistant_turn.go`                 |
-| `patient_llm_context.py`            | `application/patient_llm_context.go`            |
-| `profile_intents.py`                | `application/profile_intents.go`                |
-| `locale_intents.py`                 | `application/locale_intents.go`                 |
-| `medication_add_confirm_resolve.py` | `application/medication_add_confirm_resolve.go` |
-| `dose_clarification_resolve.py`     | `application/dose_clarification_resolve.go`     |
-| `reminder_horizon_resolve.py`       | `application/reminder_horizon_resolve.go`       |
-| `vital_log_build.py`                | `application/vital_log_build.go`                |
+| Python (`application/`)                              | Go (`application/`)                              |
+| ---------------------------------------------------- | ------------------------------------------------ |
+| `assistant_turn.py`                                  | `application/assistant_turn.go`                  |
+| `patient_llm_context.py`                             | `application/patient_llm_context.go`             |
+| `vital_log_build.py`                                 | `application/vital_log_build.go`                 |
+| `pending/locale_intents.py`                          | `application/pending/locale_intents.go`          |
+| `pending/medication_add_confirm_resolve.py`          | `application/pending/medication_add_confirm.go`  |
+| `pending/dose_clarification_resolve.py`              | `application/pending/dose_clarification.go`      |
+| `pending/reminder_horizon_resolve.py`                | `application/pending/reminder_horizon.go`        |
+| `health_events/health_issue_event_log.py`            | `application/health_events/log.go`               |
+| `health_events/health_issue_events_format.py`        | `application/health_events/format.go`            |
+| `profile/profile_intents.py`                         | `application/profile/profile_intents.go`         |
+| `profile/emergency_contact_resolve.py`               | `application/profile/emergency_contact.go`       |
+| `profile/profile_completion_nudge.py`                | `application/profile/completion_nudge.go`        |
 
 
 ### Domain / agents
@@ -107,6 +112,7 @@ Each Python file in `protocols/` maps 1:1 to a Go interface file in `ports/`.
 | Python                                       | Go                                                      |
 | -------------------------------------------- | ------------------------------------------------------- |
 | `agents/medication_agent.py`                 | `agent/medication_agent.go`                             |
+| `agents/orchestrator.py`                     | `agent/orchestrator.go` — `RunToolAgentLoop`            |
 | `agents/base.py` — `AgentTool`, `ToolResult` | `agent/tool.go` — `Tool interface`, `ToolResult struct` |
 | `agents/tools/*.py`                          | `agent/tools/*.go`                                      |
 

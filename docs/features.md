@@ -174,6 +174,14 @@ These short-circuit **before** hooks / **`run_tool_agent_loop`** when storage sa
 
 If the user starts a **new** turn while add-confirm or horizon is still open, the agent may **append** a one-line reminder (`medication.add_confirm_pending_reminder`, `reminder.horizon_still_needed`) so context is not lost.
 
+### 3.2 Emergency-contact capture from chat (pre-orchestrator)
+
+Between the **`emergency`** intent gate and **`run_tool_agent_loop`**, **`try_resolve_emergency_contact_from_message`** (`application/profile/emergency_contact_resolve.py`) intercepts turns that carry a Taiwan mobile (`09xxxxxxxx`) plus relationship cues (`兒子`, `wife`, `緊急聯絡`, …) **or** that follow an assistant prompt asking for an emergency contact. The line is run through **`extract_profile_patch`** and persisted as **`emergency_contact`** before the tool loop, so misclassified additions like “my son David, 0900111111” are **not** treated as an `add_medication` draft. The resolver also strips fields like `preferred_name` from the patch when the message is clearly listing a contact (so “David” is not silently saved as the user's preferred name).
+
+### 3.3 Profile-completion nudge (post-reply footer)
+
+When onboarding-style profile fields (`preferred_name`, `age_years`, `gender`, `emergency_contact`, `health_notes`) are still missing, **`append_profile_completion_nudge_if_due`** (`application/profile/profile_completion_nudge.py`) may append a short **`profile.completion_nudge_footer`** line to the orchestrator reply every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages (default **12**, **`0`** disables). The cadence is staggered per user via a stable `user_key` hash so two users do not both see the footer on the same turn count. The nudge runs only on the main orchestrator path — it is suppressed for locale switches, pending-state resolvers, the emergency intent fast path, and the emergency-contact capture branch.
+
 ---
 
 ## 4. Assistant behaviors (catalog)
@@ -259,7 +267,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 |-------|---------|
 | **Summary** | Classifier routes life-threatening or emergency phrasing to a **fixed** localized message. |
 | **User value** | Fast, deterministic safety response without LLM latency. |
-| **Capabilities** | **`MedicationAgent`** returns **`agent.emergency`** immediately (after pending-state resolvers and user-turn append). No tool or `compose_reply` body generation. |
+| **Capabilities** | **`MedicationAgent`** returns **`agent.emergency`** immediately (after pending-state resolvers and user-turn append). No tool or `compose_reply` body generation. **When `patients.emergency_contact` is already saved**, the same branch additionally appends the simulated outreach line used by the orchestrator **`simulate_notify_emergency_contact`** tool (i18n key `agent.emergency_with_saved_contact`) and returns **`metadata.simulated_emergency_notification = true`** so the app can surface a banner; copy avoids asking the user to add a contact "for next time." |
 
 ### 4.11 `log_vital` / `request_summary` / `general_question`
 
