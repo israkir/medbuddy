@@ -46,9 +46,12 @@ async def test_messages_add_medication(mock_settings) -> None:
     finally:
         app.dependency_overrides.pop(get_services, None)
     assert r.status_code == 200
-    reply = r.json()["reply"]
+    body = r.json()
+    reply = body["reply"]
     assert "阿斯匹靈" in reply
     assert "每天飯後" in reply
+    assert "常用於" in reply
+    assert body["metadata"].get("education_cue_shown") == "add"
     meds = await svc.users.list_medications(uid)
     assert len(meds) == 1
     assert meds[0].name == "阿斯匹靈"
@@ -117,9 +120,12 @@ async def test_messages_list_medications(mock_settings) -> None:
     finally:
         app.dependency_overrides.pop(get_services, None)
     assert r.status_code == 200
-    reply = r.json()["reply"]
+    body = r.json()
+    reply = body["reply"]
     assert "Metformin" in reply
     assert t("medication.list_intro", locale=mock_settings.locale) in reply
+    assert "常用於" in reply or "做什麼用" in reply
+    assert body["metadata"].get("education_cue_shown") == "list"
 
 
 @pytest.mark.asyncio

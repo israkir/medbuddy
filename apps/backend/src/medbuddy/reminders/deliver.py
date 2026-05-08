@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -12,6 +13,21 @@ from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 from medbuddy.reminders.enqueue import enqueue_reminder_nudge_job
 
 log = logging.getLogger(__name__)
+
+
+def _should_append_education_cta(
+    *,
+    user_key: str,
+    medication_name: str,
+    local_dt: datetime,
+    every_n_days: int,
+) -> bool:
+    if every_n_days <= 0:
+        return False
+    day_bucket = local_dt.date().toordinal() // every_n_days
+    stable = hashlib.sha256(f"{user_key}:{medication_name}".encode("utf-8")).hexdigest()
+    slot = int(stable[-2:], 16) % every_n_days
+    return (local_dt.date().toordinal() % every_n_days) == slot and day_bucket >= 0
 
 
 async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
@@ -34,6 +50,26 @@ async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
         schedule=dose_or_schedule_display(payload.schedule, unspecified_label=un),
         time_local=time_str,
     )
+    if _should_append_education_cta(
+        user_key=payload.line_user_id,
+        medication_name=payload.medication_name,
+        local_dt=local,
+        every_n_days=svc.settings.reminder_education_cta_every_n_days,
+    ):
+        text = f"{text}\n{t('reminder.education_cta', locale=locale)}"
+        log.info(
+            "reminder education_cta_shown user=%s med=%s dose_event_id=%s",
+            payload.line_user_id,
+            payload.medication_name,
+            dose_event_id,
+        )
+    else:
+        log.info(
+            "reminder education_cadence_suppressed user=%s med=%s dose_event_id=%s",
+            payload.line_user_id,
+            payload.medication_name,
+            dose_event_id,
+        )
     await svc.line.push_message_batch(payload.line_user_id, [{"type": "text", "text": text}])
     marked = await svc.users.try_mark_reminder_sent(dose_event_id)
     if not marked:

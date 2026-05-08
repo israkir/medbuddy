@@ -267,6 +267,20 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 
 ---
 
+### 3.16 Just-in-time medication understanding
+
+| | |
+|--|--|
+| **Scenario** | User just changed medication data (add/update), reviews a medication list, or receives a reminder and needs a quick “what this medicine is for” cue. |
+| **Examples** | Add: 「新增 metformin 500mg 早晚各一次」 · Update: “change aspirin to 81mg” · Reminder follow-up: “what is this one for again?” |
+| **Outcome** | Assistant appends a short purpose cue and offers an optional deep-dive CTA. If the user accepts, the next turn routes to existing **`explain_medication`**, **`interaction_check`**, or **`report_side_effects`** behavior. |
+| **Event hooks** | **Add success:** always append purpose cue + optional CTA. **Update success:** append cue when identity/dose/schedule/reminder metadata changed. **List flow:** include compact purpose tags only when data is already available and list readability remains high; otherwise prompt on-demand explain. **Reminder flow:** keep primary reminder short; append refresher CTA only when cadence gate passes. |
+| **Cadence gate** | Reminder refresher CTA is rate-limited per user+medication (default target: max once every 3-7 days), suppressed after recent explain/interaction turns, and skipped if already shown the same local day. |
+| **Microcopy templates** | **EN cue:** `Saved. <med_name> is commonly used for <plain_purpose>.` **EN CTA:** `Want a quick note on common side effects or interaction cautions?` **zh-TW cue:** `已更新。<med_name> 常用於 <plain_purpose>。` **zh-TW CTA:** `要我補充常見副作用或交互作用重點嗎？` |
+| **Boundary copy** | **EN:** `This is general information and does not replace your doctor or pharmacist's instructions.` **zh-TW:** `這是一般用藥資訊，不能取代醫師或藥師指示。` |
+
+---
+
 ## 4. Caching and persistence (when Supabase is configured)
 
 **Scenario:** Explain/interaction personalization, drug reference cache, conversations, medications, **`patients.locale`**, **`patients.timezone`**, **`dose_events`**.
@@ -289,9 +303,9 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 **Trigger:** Successful medication save/update/delete **`UserDataPort`** operations after orchestrator tools (**`add_medication`**, **`update_medication`**, **`remove_medication`**, **`remove_all_medications`**, **`disable_reminders`** follow-up sync, etc.) — same **`sync_and_enqueue_reminders`** path as before.
 
-**User-visible outcome:** **LINE push** near **`scheduled_at`** (not in-app local notifications). Optional **follow-up nudges** after the primary push when **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is configured — see [`reminders.md`](reminders.md) and [`features.md` §8](features.md#8-line-dose-reminders-prototype).
+**User-visible outcome:** **LINE push** near **`scheduled_at`** (not in-app local notifications). Optional **follow-up nudges** after the primary push when **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is configured. Optional just-in-time education CTA may be appended only when cadence gate passes — see [`reminders.md`](reminders.md) and [`features.md` §8](features.md#8-line-dose-reminders-prototype).
 
-**Behavior:** **`dose_events`** rebuild from structured **`raw_metadata.reminder`** (e.g. **`daily_local_hhmm_list`** for multiple instants per day) + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. The string **`schedule`** field is for **display** in pushes; clock times come from stored reminder prefs populated from add-time extraction, not from parsing **`schedule`** alone.
+**Behavior:** **`dose_events`** rebuild from structured **`raw_metadata.reminder`** (e.g. **`daily_local_hhmm_list`** for multiple instants per day) + defaults; **arq** + Redis; primary copy under **`reminder.line_push`**, nudge copy under **`reminder.line_push_nudge`**. The string **`schedule`** field is for **display** in pushes; clock times come from stored reminder prefs populated from add-time extraction, not from parsing **`schedule`** alone. Just-in-time education CTA remains a short optional suffix and never replaces primary reminder text.
 
 **Adherence in chat:** When the user confirms intake via the **`confirm_dose`** tool (or related flows), **`dose_events.taken_at`** can be set without LINE postback (**§3.10**).
 
@@ -299,7 +313,20 @@ Without Supabase: in-memory user/conversation mocks; drug caches not wired.
 
 ---
 
-## 7. Out of scope (not implemented as primary flows here)
+## 7. Measurement for just-in-time understanding
+
+Track these rollout metrics by cohort (pre/post and by locale):
+
+- `education_cue_shown` by source (`add`, `update`, `list`, `reminder`).
+- `education_cta_shown` and `education_cta_clicked` (proxy: explain/interaction follow-up within one user turn).
+- `education_cadence_suppressed` (cooldown prevented CTA), to validate fatigue controls.
+- Reminder outcomes: confirm-dose within 24h and missed-dose rate.
+- Safety/quality: grounded explain-turn rate and `education_fallback_uncertain` frequency.
+- Guardrails: no >2% absolute drop in reminder confirmations and no >1% absolute rise in negative sentiment/off-topic replies after CTA insertion.
+
+---
+
+## 8. Out of scope (not implemented as primary flows here)
 
 - Clinical diagnosis or replacing clinician/pharmacist judgment.
 - **Full TFDA HTTP** — stub returns empty; mocks may imitate TFDA.
