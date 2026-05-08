@@ -20,6 +20,8 @@ class LineMessagingPort(Protocol):
 
     async def get_message_content(self, message_id: str) -> bytes: ...
 
+    async def get_user_profile(self, user_id: str) -> dict[str, Any] | None: ...
+
 
 class LineAudioBlobStorePort(Protocol):
     """Short-lived publicly URL-addressable audio payloads for LINE ``originalContentUrl``."""

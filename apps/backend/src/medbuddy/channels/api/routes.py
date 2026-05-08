@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.application.assistant_turn import run_assistant_text_turn
@@ -21,7 +21,7 @@ from medbuddy.channels.api.schemas import (
     MessageVoiceReply,
     OnboardingSubmit,
 )
-from medbuddy.core.locale import effective_user_locale
+from medbuddy.core.locale import effective_user_locale, locale_from_client_language_headers
 from medbuddy.core.timezone import effective_user_timezone
 from medbuddy.deps import get_services
 from medbuddy.services import AppServices
@@ -90,11 +90,19 @@ async def app_info() -> dict[str, str]:
 
 @router.get("/me", response_model=MeResponse)
 async def app_me(
+    request: Request,
     ctx: MobileAuthContext = Depends(require_mobile_auth),
     svc: AppServices = Depends(get_services),
 ) -> MeResponse:
     """Current app user profile (backed by the same user store key as LINE ``userId``-style ids)."""
     row = await svc.users.get_or_create_user(ctx.app_user_id)
+    if row.get("onboarding_completed_at") is None:
+        hinted = locale_from_client_language_headers(
+            request.headers.get("x-medbuddy-locale"),
+            request.headers.get("accept-language"),
+        )
+        if hinted is not None:
+            row = await svc.users.patch_user_profile(ctx.app_user_id, {"locale": hinted})
     return _me_response(ctx.app_user_id, row)
 
 

@@ -13,6 +13,10 @@ class MockLineClient(LineMessagingPort):
         self.replies: list[dict[str, Any]] = []
         self.pushes: list[dict[str, Any]] = []
         self._content_by_message_id: dict[str, bytes] = {}
+        self._profile_by_user_id: dict[str, dict[str, Any]] = {}
+
+    def seed_user_profile(self, user_id: str, profile: dict[str, Any]) -> None:
+        self._profile_by_user_id[user_id] = profile
 
     def seed_voice_message(self, message_id: str, m4a_bytes: bytes) -> None:
         self._content_by_message_id[message_id] = m4a_bytes
@@ -45,3 +49,7 @@ class MockLineClient(LineMessagingPort):
     async def get_message_content(self, message_id: str) -> bytes:
         await asyncio.sleep(0)
         return self._content_by_message_id.get(message_id, b"mock-m4a-placeholder")
+
+    async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        await asyncio.sleep(0)
+        return self._profile_by_user_id.get(user_id)

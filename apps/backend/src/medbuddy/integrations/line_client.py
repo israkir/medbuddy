@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
 from linebot.v3.messaging import (
     AsyncApiClient,
     AsyncMessagingApi,
@@ -43,6 +44,7 @@ def _coerce_reply_messages(messages: list[dict[str, Any]]) -> list[Message]:
 
 class LineHttpClient(LineMessagingPort):
     def __init__(self, *, channel_access_token: str) -> None:
+        self._channel_access_token = channel_access_token
         configuration = Configuration(access_token=channel_access_token)
         api_client = AsyncApiClient(configuration)
         self._messaging = AsyncMessagingApi(api_client)
@@ -118,3 +120,30 @@ class LineHttpClient(LineMessagingPort):
     async def get_message_content(self, message_id: str) -> bytes:
         data = await self._blob.get_message_content(message_id)
         return bytes(data)
+
+    async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        url = f"https://api.line.me/v2/bot/profile/{user_id}"
+        headers = {"Authorization": f"Bearer {self._channel_access_token}"}
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(url, headers=headers, timeout=10.0)
+        except Exception:
+            log.warning(
+                "LINE profile: request failed user_id_prefix=%s",
+                (user_id or "")[:8],
+                exc_info=True,
+            )
+            return None
+        if r.status_code != 200:
+            log.warning(
+                "LINE profile: status=%s user_id_prefix=%s",
+                r.status_code,
+                (user_id or "")[:8],
+            )
+            return None
+        try:
+            data = r.json()
+        except Exception:
+            log.warning("LINE profile: invalid JSON user_id_prefix=%s", (user_id or "")[:8])
+            return None
+        return data if isinstance(data, dict) else None
