@@ -230,7 +230,13 @@ async def test_app_onboarding_saves_profile():
     assert data["timezone"] == "Asia/Taipei"
     assert data["locale"] == "zh-TW"
     assert len(data["emergency_contacts"]) == 2
-    assert data["emergency_contacts"][0]["channel_type"] == "phone"
+    primary = data["emergency_contacts"][0]
+    assert primary["is_primary"] is True
+    assert primary["channel_type"] == "line"
+    assert primary["channel_value"] == "aming_line"
+    secondary = data["emergency_contacts"][1]
+    assert secondary["is_primary"] is False
+    assert secondary["channel_type"] == "phone"
 
     with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

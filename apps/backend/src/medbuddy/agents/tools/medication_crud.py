@@ -285,17 +285,23 @@ class AddMedicationTool:
         user_text: str,
         user_row: dict[str, Any],
         locale: str,
+        recent_context: str | None = None,
         **_: Any,
     ) -> ToolResult:
         safe_text = redact_pii_text(user_text)
-        draft = await svc.llm.extract_medication_draft(safe_text, locale=locale)
+        draft = await svc.llm.extract_medication_draft(
+            safe_text, locale=locale, recent_context=recent_context
+        )
         if draft is None or not draft.name.strip():
             raise MedicationExtractionError()
 
         un = t("medication.unspecified", locale=locale)
         draft = apply_one_off_reminder_dose_default(draft, unspecified_label=un, locale=locale)
+        confirm_src = (user_text or "").strip()
+        if recent_context and recent_context.strip():
+            confirm_src = f"{recent_context.strip()}\n{confirm_src}".strip()
         if medication_draft_needs_add_confirmation(
-            draft, unspecified_label=un, user_text=user_text
+            draft, unspecified_label=un, user_text=confirm_src
         ):
             expires = datetime.now(UTC) + timedelta(
                 seconds=svc.settings.dose_clarification_ttl_seconds

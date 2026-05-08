@@ -143,9 +143,31 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
         "function": {
             "name": "explain_medication",
             "description": (
-                "Educational info about a drug (what it is for, how to take). Not for saving to the list."
+                "Educational info about a drug (what it is for, how to take). Not for saving to the list. "
+                "When the user only affirms (e.g. sure / yes / 好) or uses pronouns after you named a drug, "
+                "set medication_id from the catalog if that drug is on their list, otherwise drug_query with "
+                "the exact substance name (e.g. vitamin C)."
             ),
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "medication_id": {
+                        "type": "string",
+                        "description": (
+                            "UUID from the medication catalog when the drug is already on their list "
+                            "and the user's latest message does not repeat the name."
+                        ),
+                    },
+                    "drug_query": {
+                        "type": "string",
+                        "description": (
+                            "Plain drug or supplement name for registry lookup when not inferable from id "
+                            "(e.g. after a short yes, or off-list substance you discussed)."
+                        ),
+                    },
+                },
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -163,9 +185,24 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
         "function": {
             "name": "interaction_check",
             "description": (
-                "Combining drugs, alcohol, food, supplements — safety / interactions / 喝酒, 一起吃."
+                "Combining drugs, alcohol, food, supplements — safety / interactions / 喝酒, 一起吃. "
+                "If the user only affirms a follow-up about a specific drug, set medication_id or drug_query "
+                "like explain_medication so registry grounding targets the right substance."
             ),
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "medication_id": {
+                        "type": "string",
+                        "description": "UUID from catalog when the follow-up refers to a listed medication.",
+                    },
+                    "drug_query": {
+                        "type": "string",
+                        "description": "Drug or supplement name for label lookup when the user did not type it again.",
+                    },
+                },
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -202,8 +239,8 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
             "name": "simulate_notify_emergency_contact",
             "description": (
                 "User reports urgent symptoms that are not clearly immediate 911-level but warrant alerting "
-                "their emergency contact (e.g. severe dizziness with vomiting). Server simulates notifying "
-                "the stored contact — no real SMS/voice call."
+                "their emergency contacts (e.g. severe dizziness with vomiting). Server simulates notifying "
+                "every emergency contact on file — no real SMS/voice call."
             ),
             "parameters": {
                 "type": "object",

@@ -16,7 +16,7 @@ from medbuddy.models.domain import (
     parse_pending_agent_clarification,
 )
 from medbuddy.application.profile.emergency_contacts import (
-    normalize_emergency_contacts,
+    merge_emergency_contacts,
 )
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 from medbuddy.core.timezone import effective_user_timezone, normalize_timezone_patch
@@ -77,7 +77,9 @@ class MockProfileMixin:
         row["preferred_name"] = preferred_name.strip()
         row["age_years"] = age_years
         row["gender"] = gender
-        row["emergency_contacts"] = normalize_emergency_contacts(emergency_contacts or [])
+        row["emergency_contacts"] = merge_emergency_contacts(
+            row.get("emergency_contacts"), emergency_contacts or []
+        )
         row["health_notes"] = (health_notes or "").strip() or None
         row["onboarding_completed_at"] = datetime.now(UTC)
         row["timezone"] = effective_user_timezone(timezone)
@@ -118,8 +120,9 @@ class MockProfileMixin:
                 elif isinstance(raw, str):
                     row[key] = raw.strip() or None
         if "emergency_contacts" in fields:
-            contacts = normalize_emergency_contacts(fields["emergency_contacts"])
-            row["emergency_contacts"] = contacts
+            row["emergency_contacts"] = merge_emergency_contacts(
+                row.get("emergency_contacts"), fields["emergency_contacts"]
+            )
         if "timezone" in fields:
             norm = normalize_timezone_patch(fields["timezone"])
             if norm is not None:

@@ -55,4 +55,13 @@ Off-topic non-health chat: answer briefly without medication tools, or refuse po
 
 Interaction questions (alcohol + meds, grapefruit, multiple drugs): use interaction_check.
 
+For **explain_medication** and **interaction_check**, pass **medication_id** (from the catalog) and/or
+**drug_query** (plain drug name) whenever the latest user line is a short confirmation or pronoun
+and the substance was established in prior turns — do not rely on words like "sure" or 「好」 alone
+for registry lookup.
+
+For **add_medication**, still call the tool when the latest user line is a short confirmation (yes, ok, 「好」)
+after you offered to add or reschedule a reminder — the server passes recent thread text into extraction
+so the drug name and reminder timing can be taken from prior turns.
+
 """

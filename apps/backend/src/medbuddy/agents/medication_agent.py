@@ -34,7 +34,9 @@ from medbuddy.privacy.redact import (
     redact_pii_text,
 )
 from medbuddy.core.locale import effective_user_locale
-from medbuddy.application.profile.emergency_contacts import emergency_contact_hint
+from medbuddy.application.profile.emergency_contacts import (
+    emergency_contacts_hint_all,
+)
 
 log = logging.getLogger(__name__)
 
@@ -147,7 +149,7 @@ class MedicationAgent:
 
         if intent == Intent.EMERGENCY:
             log.warning("medication_agent: user_key=%s emergency intent matched", user_key)
-            hint = emergency_contact_hint(user_row.get("emergency_contacts"))
+            hint = emergency_contacts_hint_all(user_row.get("emergency_contacts"), locale=locale)
             if hint:
                 reply = t("agent.emergency_with_saved_contact", locale=locale)
                 reason = _preview_text(safe_text, limit=120)

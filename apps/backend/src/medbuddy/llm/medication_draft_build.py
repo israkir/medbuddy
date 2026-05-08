@@ -43,8 +43,8 @@ _DOSE_EVIDENCE = re.compile(
 # User asked for a soon / one-off reminder (English + Chinese) — counts as intent for quick reminders.
 _TIME_FIRST_REMINDER_CUE = re.compile(
     r"(?ix)"
-    r"\b(?:in|after|within|about)\s+\d+\s*(?:minute|minutes|min)\b|"
-    r"\b\d+\s*(?:minute|minutes|min)\s*(?:later|from\s+now)?\b|"
+    r"\b(?:in|after|within|about)\s+(?:\d+|one|two|three|a|an)\s*(?:minute|minutes|min)\b|"
+    r"\b(?:\d+|one|two|three|a|an)\s+(?:minute|minutes|min)\s*(?:later|from\s+now)?\b|"
     r"(?:過|再)?\s*\d+\s*(?:分鐘|分)(?:後|內)?|"
     r"(?:[一二兩三四五六七八九十百]+\s*(?:分鐘|分)(?:後|內)?)|"
     r"(?:馬上|立刻|稍後|等一下)"

@@ -7,7 +7,10 @@ from typing import Any
 
 import pytest
 
-from medbuddy.agents.orchestrator import orchestrator_prior_messages
+from medbuddy.agents.orchestrator import (
+    orchestrator_prior_messages,
+    recent_conversation_for_medication_extraction,
+)
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.container import build_app_services
 from medbuddy.integrations.mocks.llm import MockLLM
@@ -24,6 +27,24 @@ def test_orchestrator_prior_messages_tail_cap() -> None:
     assert len(orchestrator_prior_messages(turns, max_turns=1)) == 1
     assert orchestrator_prior_messages(turns, max_turns=1)[0]["content"] == "third"
     assert len(orchestrator_prior_messages(turns, max_turns=2)) == 2
+
+
+def test_recent_conversation_for_medication_extraction_formats_tail() -> None:
+    turns = [
+        ConversationTurn(
+            role="user", content="remind vitamin C in one minute", at=datetime.now(UTC)
+        ),
+        ConversationTurn(
+            role="assistant",
+            content="Your vitamin C is at 04:16; want a new one in 1 minute?",
+            at=datetime.now(UTC),
+        ),
+    ]
+    out = recent_conversation_for_medication_extraction(turns, max_turns=8)
+    assert out is not None
+    assert "user:" in out
+    assert "assistant:" in out
+    assert "vitamin c" in out.lower()
 
 
 def test_orchestrator_prior_messages_redacts_pii() -> None:

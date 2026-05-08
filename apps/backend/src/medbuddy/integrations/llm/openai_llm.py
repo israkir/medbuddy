@@ -340,15 +340,27 @@ class OpenAILLM(LLMPort):
     async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str:
         return await asyncio.to_thread(self._simplify_sync, raw_label, locale=locale)
 
-    def _extract_medication_sync(self, user_text: str, locale: str) -> MedicationDraft | None:
+    def _extract_medication_sync(
+        self,
+        user_text: str,
+        locale: str,
+        recent_context: str | None,
+    ) -> MedicationDraft | None:
         loc = locale
+        recent_block = ""
+        if recent_context and recent_context.strip():
+            recent_block = (
+                f"{t('llm.extract_medication_recent_context', locale=loc)}\n"
+                f"{recent_context.strip()}\n\n"
+            )
         prompt = (
             f"{t('llm.extract_medication_intro', locale=loc)}\n"
+            f"{recent_block}"
             f"{t('llm.extract_medication_reminder_rules', locale=loc)}\n"
             "Return JSON only with keys: name, dosage, schedule, instructions, "
             "first_reminder_in_minutes, materialize_daily_reminders, reminder_horizon_days, "
             "needs_horizon_confirmation, daily_reminder_local_hhmm, daily_reminder_local_hhmm_list.\n"
-            f"User: {user_text}"
+            f"{t('llm.user_label', locale=loc)} {user_text}"
         )
         try:
             extracted: MedicationExtraction = self._generate_structured_sync(
@@ -362,10 +374,16 @@ class OpenAILLM(LLMPort):
         return medication_draft_from_extraction(extracted, unspecified=un)
 
     async def extract_medication_draft(
-        self, user_text: str, *, locale: str
+        self,
+        user_text: str,
+        *,
+        locale: str,
+        recent_context: str | None = None,
     ) -> MedicationDraft | None:
         loc = locale or self._locale
-        return await asyncio.to_thread(self._extract_medication_sync, user_text, loc)
+        return await asyncio.to_thread(
+            self._extract_medication_sync, user_text, loc, recent_context
+        )
 
     def _resolve_remove_sync(
         self,

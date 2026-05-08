@@ -44,7 +44,9 @@ from medbuddy.models.domain import AgentTurnResult, ConversationTurn, Medication
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 from medbuddy.services import AppServices
-from medbuddy.application.profile.emergency_contacts import emergency_contact_hint
+from medbuddy.application.profile.emergency_contacts import (
+    emergency_contacts_hint_all,
+)
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +72,32 @@ def orchestrator_prior_messages(
             continue
         out.append({"role": turn.role, "content": content})
     return out
+
+
+_EXTRACTION_CONTEXT_MAX_TURNS = 8
+
+
+def recent_conversation_for_medication_extraction(
+    turns: list[ConversationTurn],
+    *,
+    max_turns: int = _EXTRACTION_CONTEXT_MAX_TURNS,
+) -> str | None:
+    """Redacted user/assistant lines as one block for ``extract_medication_draft`` (excludes current line)."""
+    if max_turns <= 0 or not turns:
+        return None
+    redacted = redact_conversation_turns_for_llm(turns)
+    tail = redacted[-max_turns:]
+    lines: list[str] = []
+    for turn in tail:
+        if turn.role not in ("user", "assistant"):
+            continue
+        content = (turn.content or "").strip()
+        if not content:
+            continue
+        lines.append(f"{turn.role}: {content}")
+    if not lines:
+        return None
+    return "\n".join(lines)
 
 
 _list_tool = ListMedicationsTool()
@@ -178,6 +206,7 @@ async def execute_agent_tool(
         return r.reply
 
     if name == "add_medication":
+        recent_extraction = recent_conversation_for_medication_extraction(ctx.history)
         r = await _run_tool_safe(
             _add_tool,
             svc=svc,
@@ -185,6 +214,7 @@ async def execute_agent_tool(
             user_text=ctx.user_text,
             user_row=ctx.user_row,
             locale=locale,
+            recent_context=recent_extraction,
         )
         _capture_metadata(r, name)
         await ctx.reload_medications()
@@ -282,6 +312,8 @@ async def execute_agent_tool(
             medications=ctx.medications,
             history=ctx.history,
             locale=locale,
+            drug_query=(args.get("drug_query") or None),
+            medication_id=(args.get("medication_id") or None),
         )
         _capture_metadata(r, name)
         return r.reply
@@ -310,6 +342,8 @@ async def execute_agent_tool(
             medications=ctx.medications,
             history=ctx.history,
             locale=locale,
+            drug_query=(args.get("drug_query") or None),
+            medication_id=(args.get("medication_id") or None),
         )
         _capture_metadata(r, name)
         return r.reply
@@ -368,7 +402,7 @@ async def execute_agent_tool(
     if name == "simulate_notify_emergency_contact":
         reason = (args.get("reason") or "").strip() or "urgent symptoms"
         ctx.metadata["simulated_emergency_notification"] = True
-        hint = emergency_contact_hint(ctx.user_row.get("emergency_contacts"))
+        hint = emergency_contacts_hint_all(ctx.user_row.get("emergency_contacts"), locale=locale)
         return t(
             "agent.simulated_emergency_notify",
             locale=locale,

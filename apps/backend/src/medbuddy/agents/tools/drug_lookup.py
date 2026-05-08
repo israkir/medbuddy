@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
+from medbuddy.application.drug_grounding_query import resolve_registry_lookup_query
 from medbuddy.integrations.caching_drugs import (
     DRUG_REFERENCE_SOURCE_OPENFDA,
     DRUG_REFERENCE_SOURCE_TFDA,
@@ -42,11 +43,21 @@ class ExplainMedicationTool:
         medications: list[MedicationRecord],
         history: list[ConversationTurn],
         locale: str,
+        drug_query: str | None = None,
+        medication_id: str | None = None,
         **_: Any,
     ) -> ToolResult:
         safe_text = redact_pii_text(user_text)
         patient_ctx = await patient_context_for_llm(
             svc, user_key, user_row, medications, locale=locale
+        )
+
+        registry_q = resolve_registry_lookup_query(
+            user_text=user_text,
+            history=history,
+            medications=medications,
+            drug_query=drug_query,
+            medication_id=medication_id,
         )
 
         # Personalization cache check
@@ -64,9 +75,7 @@ class ExplainMedicationTool:
                 return ToolResult(reply=cached, metadata={"cache_hit": True})
 
         # Fetch grounding
-        drug_grounding, ref_cache_id, grounding_source = await _fetch_grounding(
-            svc, user_text, locale
-        )
+        drug_grounding, ref_cache_id, grounding_source = await _fetch_grounding(svc, registry_q)
 
         system_persona = get_system_persona(locale=locale)
         system_persona = (
@@ -90,10 +99,15 @@ class ExplainMedicationTool:
                 user_text=safe_text,
                 patient_context=patient_ctx,
             )
+            extra_parts: list[str] = []
+            if safe_text.strip() != user_text.strip():
+                extra_parts.append(safe_text)
+            if registry_q and normalize_query_key(registry_q) != normalize_query_key(user_text):
+                extra_parts.append(registry_q)
             med_cache_id = resolve_medication_id_for_personalization(
                 medications,
                 user_text,
-                extra_query_text=safe_text if safe_text != user_text else None,
+                extra_query_text=" ".join(extra_parts).strip() or None,
             )
             prov_source = grounding_source or svc.llm.drug_cache_provenance_id
             await svc.drug_caches.save_personalized_reply(
@@ -111,10 +125,12 @@ class ExplainMedicationTool:
 
 
 async def _fetch_grounding(
-    svc: AppServices, user_text: str, locale: str
+    svc: AppServices, registry_query: str | None
 ) -> tuple[str | None, str | None, str | None]:
     """Return (drug_grounding_text, reference_cache_id, source_label)."""
-    q = user_text.strip()
+    if not registry_query or not registry_query.strip():
+        return None, None, None
+    q = registry_query.strip()
     parts: list[str] = []
     ref_cache_id: str | None = None
     source: str | None = None

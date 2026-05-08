@@ -73,6 +73,10 @@ class MockLLM(LLMPort):
         medication_update: MedicationUpdateResolution | None = None,
         vital_log: VitalLogExtraction | None = None,
         locale_intent: str | None = None,
+        explain_tool_drug_query: str | None = None,
+        explain_tool_medication_id: str | None = None,
+        interaction_tool_drug_query: str | None = None,
+        interaction_tool_medication_id: str | None = None,
     ) -> None:
         self._intent = intent
         self._locale = locale
@@ -85,6 +89,10 @@ class MockLLM(LLMPort):
         self._medication_update = medication_update
         self._vital_log = vital_log
         self._locale_intent = locale_intent
+        self._explain_tool_drug_query = explain_tool_drug_query
+        self._explain_tool_medication_id = explain_tool_medication_id
+        self._interaction_tool_drug_query = interaction_tool_drug_query
+        self._interaction_tool_medication_id = interaction_tool_medication_id
         self.last_interpret_user_turn_input: str | None = None
         self.last_health_issue_events_block: str | None = None
         self._orch_step = 0
@@ -143,10 +151,14 @@ class MockLLM(LLMPort):
         return t("mocks.llm.simplify_prefix", locale=loc, excerpt=excerpt)
 
     async def extract_medication_draft(
-        self, user_text: str, *, locale: str
+        self,
+        user_text: str,
+        *,
+        locale: str,
+        recent_context: str | None = None,
     ) -> MedicationDraft | None:
         await asyncio.sleep(0)
-        _ = (user_text, locale)
+        _ = recent_context
         return self._medication_draft
 
     async def resolve_medication_removal_id(
@@ -295,12 +307,26 @@ class MockLLM(LLMPort):
                         else True
                     )
                     note = self._dose_adherence_note
-                    payload: dict[str, Any] = {
+                    payload = {
                         "record_pending_dose_as_taken": bool(record),
                     }
                     if note:
                         payload["dose_adherence_note"] = note
                     args = json.dumps(payload)
+                elif name == "explain_medication":
+                    ex: dict[str, Any] = {}
+                    if self._explain_tool_drug_query:
+                        ex["drug_query"] = self._explain_tool_drug_query
+                    if self._explain_tool_medication_id:
+                        ex["medication_id"] = self._explain_tool_medication_id
+                    args = json.dumps(ex) if ex else "{}"
+                elif name == "interaction_check":
+                    ix: dict[str, Any] = {}
+                    if self._interaction_tool_drug_query:
+                        ix["drug_query"] = self._interaction_tool_drug_query
+                    if self._interaction_tool_medication_id:
+                        ix["medication_id"] = self._interaction_tool_medication_id
+                    args = json.dumps(ix) if ix else "{}"
                 return (None, [ChatToolCall(id="mock-tc-1", name=name, arguments=args)])
 
         ut = _last_user_content(messages)

@@ -65,7 +65,11 @@ class LLMPort(Protocol):
     async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str: ...
 
     async def extract_medication_draft(
-        self, user_text: str, *, locale: str
+        self,
+        user_text: str,
+        *,
+        locale: str,
+        recent_context: str | None = None,
     ) -> MedicationDraft | None: ...
 
     async def resolve_medication_removal_id(
