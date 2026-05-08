@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from medbuddy.agents.base import ToolResult
 from medbuddy.agents.tools.confirm_dose import ConfirmDoseTool
@@ -40,7 +41,12 @@ from medbuddy.core.errors import (
 from medbuddy.core.i18n import t
 from medbuddy.llm.agent_system_prompt import build_agent_system_prompt
 from medbuddy.llm.agent_tool_definitions import AGENT_TOOLS_OPENAI
-from medbuddy.models.domain import AgentTurnResult, ConversationTurn, MedicationRecord
+from medbuddy.models.domain import (
+    AgentTurnResult,
+    ConversationTurn,
+    MedicationRecord,
+    TurnInterpretation,
+)
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 from medbuddy.services import AppServices
@@ -124,10 +130,43 @@ class _OrchestrationContext:
     user_row: dict[str, Any]
     medications: list[MedicationRecord]
     history: list[ConversationTurn]
+    interpretation: TurnInterpretation | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     async def reload_medications(self) -> None:
         self.medications = await self.svc.users.list_medications(self.user_key)
+
+
+def _merge_confirm_dose_payload(
+    args: dict[str, Any],
+    interpretation: TurnInterpretation | None,
+) -> tuple[bool, str | None]:
+    """Combine planner JSON with classifier adherence slots (stage-1 structured output)."""
+    tool_record = bool(args.get("record_pending_dose_as_taken", False))
+    tool_raw = args.get("dose_adherence_note")
+    tool_note = tool_raw.strip() if isinstance(tool_raw, str) else None
+
+    if interpretation is None:
+        return tool_record, tool_note
+
+    interp_record = bool(interpretation.record_pending_dose_as_taken)
+    interp_raw = interpretation.dose_adherence_note
+    interp_note = interp_raw.strip() if isinstance(interp_raw, str) else None
+
+    record = tool_record or interp_record
+
+    if tool_note and interp_note:
+        if tool_note == interp_note:
+            note: str | None = tool_note
+        else:
+            combined = f"{tool_note} | {interp_note}"
+            note = combined[:500] if len(combined) > 500 else combined
+    elif tool_note:
+        note = tool_note
+    else:
+        note = interp_note
+
+    return record, note
 
 
 def _tool_payload(args_raw: str) -> dict[str, Any]:
@@ -278,6 +317,7 @@ async def execute_agent_tool(
         return t("medication.reminders_disabled_all", locale=locale, count=n)
 
     if name == "confirm_dose":
+        rec, note = _merge_confirm_dose_payload(args, ctx.interpretation)
         r = await _run_tool_safe(
             _confirm_dose_tool,
             svc=svc,
@@ -285,8 +325,8 @@ async def execute_agent_tool(
             user_text=ctx.user_text,
             user_row=ctx.user_row,
             locale=locale,
-            record_pending_dose_as_taken=bool(args.get("record_pending_dose_as_taken", False)),
-            dose_adherence_note=args.get("dose_adherence_note"),
+            record_pending_dose_as_taken=rec,
+            dose_adherence_note=note,
         )
         _capture_metadata(r, name)
         return r.reply
@@ -431,6 +471,9 @@ async def run_tool_agent_loop(
     locale: str,
     llm: Any,
     max_prior_turns: int,
+    interpretation: TurnInterpretation | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    system_prompt_suffix: str | None = None,
 ) -> AgentTurnResult:
     """Multi-step OpenAI-tool loop until the model returns text or max steps."""
     cat = json.dumps(
@@ -444,6 +487,7 @@ async def run_tool_agent_loop(
         medication_catalog_json=cat,
         patient_context_block=patient_ctx,
         prior_turn_count=len(prior_msgs),
+        extra_instructions=system_prompt_suffix,
     )
     ctx = _OrchestrationContext(
         svc=svc,
@@ -454,16 +498,21 @@ async def run_tool_agent_loop(
         user_row=user_row,
         medications=list(medications),
         history=history,
+        interpretation=interpretation,
     )
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     messages.extend(prior_msgs)
     messages.append({"role": "user", "content": safe_text})
 
+    effective_tools: list[dict[str, Any]] = (
+        tools if tools is not None else cast(list[dict[str, Any]], AGENT_TOOLS_OPENAI)
+    )
+
     for step in range(_MAX_AGENT_STEPS):
         content, tool_calls = await llm.complete_chat_with_tools(
             messages=messages,
-            tools=AGENT_TOOLS_OPENAI,
+            tools=effective_tools,
         )
         if tool_calls:
             messages.append(
@@ -480,12 +529,35 @@ async def run_tool_agent_loop(
                     ],
                 }
             )
+            names_in_batch = {tc.name for tc in tool_calls}
             for tc in tool_calls:
                 out = await execute_agent_tool(tc.name, tc.arguments, ctx)
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tc.id,
+                        "content": out,
+                    }
+                )
+            intr = ctx.interpretation
+            if (
+                intr is not None
+                and "report_side_effects" in names_in_batch
+                and "confirm_dose" not in names_in_batch
+                and (intr.record_pending_dose_as_taken or (intr.dose_adherence_note or "").strip())
+            ):
+                mech_id = f"mechanical-confirm-dose-{uuid.uuid4().hex[:12]}"
+                out = await execute_agent_tool(
+                    "confirm_dose",
+                    json.dumps(
+                        {"record_pending_dose_as_taken": False, "dose_adherence_note": None},
+                    ),
+                    ctx,
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": mech_id,
                         "content": out,
                     }
                 )

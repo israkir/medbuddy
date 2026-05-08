@@ -77,6 +77,8 @@ class MockLLM(LLMPort):
         explain_tool_medication_id: str | None = None,
         interaction_tool_drug_query: str | None = None,
         interaction_tool_medication_id: str | None = None,
+        orchestrator_text_only: bool = False,
+        orchestrator_tools_step1: list[tuple[str, str]] | None = None,
     ) -> None:
         self._intent = intent
         self._locale = locale
@@ -93,6 +95,8 @@ class MockLLM(LLMPort):
         self._explain_tool_medication_id = explain_tool_medication_id
         self._interaction_tool_drug_query = interaction_tool_drug_query
         self._interaction_tool_medication_id = interaction_tool_medication_id
+        self._orchestrator_text_only = orchestrator_text_only
+        self._orchestrator_tools_step1 = orchestrator_tools_step1
         self.last_interpret_user_turn_input: str | None = None
         self.last_health_issue_events_block: str | None = None
         self._orch_step = 0
@@ -280,6 +284,10 @@ class MockLLM(LLMPort):
         tools: list[dict[str, Any]],
     ) -> tuple[str | None, list[ChatToolCall] | None]:
         await asyncio.sleep(0)
+        if self._orchestrator_text_only:
+            _ = tools
+            ut = _last_user_content(messages)
+            return (self.reply_template.format(user_message=ut), None)
         _ = tools
         # First hop of each user turn has no tool results yet; later hops include role=tool.
         if not any(m.get("role") == "tool" for m in messages):
@@ -295,6 +303,13 @@ class MockLLM(LLMPort):
             ]
             if tool_texts:
                 return ("\n\n".join(tool_texts), None)
+
+        if step == 1 and self._orchestrator_tools_step1:
+            calls = [
+                ChatToolCall(id=f"mock-tc-{i}", name=n, arguments=a)
+                for i, (n, a) in enumerate(self._orchestrator_tools_step1)
+            ]
+            return (None, calls)
 
         if step == 1 and self._intent is not None:
             name = _MOCK_INTENT_TOOL.get(self._intent)

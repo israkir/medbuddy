@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -343,6 +344,81 @@ async def test_messages_update_profile(mock_settings) -> None:
     row = await svc.users.get_or_create_user(uid)
     assert row["preferred_name"] == "陳阿姨"
     assert row["age_years"] == 72
+
+
+@pytest.mark.asyncio
+async def test_update_profile_persisted_when_planner_text_only(mock_settings) -> None:
+    """Classifier UPDATE_PROFILE + extraction persists even when the tool planner returns prose only."""
+    uid = "user-profile-planner-text-only"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    svc.llm = MockLLM(
+        intent=Intent.UPDATE_PROFILE,
+        locale="en",
+        profile_patch={"preferred_name": "David", "age_years": 70, "gender": "male"},
+        orchestrator_text_only=True,
+    )
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "I'm David, 70, male"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    row = await svc.users.get_or_create_user(uid)
+    assert row["preferred_name"] == "David"
+    assert row["age_years"] == 70
+    assert row["gender"] == "male"
+
+
+@pytest.mark.asyncio
+async def test_report_side_effects_applies_classifier_adherence_without_confirm_dose_tool(
+    mock_settings,
+) -> None:
+    """Stage-1 adherence slots apply when the planner calls report_side_effects but not confirm_dose."""
+    uid = "user-sfx-adherence-merge"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(uid, {"locale": "en"})
+    await svc.users.add_medication(
+        uid,
+        MedicationDraft(name="Aspirin", dosage="100mg", schedule="QD"),
+    )
+    jobs = await svc.users.sync_upcoming_dose_events(uid)
+    assert jobs
+    dose_id, _ = jobs[0]
+    svc.users._doses[dose_id]["scheduled_at"] = datetime.now(UTC) - timedelta(
+        hours=2
+    )  # noqa: SLF001
+
+    svc.llm = MockLLM(
+        intent=Intent.REPORT_SIDE_EFFECTS,
+        locale="en",
+        record_pending_dose_as_taken=True,
+        dose_adherence_note="Dizzy after taking it",
+        orchestrator_tools_step1=[("report_side_effects", "{}")],
+    )
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "I took aspirin and feel dizzy"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    dose_row = svc.users._doses[dose_id]  # noqa: SLF001
+    assert dose_row.get("taken_at") is not None
+    assert "Dizzy" in (dose_row.get("notes") or "")
 
 
 @pytest.mark.asyncio

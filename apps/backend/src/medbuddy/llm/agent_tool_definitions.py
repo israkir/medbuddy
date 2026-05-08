@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 # Shared descriptions — models route English and Traditional Chinese user text using these.
 AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
     {
@@ -260,10 +262,23 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
         "function": {
             "name": "update_profile",
             "description": (
-                "Update durable profile fields from natural language (name, age, emergency/family contact "
-                "with phone, allergies, locale). Use when they share who to call in an emergency — not add_medication."
+                "Update durable profile fields from natural language: preferred name, age, gender, allergies or "
+                "long-term health notes, emergency/family contacts (phone, email, LINE, WhatsApp), locale, timezone. "
+                "Use for self-introduction/onboarding facts and who to call in an emergency — not add_medication."
             ),
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },
     },
 ]
+
+
+def agent_tools_openai_omit(*omit_names: str) -> list[dict[str, Any]]:
+    """Copy of ``AGENT_TOOLS_OPENAI`` without named tools (e.g. hide ``update_profile``)."""
+    skip = frozenset(omit_names)
+    out: list[dict[str, Any]] = []
+    for entry in AGENT_TOOLS_OPENAI:
+        fn = entry.get("function")
+        if isinstance(fn, dict) and cast(dict[str, Any], fn).get("name") in skip:
+            continue
+        out.append(cast(dict[str, Any], entry))
+    return out
