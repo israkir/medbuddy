@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from medbuddy.agents.base import ToolResult
+from medbuddy.application.drug_grounding_query import resolve_registry_lookup_query
 from medbuddy.integrations.caching_drugs import (
     DRUG_REFERENCE_SOURCE_OPENFDA,
     normalize_query_key,
@@ -45,9 +46,18 @@ class InteractionCheckTool:
         medications: list[MedicationRecord],
         history: list[ConversationTurn],
         locale: str,
+        drug_query: str | None = None,
+        medication_id: str | None = None,
         **_: Any,
     ) -> ToolResult:
         safe_text = redact_pii_text(user_text)
+        registry_q = resolve_registry_lookup_query(
+            user_text=user_text,
+            history=history,
+            medications=medications,
+            drug_query=drug_query,
+            medication_id=medication_id,
+        )
         # Include actual health notes so the LLM can check drug-condition interactions.
         patient_ctx = await patient_context_for_llm(
             svc, user_key, user_row, medications, locale=locale, include_health_notes=True
@@ -67,28 +77,29 @@ class InteractionCheckTool:
                 log.info("interaction_check: cache_hit user_key=%s", user_key)
                 return ToolResult(reply=cached, metadata={"cache_hit": True})
 
-        # Fetch grounding for mentioned drugs
-        q = safe_text.strip()
+        # Fetch grounding for mentioned drugs (resolved query avoids "sure" → OpenFDA).
         grounding_parts: list[str] = []
         grounding_sources: list[str] = []
         ref_cache_id: str | None = None
 
-        try:
-            ofda = await svc.drugs.fetch_openfda_label_snippet(q)
-        except Exception:
-            log.debug("interaction_check: OpenFDA fetch failed query_len=%d", len(q))
-            ofda = None
+        if registry_q and registry_q.strip():
+            q = registry_q.strip()
+            try:
+                ofda = await svc.drugs.fetch_openfda_label_snippet(q)
+            except Exception:
+                log.debug("interaction_check: OpenFDA fetch failed query_len=%d", len(q))
+                ofda = None
 
-        if ofda:
-            grounding_parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
-            if ofda.warnings:
-                grounding_parts.append(f"Warnings: {ofda.warnings[:1000]}")
-            grounding_sources.append(DRUG_REFERENCE_SOURCE_OPENFDA)
-            if svc.drug_caches is not None:
-                ref_cache_id = await svc.drug_caches.get_reference_cache_id(
-                    source=DRUG_REFERENCE_SOURCE_OPENFDA,
-                    query_key=normalize_query_key(q),
-                )
+            if ofda:
+                grounding_parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
+                if ofda.warnings:
+                    grounding_parts.append(f"Warnings: {ofda.warnings[:1000]}")
+                grounding_sources.append(DRUG_REFERENCE_SOURCE_OPENFDA)
+                if svc.drug_caches is not None:
+                    ref_cache_id = await svc.drug_caches.get_reference_cache_id(
+                        source=DRUG_REFERENCE_SOURCE_OPENFDA,
+                        query_key=normalize_query_key(q),
+                    )
 
         drug_grounding = "\n\n".join(grounding_parts) if grounding_parts else None
 
@@ -131,10 +142,15 @@ class InteractionCheckTool:
                 user_text=safe_text,
                 patient_context=patient_ctx,
             )
+            extra_parts: list[str] = []
+            if safe_text.strip() != user_text.strip():
+                extra_parts.append(safe_text)
+            if registry_q and normalize_query_key(registry_q) != normalize_query_key(user_text):
+                extra_parts.append(registry_q)
             med_cache_id = resolve_medication_id_for_personalization(
                 medications,
                 user_text,
-                extra_query_text=safe_text if safe_text != user_text else None,
+                extra_query_text=" ".join(extra_parts).strip() or None,
             )
             prov_source = (
                 grounding_sources[0] if grounding_sources else svc.llm.drug_cache_provenance_id

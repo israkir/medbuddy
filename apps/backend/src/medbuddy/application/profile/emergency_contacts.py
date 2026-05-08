@@ -99,17 +99,96 @@ def extract_contacts_from_text(text: str) -> list[dict[str, str | bool]]:
     return normalize_emergency_contacts(contacts)
 
 
-def emergency_contact_hint(contacts: object) -> str:
-    """Small human-readable emergency contact hint for prompts/replies."""
-    normalized = normalize_emergency_contacts(contacts)
-    if not normalized:
-        return ""
-    first = normalized[0]
-    rel = str(first.get("relationship") or "").strip()
-    val = str(first.get("channel_value") or "").strip()
+def _format_one_contact_hint(row: dict[str, object]) -> str:
+    rel = str(row.get("relationship") or "").strip()
+    val = str(row.get("channel_value") or "").strip()
     if rel and val:
         return f"{rel} {val}"
     return val
+
+
+def emergency_contact_hint(contacts: object) -> str:
+    """Small human-readable hint for the *primary* (or first) emergency contact.
+
+    Kept for callers that only show one contact (e.g. profile signal lines).
+    """
+    normalized = normalize_emergency_contacts(contacts)
+    if not normalized:
+        return ""
+    return _format_one_contact_hint(normalized[0])
+
+
+def emergency_contacts_hint_all(contacts: object, *, locale: str = "en") -> str:
+    """Human-readable hint listing **all** stored emergency contacts.
+
+    Used by the simulated emergency notify path so the message reflects every
+    contact on file (not just the primary). Primary first, then the rest in the
+    order returned by the store. Joined with a locale-appropriate separator.
+    """
+    normalized = normalize_emergency_contacts(contacts)
+    if not normalized:
+        return ""
+    parts = [p for p in (_format_one_contact_hint(r) for r in normalized) if p]
+    if not parts:
+        return ""
+    sep = "；" if locale == "zh-TW" else "; "
+    return sep.join(parts)
+
+
+def merge_emergency_contacts(existing: object, new_inputs: object) -> list[dict[str, str | bool]]:
+    """Merge ``new_inputs`` into ``existing`` and mark only the most recent as primary.
+
+    Semantics:
+    - Contacts are addressable by ``(channel_type, channel_value)``.
+    - A new entry that matches an existing one updates that entry's fields and
+      counts as "most recent" again.
+    - New entries that don't match are added (most recent last in input wins).
+    - After merging, ``is_primary`` is ``True`` on exactly one entry — the
+      most-recently-touched contact — and ``False`` on every other entry,
+      regardless of any input flags.
+
+    The returned list is ordered for display: the primary (most recent) first,
+    then the remaining contacts in their original chronological order
+    (oldest-first). This matches the read order Supabase returns
+    (``is_primary desc, created_at asc``).
+    """
+    base = normalize_emergency_contacts(existing)
+    incoming = normalize_emergency_contacts(new_inputs)
+    by_key: dict[tuple[str, str], dict[str, str | bool]] = {}
+    chrono: list[tuple[str, str]] = []
+    for row in base:
+        key = (str(row.get("channel_type") or ""), str(row.get("channel_value") or ""))
+        by_key[key] = dict(row)
+        chrono.append(key)
+    most_recent: tuple[str, str] | None = chrono[-1] if chrono else None
+    for row in incoming:
+        key = (str(row.get("channel_type") or ""), str(row.get("channel_value") or ""))
+        if key in by_key:
+            merged = dict(by_key[key])
+            for k, v in row.items():
+                if k == "is_primary":
+                    continue
+                if v is None or v == "":
+                    continue
+                merged[k] = v
+            by_key[key] = merged
+        else:
+            by_key[key] = dict(row)
+            chrono.append(key)
+        most_recent = key
+    if most_recent is None:
+        return []
+    out: list[dict[str, str | bool]] = []
+    primary = dict(by_key[most_recent])
+    primary["is_primary"] = True
+    out.append(primary)
+    for key in chrono:
+        if key == most_recent:
+            continue
+        item = dict(by_key[key])
+        item["is_primary"] = False
+        out.append(item)
+    return out
 
 
 def _detail_suffix(value: str, *, locale: str) -> str:

@@ -16,6 +16,51 @@ from medbuddy.main import app
 from medbuddy.models.domain import Intent, MedicationDraft, MedicationRecord
 
 
+class _ReminderFollowUpYesMockLLM(MockLLM):
+    """Turn 1: general reply about vitamin C + 1-minute offer; turn 2: add via context + ``yes``."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            intent=Intent.GENERAL_QUESTION,
+            locale="en",
+            reply_template=(
+                "Your vitamin C reminder is scheduled for 04:16, not in 1 minute from now. "
+                "If you want, I can set a new reminder specifically for one minute from now. "
+                "Would you like me to do that?"
+            ),
+        )
+
+    async def interpret_user_turn(self, user_text: str, *, recent_context: str | None = None):
+        if user_text.strip().lower() == "yes":
+            self._intent = Intent.ADD_MEDICATION
+        else:
+            self._intent = Intent.GENERAL_QUESTION
+        return await super().interpret_user_turn(user_text, recent_context=recent_context)
+
+    async def extract_medication_draft(
+        self,
+        user_text: str,
+        *,
+        locale: str,
+        recent_context: str | None = None,
+    ):
+        un = t("medication.unspecified", locale=locale)
+        ut = user_text.strip().lower()
+        rc = (recent_context or "").lower()
+        affirm = ut in {"yes", "y", "ok", "sure"}
+        if affirm and "vitamin c" in rc and ("1 minute" in rc or "one minute" in rc):
+            return MedicationDraft(
+                name="Vitamin C",
+                dosage=un,
+                schedule=un,
+                first_reminder_in_minutes=1,
+                materialize_daily_reminders=False,
+            )
+        return await super().extract_medication_draft(
+            user_text, locale=locale, recent_context=recent_context
+        )
+
+
 def _headers(*, user: str = "u-med-text") -> dict[str, str]:
     return {"X-App-User-Id": user}
 
@@ -55,6 +100,45 @@ async def test_messages_add_medication(mock_settings) -> None:
     meds = await svc.users.list_medications(uid)
     assert len(meds) == 1
     assert meds[0].name == "阿斯匹靈"
+
+
+@pytest.mark.asyncio
+async def test_yes_after_reminder_offer_resolves_vitamin_c_from_context(mock_settings) -> None:
+    """Regression: ``add_medication`` extraction receives prior turns so bare ``yes`` keeps the drug."""
+    uid = "user-reminder-yes-ctx"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(uid, {"locale": "en"})
+    svc.llm = _ReminderFollowUpYesMockLLM()
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r1 = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "I thought my vitamin C was in one minute"},
+                    headers=_headers(user=uid),
+                )
+                assert r1.status_code == 200
+                assert "vitamin c" in r1.json()["reply"].lower()
+
+                r2 = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "yes"},
+                    headers=_headers(user=uid),
+                )
+                assert r2.status_code == 200
+                reply2 = r2.json()["reply"].lower()
+                assert "vitamin c" in reply2
+                assert "i'd like to save" not in reply2
+                assert "medication name" not in reply2
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+
+    meds = await svc.users.list_medications(uid)
+    assert len(meds) == 1
+    assert meds[0].name == "Vitamin C"
 
 
 @pytest.mark.asyncio
@@ -224,8 +308,13 @@ async def test_messages_update_profile_multi_contacts_from_patch(mock_settings) 
     row = await svc.users.get_or_create_user(uid)
     contacts = row.get("emergency_contacts") or []
     assert len(contacts) == 2
-    assert contacts[0]["channel_type"] == "phone"
-    assert contacts[1]["channel_type"] == "line"
+    primary = contacts[0]
+    assert primary["is_primary"] is True
+    assert primary["channel_type"] == "line"
+    assert primary["channel_value"] == "amy_line_id"
+    secondary = contacts[1]
+    assert secondary["is_primary"] is False
+    assert secondary["channel_type"] == "phone"
 
 
 @pytest.mark.asyncio
@@ -316,6 +405,52 @@ async def test_messages_emergency_with_saved_contact_simulates_notify(mock_setti
     assert body["metadata"].get("simulated_emergency_notification") is True
     assert "0912345678" in body["reply"]
     assert "practice message" in body["reply"].lower()
+
+
+@pytest.mark.asyncio
+async def test_messages_emergency_lists_all_saved_contacts(mock_settings) -> None:
+    """EMERGENCY intent should mention every emergency contact on file, not only the primary."""
+    uid = "user-emergency-multi"
+    transport = ASGITransport(app=app)
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(
+        uid,
+        {
+            "locale": "en",
+            "emergency_contacts": [
+                {
+                    "relationship": "son",
+                    "channel_type": "phone",
+                    "channel_value": "0900111111",
+                },
+                {
+                    "relationship": "daughter",
+                    "channel_type": "phone",
+                    "channel_value": "0922222222",
+                },
+            ],
+        },
+    )
+    svc.llm = MockLLM(intent=Intent.EMERGENCY, locale="en")
+    app.dependency_overrides[get_services] = lambda: svc
+    try:
+        with patch("medbuddy.channels.api.auth.get_settings", return_value=mock_settings):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                r = await client.post(
+                    "/v1/app/messages",
+                    json={"text": "i am fainting"},
+                    headers=_headers(user=uid),
+                )
+    finally:
+        app.dependency_overrides.pop(get_services, None)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["metadata"].get("simulated_emergency_notification") is True
+    reply = body["reply"]
+    assert "0900111111" in reply
+    assert "0922222222" in reply
+    assert "every emergency contact" in reply.lower()
 
 
 @pytest.mark.asyncio

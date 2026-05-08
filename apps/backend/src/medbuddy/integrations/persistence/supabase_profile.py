@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Sequence
 
 from medbuddy.models.domain import (
@@ -138,38 +138,105 @@ class SupabaseProfileMixin:
         rows = (await _run_q(q)).data or []
         return normalize_emergency_contacts(rows)
 
-    async def _replace_emergency_contacts(
+    async def _merge_emergency_contacts(
         self, patient_id: str, contacts: list[dict[str, str | bool]]
     ) -> None:
-        def delete_old() -> Any:
+        """Append/update emergency contacts; only the most recently written row stays primary.
+
+        Multiple emergency contacts are kept on file. New entries that match an
+        existing ``(channel_type, channel_value)`` are updated in place; new
+        unique entries are inserted. After all writes, ``is_primary`` is forced
+        to ``True`` on the row with the latest ``updated_at`` only — older
+        contacts are demoted automatically so the most recent contact is always
+        the single primary.
+        """
+        normalized = normalize_emergency_contacts(contacts)
+        if not normalized:
+            return
+        existing_rows = await self._list_emergency_contacts(patient_id)
+        existing_keys = {
+            (str(r.get("channel_type") or ""), str(r.get("channel_value") or ""))
+            for r in existing_rows
+        }
+        now = datetime.now(UTC)
+        for i, c in enumerate(normalized):
+            ch_type = str(c.get("channel_type") or "")
+            ch_val = str(c.get("channel_value") or "")
+            ts = (now + timedelta(microseconds=i)).isoformat()
+            payload_base: dict[str, Any] = {
+                "contact_name": c.get("contact_name"),
+                "relationship": c.get("relationship"),
+                "notes": c.get("notes"),
+                "is_primary": False,
+                "updated_at": ts,
+            }
+            if (ch_type, ch_val) in existing_keys:
+
+                def upd(
+                    payload: dict[str, Any] = payload_base,
+                    ch_type: str = ch_type,
+                    ch_val: str = ch_val,
+                ) -> Any:
+                    return (
+                        self._client.table("emergency_contacts")
+                        .update(payload)
+                        .eq("patient_id", patient_id)
+                        .eq("channel_type", ch_type)
+                        .eq("channel_value", ch_val)
+                        .execute()
+                    )
+
+                await _run_q(upd)
+            else:
+                insert_payload = {
+                    "patient_id": patient_id,
+                    "channel_type": ch_type,
+                    "channel_value": ch_val,
+                    "source": "user",
+                    "created_at": ts,
+                    **payload_base,
+                }
+
+                def ins(payload: dict[str, Any] = insert_payload) -> Any:
+                    return self._client.table("emergency_contacts").insert(payload).execute()
+
+                await _run_q(ins)
+
+        def fetch_latest() -> Any:
             return (
                 self._client.table("emergency_contacts")
-                .delete()
+                .select("id")
                 .eq("patient_id", patient_id)
+                .order("updated_at", desc=True)
+                .limit(1)
                 .execute()
             )
 
-        await _run_q(delete_old)
-        if not contacts:
+        rows = (await _run_q(fetch_latest)).data or []
+        if not rows:
             return
-        payload = [
-            {
-                "patient_id": patient_id,
-                "contact_name": c.get("contact_name"),
-                "relationship": c.get("relationship"),
-                "channel_type": c.get("channel_type"),
-                "channel_value": c.get("channel_value"),
-                "is_primary": bool(c.get("is_primary", False)),
-                "notes": c.get("notes"),
-                "source": "user",
-            }
-            for c in contacts
-        ]
+        latest_id = rows[0]["id"]
 
-        def insert_new() -> Any:
-            return self._client.table("emergency_contacts").insert(payload).execute()
+        def demote_others() -> Any:
+            return (
+                self._client.table("emergency_contacts")
+                .update({"is_primary": False})
+                .eq("patient_id", patient_id)
+                .neq("id", latest_id)
+                .execute()
+            )
 
-        await _run_q(insert_new)
+        await _run_q(demote_others)
+
+        def promote_latest() -> Any:
+            return (
+                self._client.table("emergency_contacts")
+                .update({"is_primary": True})
+                .eq("id", latest_id)
+                .execute()
+            )
+
+        await _run_q(promote_latest)
 
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]:
         row = await self._select_user_row(line_user_id)
@@ -235,7 +302,7 @@ class SupabaseProfileMixin:
 
         await _run_q(upd)
         if contacts:
-            await self._replace_emergency_contacts(uid, contacts)
+            await self._merge_emergency_contacts(uid, contacts)
         log.info("DB users.save_onboarding_profile: patient_id=%s updated", uid)
         row = await self._select_user_row(line_user_id)
         if not row:
@@ -289,7 +356,7 @@ class SupabaseProfileMixin:
                 payload["locale"] = norm_loc
         if "emergency_contacts" in fields:
             contacts = normalize_emergency_contacts(fields["emergency_contacts"])
-            await self._replace_emergency_contacts(uid, contacts)
+            await self._merge_emergency_contacts(uid, contacts)
         if not payload:
             row = await self._select_user_row(line_user_id)
             return _user_row_to_dict(row) if row else user

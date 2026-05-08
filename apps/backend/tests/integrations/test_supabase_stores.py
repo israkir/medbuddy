@@ -258,8 +258,27 @@ async def test_save_onboarding_profile_updates_row() -> None:
         ),
     ]
 
+    contacts_builder = MagicMock()
+    contacts_builder.select.return_value = contacts_builder
+    contacts_builder.eq.return_value = contacts_builder
+    contacts_builder.neq.return_value = contacts_builder
+    contacts_builder.order.return_value = contacts_builder
+    contacts_builder.limit.return_value = contacts_builder
+    contacts_builder.insert.return_value = contacts_builder
+    contacts_builder.update.return_value = contacts_builder
+    contacts_builder.delete.return_value = contacts_builder
+    contacts_builder.execute.return_value = MagicMock(
+        data=[{"id": "00000000-0000-0000-0000-0000000000aa"}]
+    )
+
     client = MagicMock()
-    client.table.return_value = user_builder
+
+    def table(name: str) -> MagicMock:
+        if name == "emergency_contacts":
+            return contacts_builder
+        return user_builder
+
+    client.table.side_effect = table
 
     ud = SupabaseUserData(client, load_settings({}))
     out = await ud.save_onboarding_profile(
@@ -283,6 +302,10 @@ async def test_save_onboarding_profile_updates_row() -> None:
     assert upd["gender"] == "female"
     assert upd["timezone"] == "Asia/Taipei"
     assert upd["locale"] == "en"
+    contacts_builder.insert.assert_called_once()
+    insert_payload = contacts_builder.insert.call_args[0][0]
+    assert insert_payload["channel_type"] == "phone"
+    assert insert_payload["channel_value"] == "0912"
 
 
 @pytest.mark.asyncio
@@ -422,3 +445,97 @@ async def test_patch_user_profile_accepts_gender() -> None:
     assert out["gender"] == "male"
     upd = user_builder.update.call_args[0][0]
     assert upd == {"gender": "male"}
+
+
+@pytest.mark.asyncio
+async def test_patch_user_profile_emergency_contacts_demotes_old_primary() -> None:
+    """New emergency contact is appended; previously stored row is demoted to non-primary."""
+    user_id = "00000000-0000-0000-0000-0000000000ab"
+    patient_row = {
+        "id": user_id,
+        "external_user_id": "ext-merge",
+        "preferred_name": None,
+        "age_years": None,
+        "gender": None,
+        "health_notes": None,
+        "onboarding_completed_at": None,
+        "timezone": "Asia/Taipei",
+        "locale": "zh-TW",
+    }
+    user_builder = MagicMock()
+    user_builder.select.return_value = user_builder
+    user_builder.eq.return_value = user_builder
+    user_builder.limit.return_value = user_builder
+    user_builder.update.return_value = user_builder
+    user_builder.execute.return_value = MagicMock(data=[patient_row])
+
+    contacts_builder = MagicMock()
+    contacts_builder.select.return_value = contacts_builder
+    contacts_builder.eq.return_value = contacts_builder
+    contacts_builder.neq.return_value = contacts_builder
+    contacts_builder.order.return_value = contacts_builder
+    contacts_builder.limit.return_value = contacts_builder
+    contacts_builder.insert.return_value = contacts_builder
+    contacts_builder.update.return_value = contacts_builder
+
+    existing_primary_id = "00000000-0000-0000-0000-0000000000cc"
+    new_inserted_id = "00000000-0000-0000-0000-0000000000dd"
+    existing_row = {
+        "id": existing_primary_id,
+        "contact_name": None,
+        "relationship": "son",
+        "channel_type": "phone",
+        "channel_value": "0900000000",
+        "is_primary": True,
+        "notes": None,
+        "source": "user",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+    contacts_builder.execute.side_effect = [
+        MagicMock(data=[existing_row]),
+        MagicMock(data=[existing_row]),
+        MagicMock(data=[{"id": new_inserted_id}]),
+        MagicMock(data=[{"id": new_inserted_id}]),
+        MagicMock(data=[]),
+        MagicMock(data=[{"id": new_inserted_id}]),
+        MagicMock(data=[existing_row]),
+    ]
+
+    client = MagicMock()
+
+    def table(name: str) -> MagicMock:
+        if name == "emergency_contacts":
+            return contacts_builder
+        return user_builder
+
+    client.table.side_effect = table
+
+    ud = SupabaseUserData(client, load_settings({}))
+    await ud.patch_user_profile(
+        "ext-merge",
+        {
+            "emergency_contacts": [
+                {
+                    "channel_type": "line",
+                    "channel_value": "kathy_line",
+                    "relationship": "daughter",
+                }
+            ]
+        },
+    )
+
+    contacts_builder.insert.assert_called_once()
+    insert_payload = contacts_builder.insert.call_args[0][0]
+    assert insert_payload["channel_type"] == "line"
+    assert insert_payload["channel_value"] == "kathy_line"
+    assert insert_payload["is_primary"] is False
+
+    update_calls = contacts_builder.update.call_args_list
+    update_payloads = [c.args[0] for c in update_calls]
+    assert any(
+        p == {"is_primary": False} for p in update_payloads
+    ), "expected demote-others update to set is_primary=False"
+    assert any(
+        p == {"is_primary": True} for p in update_payloads
+    ), "expected promote-latest update to set is_primary=True"

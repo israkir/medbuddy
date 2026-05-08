@@ -22,6 +22,65 @@ def normalize_query_key(query: str) -> str:
     return " ".join(query.strip().casefold().split())
 
 
+_GROUNDING_STOP_NORMALIZED: frozenset[str] = frozenset(
+    {
+        "sure",
+        "yes",
+        "yep",
+        "yeah",
+        "ya",
+        "no",
+        "nope",
+        "nah",
+        "ok",
+        "okay",
+        "thanks",
+        "thank",
+        "you",
+        "ty",
+        "pls",
+        "please",
+        "hi",
+        "hello",
+        "hey",
+        "go",
+        "ahead",
+        "好",
+        "好的",
+        "好啊",
+        "好呀",
+        "可以",
+        "行",
+        "嗯",
+        "嗯好",
+        "要",
+        "不要",
+        "不用",
+        "對",
+        "对",
+        "是",
+        "不是",
+        "算了",
+        "行啊",
+    }
+)
+
+
+def is_weak_grounding_query(normalized_key: str) -> bool:
+    """True if this normalized key must not be used alone for registry lookup or cache I/O."""
+    if not normalized_key:
+        return True
+    if normalized_key in _GROUNDING_STOP_NORMALIZED:
+        return True
+    if len(normalized_key) <= 2:
+        if any(ch.isdigit() for ch in normalized_key):
+            return False
+        if not normalized_key.isascii():
+            return False
+        return True
+    return False
+
+
 def _name_match_candidates(stored_name: str) -> list[str]:
     """Substrings to test against user text so list names with strength/branding still match.
 
@@ -88,6 +147,8 @@ class CachingDrugData(DrugDataPort):
 
     async def fetch_tfda_snippet(self, query: str) -> DrugGrounding | None:
         key = normalize_query_key(query)
+        if is_weak_grounding_query(key):
+            return None
         hit = await self._caches.get_valid_reference(
             source=DRUG_REFERENCE_SOURCE_TFDA, query_key=key
         )
@@ -109,6 +170,8 @@ class CachingDrugData(DrugDataPort):
 
     async def fetch_openfda_label_snippet(self, query: str) -> DrugGrounding | None:
         key = normalize_query_key(query)
+        if is_weak_grounding_query(key):
+            return None
         hit = await self._caches.get_valid_reference(
             source=DRUG_REFERENCE_SOURCE_OPENFDA, query_key=key
         )
