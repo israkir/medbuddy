@@ -149,24 +149,24 @@ def reminder_compose_appendix(saved: MedicationRecord, locale: str) -> str:
         return ""
     lines: list[str] = []
     if rem.get("needs_horizon_confirmation"):
-        lines.append(t("gemini.added_ask_reminder_horizon", locale=locale))
+        lines.append(t("llm.added_ask_reminder_horizon", locale=locale))
     fm = rem.get("first_reminder_in_minutes")
     md = bool(rem.get("materialize_daily", True))
     if isinstance(fm, (int, float)) and int(fm) > 0:
         if md:
             lines.append(
                 t(
-                    "gemini.added_first_reminder_plus_daily",
+                    "llm.added_first_reminder_plus_daily",
                     locale=locale,
                     minutes=int(fm),
                 )
             )
         else:
-            lines.append(t("gemini.added_first_reminder_only", locale=locale, minutes=int(fm)))
+            lines.append(t("llm.added_first_reminder_only", locale=locale, minutes=int(fm)))
     elif md and not rem.get("needs_horizon_confirmation"):
         hd = rem.get("horizon_days")
         if isinstance(hd, (int, float)):
-            lines.append(t("gemini.added_daily_horizon_days", locale=locale, days=int(hd)))
+            lines.append(t("llm.added_daily_horizon_days", locale=locale, days=int(hd)))
     if not lines:
         return ""
     return "\n\n" + "\n".join(lines)

@@ -108,7 +108,7 @@ class InteractionCheckTool:
             system_persona = get_system_persona(locale=locale)
             system_persona = (
                 f"{system_persona}\n\n"
-                f"{t('gemini.medication_companion_interactions', locale=locale)}"
+                f"{t('llm.medication_companion_interactions', locale=locale)}"
             )
             reply = await svc.llm.compose_reply(
                 system_persona=system_persona,
@@ -168,7 +168,15 @@ def _format_interaction_reply(result: InteractionResult, *, locale: str) -> str:
         lines.append("")
         for ix in r.interactions:
             severity_label = _severity_label(ix.severity, locale=locale)
-            lines.append(f"• {ix.drug_a} × {ix.drug_b} [{severity_label}]")
+            lines.append(
+                t(
+                    "interaction.pair_line",
+                    locale=locale,
+                    drug_a=ix.drug_a,
+                    drug_b=ix.drug_b,
+                    severity=severity_label,
+                )
+            )
             lines.append(f"  {ix.description}")
             rec = t("interaction.recommendation_prefix", locale=locale)
             lines.append(f"  {rec}{ix.recommendation}")

@@ -33,9 +33,12 @@ async def test_nudge_sends_after_primary_and_increments_count() -> None:
     n = await deliver_dose_reminder_nudge(svc, dose_id, 0)
     assert n is True
     assert len(svc.line.pushes) == 2
+    nudge_text = svc.line.pushes[1]["messages"][0]["text"]
     assert (
-        "Follow-up" in svc.line.pushes[1]["messages"][0]["text"]
-        or "再次提醒" in svc.line.pushes[1]["messages"][0]["text"]
+        "Follow-up" in nudge_text
+        or "再次提醒" in nudge_text
+        or "Gentle nudge" in nudge_text
+        or "輕聲提醒" in nudge_text
     )
 
     again = await deliver_dose_reminder_nudge(svc, dose_id, 0)

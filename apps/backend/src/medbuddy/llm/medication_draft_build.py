@@ -26,8 +26,10 @@ _PLACEHOLDER_TOKENS = frozenset(
         "...",
         "未指定",
         "未註明",
+        "還沒填",
         "不明",
         "不詳",
+        "not filled in yet",
     }
 )
 

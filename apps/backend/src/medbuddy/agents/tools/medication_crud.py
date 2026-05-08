@@ -372,14 +372,26 @@ class UpdateMedicationTool:
             ",".join(sorted(fields.keys())),
         )
         un = t("medication.unspecified", locale=locale)
-        reply = t(
-            "medication.updated",
-            locale=locale,
-            name=updated.name,
-            dosage=dose_or_schedule_display(updated.dosage, unspecified_label=un),
-            schedule=dose_or_schedule_display(updated.schedule, unspecified_label=un),
-            instructions=(updated.instructions or "-"),
-        )
+        dose_disp = dose_or_schedule_display(updated.dosage, unspecified_label=un)
+        sched_disp = dose_or_schedule_display(updated.schedule, unspecified_label=un)
+        inst = updated.instructions if isinstance(updated.instructions, str) else ""
+        if inst.strip():
+            reply = t(
+                "medication.updated_with_note",
+                locale=locale,
+                name=updated.name,
+                dosage=dose_disp,
+                schedule=sched_disp,
+                instructions=inst.strip(),
+            )
+        else:
+            reply = t(
+                "medication.updated",
+                locale=locale,
+                name=updated.name,
+                dosage=dose_disp,
+                schedule=sched_disp,
+            )
         if "dosage" in fields or "schedule" in fields:
             reply = f"{reply}\n{t('medication.update_reminder_followup', locale=locale)}"
         material_change = any(k in fields for k in ("name", "dosage", "schedule"))

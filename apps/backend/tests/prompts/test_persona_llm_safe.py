@@ -40,8 +40,9 @@ def test_llm_context_stored_preferred_name_in_signals_not_in_gaps() -> None:
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="en")
     assert "Mei" in ctx
-    assert "Preferred form of address" in ctx
-    assert "Preferred name / how to address them: not stored yet" not in ctx
+    assert "Profile signals for tone and safety" in ctx
+    assert "in greetings when it fits naturally" in ctx
+    assert "How to address them: not saved yet" not in ctx
 
 
 def test_llm_context_whitespace_preferred_name_is_absent_and_gap_lists_name() -> None:
@@ -53,8 +54,8 @@ def test_llm_context_whitespace_preferred_name_is_absent_and_gap_lists_name() ->
         "health_notes": None,
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="en")
-    assert "Preferred name / how to address them: not stored yet" in ctx
-    assert "Preferred form of address" not in ctx
+    assert "How to address them: not saved yet" in ctx
+    assert "Profile signals for tone and safety" not in ctx
 
 
 def test_llm_context_zh_tw_includes_preferred_name_literal() -> None:
@@ -67,4 +68,4 @@ def test_llm_context_zh_tw_includes_preferred_name_literal() -> None:
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="zh-TW")
     assert "阿春" in ctx
-    assert "慣用稱呼" in ctx
+    assert "問候時可自然稱呼" in ctx

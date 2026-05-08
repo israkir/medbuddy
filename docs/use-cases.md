@@ -109,7 +109,7 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 |--|--|
 | **Scenario** | User asks for their saved medication list. |
 | **Examples** | 「我的藥清單」 · “What’s on my med list?” |
-| **Outcome** | List from **`UserDataPort.list_medications`** + i18n intro or empty state. **No** LLM compose for the list body. |
+| **Outcome** | List from **`UserDataPort.list_medications`** + i18n intro or empty state. **No** LLM compose for the list body. The reply uses **`format_patient_medication_context`**: placeholder dose/schedule shows as **`medication.unspecified`**, and if any row is incomplete, **`medication.list_hint_fill_dose_schedule`** is appended. Optional purpose tags and **`medication.list_education_cta`** may follow. |
 | **Errors** | Unusual failures → generic agent error message (`agent.generic_error`). |
 
 ---
@@ -133,7 +133,7 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 | **Scenario** | User adds a drug with dose/schedule in natural language. |
 | **Examples** | 「新增阿斯匹靈 100mg 每天飯後」 · `add aspirin 100mg after meals` |
 | **Outcome (save now)** | When the draft is **complete** and passes **`medication_draft_needs_add_confirmation`** guardrails: **`UserDataPort.add_medication`** → **`sync_and_enqueue_reminders`** → **`compose_medication_added_reply`** (or i18n **`medication.added`** fallback). Post-add, if **`needs_horizon_confirmation`**, a **`ReminderHorizonPending`** row may be set so the next message can supply “N days” without re-invoking add intent. |
-| **Outcome (confirm first)** | When dose/schedule is missing, unclear, or the utterance lacks evidence the user stated both dose and schedule: **`MedicationAddConfirmationPending`** is stored; user sees **`medication.add_confirm_prompt`**. Reply **yes** / **no** (or locale equivalents) is handled by **`try_resolve_pending_medication_add_confirmation`** before the next full turn. A **non** yes/no message **does not** clear pending—the normal agent answers (e.g. a drug question) and pending stays until resolved (**`medication.add_confirm_pending_reminder`** may append on later turns). |
+| **Outcome (confirm first)** | When dose/schedule is missing, unclear, or the utterance lacks evidence the user stated both dose and schedule: **`MedicationAddConfirmationPending`** is stored; user sees conversational **`medication.add_confirm_prompt`** (prose summary of draft fields, not a rigid bullet checklist). Reply **yes** / **no** (or locale equivalents) is handled by **`try_resolve_pending_medication_add_confirmation`** before the next full turn. A **non** yes/no message **does not** clear pending—the normal agent answers (e.g. a drug question) and pending stays until resolved (**`medication.add_confirm_pending_reminder`** may append on later turns). |
 | **Incomplete** | No drug name → **`MedicationExtractionError`** → **`medication.add_incomplete`**. |
 | **Side effect** | When Supabase + reminders are configured: **dose_events** sync / LINE push — [`reminders.md`](reminders.md). |
 
@@ -231,7 +231,7 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 |--|--|
 | **Scenario** | User wants to edit an existing medication entry (rename medication, change dosage/schedule, update or clear instructions) without deleting and recreating it. |
 | **Examples** | 「把阿斯匹靈改成 81mg」 · “update my metformin to twice daily” · “clear the notes on my blood pressure pill” |
-| **Outcome** | Resolve target row + patch fields via structured LLM extraction (`resolve_medication_update`) → `update_medication` persistence path → i18n confirmation. If target or patch is unclear, tool asks for clarification / returns a safe user-facing error. |
+| **Outcome** | Resolve target row + patch fields via structured LLM extraction (`resolve_medication_update`) → `update_medication` persistence path → i18n **`medication.updated`** when saved **instructions** are empty, else **`medication.updated_with_note`**; dose/schedule display uses **`medication.unspecified`** for placeholders. If **dosage** or **schedule** was patched, **`medication.update_reminder_followup`** is appended. If target or patch is unclear, tool asks for clarification / returns a safe user-facing error. |
 | **Dose events / reminders** | After a successful update, the reminder lifecycle sync runs: **future** `dose_events` (`scheduled_at > now`) for the user are deleted and regenerated from each medication's stored reminder metadata (`raw_metadata.reminder`), then new jobs are enqueued. Past/current events remain for adherence history. Updating free-text `schedule` changes displayed text in reminder payloads, but reminder timing follows `raw_metadata.reminder` fields (not `schedule` text alone). |
 
 ---

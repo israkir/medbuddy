@@ -494,7 +494,7 @@ Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equiva
 | `ListMedicationsTool` / `list_medications` | Load medication list → i18n formatted reply |
 | `ListUpcomingDosesTool` / `list_upcoming_doses` | Sync dose_events → list pending rows in local-time window (~7 days) → i18n formatted schedule |
 | `AddMedicationTool` / `add_medication` | LLM extract draft → persist → drug grounding → compose acknowledgment → reminder sync |
-| `UpdateMedicationTool` / `update_medication` | LLM resolve patch → update → i18n confirm → reminder sync |
+| `UpdateMedicationTool` / `update_medication` | LLM resolve patch → update → i18n **`medication.updated`** or **`medication.updated_with_note`** (by non-empty saved instructions) → optional **`medication.update_reminder_followup`** if dose/schedule changed → reminder sync |
 | `RemoveMedicationTool` / `remove_medication` | LLM resolve target → delete → i18n confirm → reminder sync |
 | `remove_all_medications` | Delete all medications + sync reminders |
 | `disable_reminders` | Bulk or single-med reminder disable + sync |
