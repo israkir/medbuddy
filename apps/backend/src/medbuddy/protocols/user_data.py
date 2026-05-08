@@ -29,7 +29,7 @@ class UserDataPort(Protocol):
         preferred_name: str,
         age_years: int | None,
         gender: str | None,
-        emergency_contact: str | None,
+        emergency_contacts: list[dict[str, Any]] | None,
         health_notes: str | None,
         timezone: str | None = None,
         locale: str = "zh-TW",

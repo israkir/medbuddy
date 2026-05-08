@@ -3255,6 +3255,23 @@ class: deep eng-proto
 
 class: deep eng-proto
 <div class="track-tag eng">ENG</div>
+<div class="eng-proto-strip">Prototype → MVP → Growth <span class="detail">One scorecard for architecture decisions, impact, and measurable proof</span></div>
+
+# Principles scorecard (speed + always-on reliability)
+
+| Lens | Key design choices | KPI proof | Current / target phase |
+|---|---|---|---|
+| **Response speed** | Go/Fiber runtime at MVP/Growth behind same ports; deterministic pipeline ordering; fast webhook ack | Assistant-turn latency **p95/p99**; webhook ack p95; queue lag/age | Prototype: p95 monitored · Growth target: p95 &lt; 3s / p99 &lt; 6s |
+| **Availability** | Multi-provider LLM adapter path; idempotent reminder delivery + reconcile replay | API uptime; reminder delivery success; replay coverage | Prototype: best effort + reconcile coverage · Growth: ≥99.5% uptime, ≥99% reminder delivery |
+| **Reliability** | Bounded retries, idempotent sends, and replay for overdue reminders | Reconcile recovery %, retry success %, duplicate-send rate | Prototype: replay path validated · Growth: error-budget driven operations |
+| **Optimization (supporting)** | Cache-first drug/session reads and bounded orchestration rounds | Cache hit rate; LLM calls per turn | Used to support speed/reliability outcomes |
+
+<div class="callout"><p><strong>Claim → evidence rule:</strong> every architecture claim maps to a KPI and an explicit fallback guardrail.</p></div>
+
+---
+
+class: deep eng-proto
+<div class="track-tag eng">ENG</div>
 <div class="eng-proto-strip">MVP &amp; Growth <span class="detail">Prototype stays Python/FastAPI — production server is Go + Fiber</span></div>
 
 # Server Economics: Prototype vs MVP/Growth
@@ -3286,6 +3303,8 @@ class: deep eng-proto
 - **Single binary deploy** — `go build` → one ~15 MB binary. No virtualenv, no pip install, no dependency resolution at container start.
 
 <div class="callout"><p><strong>The ports boundary absorbs the migration.</strong> Switching to Go for MVP means rewriting <code>routes/</code>, <code>main.go</code>, and the I/O adapters. The agent, tools, redaction pipeline, and drug-registry logic are unchanged.</p></div>
+
+<div class="callout"><p><strong>Response-speed takeaway:</strong> this migration improves latency under burst load while preserving behavior because the domain boundary does not change.</p></div>
 ]
 ]
 
@@ -3632,6 +3651,12 @@ class: deep eng-proto
 
 **MVP** optimises for *honest degradation + visibility*; **Growth** adds *automation, redundancy, and stricter SLOs* without rewriting the pipeline.
 
+**Prototype evidence:** idempotent reminder semantics + reconcile replay path validated in the current architecture.
+
+**MVP evidence:** queue depth, reminder delivery, and latency dashboards tracked per release.
+
+**Growth evidence:** SLO/error-budget review and automated burn alerts across tenants/regions.
+
 | Failure mode | MVP &amp; Taiwan Pilot | Growth |
 |---|---|---|
 | LLM provider outage | Two providers behind `LLMPort`; failover adapter; safe **compose-off** fallbacks when grounded context exists; manual cutover if needed | Circuit breakers + weighted routing; **semantic / prompt cache** to cut calls and shrink blast radius; per-tenant fallbacks as multi-market patterns diverge |
@@ -3651,11 +3676,11 @@ class: deep eng-proto
 
 # Observability roadmap
 
-**Prototype** — Structured logs across every pipeline layer, with raw user text excluded from INFO logs. Failures counted at each port (LLM, drug registry, LINE, voice) so gaps surface immediately in CI.
+**Prototype evidence** — Structured logs across every pipeline layer, with raw user text excluded from INFO logs. Failures counted at each port (LLM, drug registry, LINE, voice) so gaps surface immediately in CI.
 
-**MVP &amp; Pilot** — CloudWatch and X-Ray on the full request path: assistant-turn latency, intent mix, registry-grounding gaps, and LLM/voice errors all tracked. Reminder pipeline: queue depth, worker throughput, LINE push delivery, and the reconcile job are monitored separately. Dashboards cover p95 latency, weekly grounding-quality review, reminder delivery rate, and voice cost per turn.
+**MVP &amp; Pilot evidence** — CloudWatch and X-Ray on the full request path: assistant-turn latency, intent mix, registry-grounding gaps, and LLM/voice errors all tracked. Reminder pipeline: queue depth, worker throughput, LINE push delivery, and the reconcile job are monitored separately. Dashboards cover p95 latency, weekly grounding-quality review, reminder delivery rate, and voice cost per turn.
 
-**Growth** — Distributed tracing across the Tokyo region and all partner tenants. Per-tenant cost dashboards (LLM and voice) tracked in US$/MAU. Reliability targets reviewed weekly against SLOs; prompt and answer-content reviewed on a sampling cadence.
+**Growth evidence** — Distributed tracing across the Tokyo region and all partner tenants. Reliability targets reviewed weekly against SLOs and error budgets; prompt and answer-content reviewed on a sampling cadence.
 
 ---
 
@@ -3697,6 +3722,8 @@ class: deep
 | **Infra cost / month** | ~$150–250 | ~$2K–5K | ~$15K–30K |
 
 <div class="callout"><p><strong>Same cloud platform, same application code across all phases.</strong> Growing from MVP to Regional means resizing instances, enabling Multi-AZ, and adding tasks — <em>not</em> migrating platforms.</p></div>
+
+<div class="callout"><p><strong>Availability + speed takeaway:</strong> scaling is additive (replicas, Multi-AZ, queue workers), so latency and resilience improve without re-architecting the assistant pipeline.</p></div>
 
 .src[Pricing references: [AWS ECS Fargate pricing](https://aws.amazon.com/fargate/pricing/) · [AWS RDS pricing](https://aws.amazon.com/rds/pricing/) · [AWS ElastiCache pricing](https://aws.amazon.com/elasticache/pricing/) · [AWS SQS pricing](https://aws.amazon.com/sqs/pricing/). Cost estimates are internal projections — assumptions in [tdd-extended.md](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md).]
 

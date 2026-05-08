@@ -143,7 +143,22 @@ async def test_app_onboarding_saves_profile():
                     "preferred_name": "阿春",
                     "age_years": 68,
                     "gender": "female",
-                    "emergency_contact": "女兒 0922",
+                    "emergency_contacts": [
+                        {
+                            "contact_name": "小美",
+                            "relationship": "女兒",
+                            "channel_type": "phone",
+                            "channel_value": "0922000111",
+                            "is_primary": True,
+                        },
+                        {
+                            "contact_name": "阿明",
+                            "relationship": "兒子",
+                            "channel_type": "line",
+                            "channel_value": "aming_line",
+                            "is_primary": False,
+                        },
+                    ],
                     "health_notes": "對青黴素過敏",
                     "timezone": "Asia/Taipei",
                     "locale": "zh-TW",
@@ -158,6 +173,8 @@ async def test_app_onboarding_saves_profile():
     assert data["onboarding_completed_at"] is not None
     assert data["timezone"] == "Asia/Taipei"
     assert data["locale"] == "zh-TW"
+    assert len(data["emergency_contacts"]) == 2
+    assert data["emergency_contacts"][0]["channel_type"] == "phone"
 
     with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

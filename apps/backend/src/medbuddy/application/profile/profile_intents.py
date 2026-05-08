@@ -8,6 +8,7 @@ from medbuddy.protocols import ProfilePatch
 from medbuddy.llm.prompts.persona import gender_option_label, normalized_profile_gender
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 from medbuddy.core.timezone import normalize_timezone_patch
+from medbuddy.application.profile.emergency_contacts import normalize_emergency_contacts
 
 
 def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
@@ -20,10 +21,20 @@ def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
         age = patch["age_years"]
         if isinstance(age, int):
             parts.append(t("profile.ack_age", locale=locale, age=age))
-    if "emergency_contact" in patch:
-        c = patch["emergency_contact"]
-        if isinstance(c, str) and c.strip():
-            parts.append(t("profile.ack_contact", locale=locale, contact=c.strip()))
+    if "emergency_contacts" in patch:
+        contacts = normalize_emergency_contacts(patch.get("emergency_contacts"))
+        if contacts:
+            first = contacts[0]
+            hint = f"{first.get('relationship') or ''} {first.get('channel_value') or ''}".strip()
+            if hint:
+                parts.append(
+                    t(
+                        "profile.ack_contacts_count",
+                        locale=locale,
+                        count=len(contacts),
+                        contact=hint,
+                    )
+                )
     if "health_notes" in patch:
         n = patch["health_notes"]
         if isinstance(n, str) and n.strip():
@@ -73,6 +84,12 @@ def _normalize_profile_patch(patch: ProfilePatch) -> ProfilePatch:
                 out.pop("timezone", None)
             else:
                 out["timezone"] = norm_tz
+    if "emergency_contacts" in out:
+        normalized_contacts = normalize_emergency_contacts(out["emergency_contacts"])
+        if normalized_contacts:
+            out["emergency_contacts"] = normalized_contacts
+        else:
+            out.pop("emergency_contacts", None)
     return out
 
 

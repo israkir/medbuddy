@@ -135,6 +135,17 @@ agents/          (per-port files)     (concrete or mock)
 
 **Rationale:** Keeps early pilot measurement tractable while still allowing real users to use voice in LINE and HTTP where enabled.
 
+### 2.6 Engineering principles matrix (performance, availability, optimization, speed)
+
+Use this matrix when evaluating architecture changes. Every significant design change should map to at least one row and keep the corresponding metric/guardrail intact.
+
+| Principle | Decision | Impact | Metric | Guardrail |
+|---|---|---|---|---|
+| **Performance by boundary** | Runtime/framework changes happen at adapters (`channels/*`, infra wiring), not in domain or tool contracts. | Higher throughput and lower latency without logic drift. | Assistant-turn p95/p99, cold-start time, req/s under representative load. | Keep ports and use-case signatures stable so rollback is adapter-only. |
+| **Availability by degradation** | Redundant providers where possible; idempotent reminder delivery; reconcile job for unsent due events. | Service continues in degraded-but-honest mode during dependency failures. | API uptime, reminder delivery success %, backlog age, replay success %. | Fixed safety replies, bounded retries, and no duplicate sends (`reminder_sent_at` semantics). |
+| **Optimization by decomposition** | Sync chat path remains thin; heavy/temporal work goes through queue workers and caches. | Lower tail latency and lower unit cost per turn. | Cache hit %, LLM calls per turn, worker throughput, US$/MAU. | TTL limits, fallback when cache miss, and queue depth alarms before saturation. |
+| **Speed by deterministic flow** | Single turn runner for all channels; pending/emergency gates execute before orchestration loop. | Fast acknowledgements and predictable response behavior. | Webhook ack p95, early-exit rate, orchestration round count distribution. | No channel-specific bypass of redaction/safety/persistence ordering. |
+
 ---
 
 ## 3. Backend component map
@@ -1315,14 +1326,32 @@ Use cases:
 
 These are best-effort targets for the prototype — not contractual SLAs.
 
-| Attribute | Target | Notes |
-|-----------|--------|-------|
-| **Assistant turn latency (p90)** | < 5s | Routing classify + **`complete_chat_with_tools`** rounds + tool handlers |
-| **Reminder delivery lag** | < 5 min from `scheduled_at` | Under normal conditions with arq worker running |
-| **Reconcile coverage** | 100% of overdue reminders re-enqueued within 60 min | Assuming 15–60 min cron frequency |
-| **Availability** | Best effort; no SLA | Render web service with health check restart |
-| **Data durability** | Supabase managed Postgres backup | Row-level data not stored outside Supabase |
-| **Test suite** | 100% pass rate required for any merge to `main` | CI gate |
+### 17.1 Core KPI set (shared with docs deck)
+
+| Attribute group | Prototype target | MVP/Growth direction | Where measured |
+|-----------|--------|-------|---|
+| **Performance** | Assistant-turn latency p90 < 5s (p95 monitored) | p95 < 3s and p99 < 6s at Growth target load | API traces + request timing dashboards |
+| **Speed** | LINE webhook ack remains fast; reminder send lag < 5 min from `scheduled_at` in healthy conditions | Maintain fast ack under burst; queue lag autoscaled by depth/age | Edge request logs + queue depth/age metrics |
+| **Availability** | Best effort uptime; reconcile coverage = 100% of overdue reminders re-enqueued within 60 min | SLO-based operation with explicit error budgets and burn alerts | Health checks, SLO dashboards, reconcile replay logs |
+| **Optimization** | Cache-assisted drug lookups and bounded orchestrator rounds to limit cost | Improve cache hit %, reduce LLM calls per turn, track US$/MAU | Cache telemetry + LLM usage/cost dashboards |
+| **Durability / correctness** | Supabase/Postgres managed backups; idempotent reminder sends | Multi-AZ/replication by phase and stronger replay controls | DB backup posture + idempotency/retry event logs |
+| **Testability gate** | 100% pass rate required for any merge to `main` | Keep CI gate plus representative load checks | CI status + pre-release perf checks |
+
+### 17.2 Decision -> impact -> metric -> guardrail checklist
+
+Apply this checklist to major architecture changes:
+
+1. **Decision:** what is changing (pipeline, adapter, queue, cache, provider route).
+2. **Impact:** which of performance/availability/optimization/speed is expected to improve.
+3. **Metric:** which KPI must move (and by how much) to call the change successful.
+4. **Guardrail:** fallback/degradation rule if the new path fails.
+
+### 17.3 Prototype instrumentation minimum
+
+- Latency and error counters for `interpret_user_turn` and orchestrator rounds.
+- Queue depth, queue age, and worker throughput for reminder paths.
+- Fallback reason codes (provider failover, model-only drug fallback, reconcile replay).
+- Cost counters split by model/provider to support US$/MAU tracking.
 
 ---
 

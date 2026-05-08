@@ -17,6 +17,9 @@ from medbuddy.models.domain import (
 )
 from medbuddy.core.locale import effective_user_locale, normalize_locale_patch
 from medbuddy.core.timezone import effective_user_timezone, normalize_timezone_patch
+from medbuddy.application.profile.emergency_contacts import (
+    normalize_emergency_contacts,
+)
 
 if TYPE_CHECKING:
     pass
@@ -36,13 +39,14 @@ def _parse_ts(value: object) -> datetime:
 
 
 def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
+    contacts = normalize_emergency_contacts(row.get("emergency_contacts"))
     return {
         "id": str(row["id"]),
         "line_user_id": row["external_user_id"],
         "preferred_name": row.get("preferred_name"),
         "age_years": row.get("age_years"),
         "gender": row.get("gender"),
-        "emergency_contact": row.get("emergency_contact"),
+        "emergency_contacts": contacts,
         "health_notes": row.get("health_notes"),
         "onboarding_completed_at": row.get("onboarding_completed_at"),
         "timezone": row.get("timezone") or "Asia/Taipei",
@@ -102,7 +106,7 @@ class SupabaseProfileMixin:
                 self._client.table("patients")
                 .select(
                     "id, external_user_id, preferred_name, age_years, gender, "
-                    "emergency_contact, health_notes, onboarding_completed_at, timezone, locale"
+                    "health_notes, onboarding_completed_at, timezone, locale"
                 )
                 .eq("external_user_id", external_user_id)
                 .limit(1)
@@ -111,7 +115,61 @@ class SupabaseProfileMixin:
 
         resp = await _run_q(q)
         rows = resp.data or []
-        return rows[0] if rows else None
+        if not rows:
+            return None
+        row = dict(rows[0])
+        row["emergency_contacts"] = await self._list_emergency_contacts(str(row["id"]))
+        return row
+
+    async def _list_emergency_contacts(self, patient_id: str) -> list[dict[str, Any]]:
+        def q() -> Any:
+            return (
+                self._client.table("emergency_contacts")
+                .select(
+                    "id, contact_name, relationship, channel_type, channel_value, "
+                    "is_primary, notes, source, created_at, updated_at"
+                )
+                .eq("patient_id", patient_id)
+                .order("is_primary", desc=True)
+                .order("created_at", desc=False)
+                .execute()
+            )
+
+        rows = (await _run_q(q)).data or []
+        return normalize_emergency_contacts(rows)
+
+    async def _replace_emergency_contacts(
+        self, patient_id: str, contacts: list[dict[str, str | bool]]
+    ) -> None:
+        def delete_old() -> Any:
+            return (
+                self._client.table("emergency_contacts")
+                .delete()
+                .eq("patient_id", patient_id)
+                .execute()
+            )
+
+        await _run_q(delete_old)
+        if not contacts:
+            return
+        payload = [
+            {
+                "patient_id": patient_id,
+                "contact_name": c.get("contact_name"),
+                "relationship": c.get("relationship"),
+                "channel_type": c.get("channel_type"),
+                "channel_value": c.get("channel_value"),
+                "is_primary": bool(c.get("is_primary", False)),
+                "notes": c.get("notes"),
+                "source": "user",
+            }
+            for c in contacts
+        ]
+
+        def insert_new() -> Any:
+            return self._client.table("emergency_contacts").insert(payload).execute()
+
+        await _run_q(insert_new)
 
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]:
         row = await self._select_user_row(line_user_id)
@@ -153,7 +211,7 @@ class SupabaseProfileMixin:
         preferred_name: str,
         age_years: int | None,
         gender: str | None,
-        emergency_contact: str | None,
+        emergency_contacts: list[dict[str, Any]] | None,
         health_notes: str | None,
         timezone: str | None = None,
         locale: str = "zh-TW",
@@ -165,17 +223,19 @@ class SupabaseProfileMixin:
             "preferred_name": preferred_name.strip(),
             "age_years": age_years,
             "gender": gender,
-            "emergency_contact": (emergency_contact or "").strip() or None,
             "health_notes": (health_notes or "").strip() or None,
             "onboarding_completed_at": now.isoformat(),
             "timezone": effective_user_timezone(timezone),
             "locale": effective_user_locale(locale),
         }
+        contacts = normalize_emergency_contacts(emergency_contacts or [])
 
         def upd() -> Any:
             return self._client.table("patients").update(payload).eq("id", uid).execute()
 
         await _run_q(upd)
+        if contacts:
+            await self._replace_emergency_contacts(uid, contacts)
         log.info("DB users.save_onboarding_profile: patient_id=%s updated", uid)
         row = await self._select_user_row(line_user_id)
         if not row:
@@ -210,7 +270,7 @@ class SupabaseProfileMixin:
                 allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
                 if g in allowed:
                     payload["gender"] = g
-        for key in ("emergency_contact", "health_notes"):
+        for key in ("health_notes",):
             if key in fields:
                 raw = fields[key]
                 if raw is None:
@@ -227,8 +287,12 @@ class SupabaseProfileMixin:
             norm_loc = normalize_locale_patch(fields["locale"])
             if norm_loc is not None:
                 payload["locale"] = norm_loc
+        if "emergency_contacts" in fields:
+            contacts = normalize_emergency_contacts(fields["emergency_contacts"])
+            await self._replace_emergency_contacts(uid, contacts)
         if not payload:
-            return user
+            row = await self._select_user_row(line_user_id)
+            return _user_row_to_dict(row) if row else user
 
         def upd() -> Any:
             return self._client.table("patients").update(payload).eq("id", uid).execute()

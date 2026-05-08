@@ -243,6 +243,34 @@ flowchart LR
 
 ---
 
+## 9. Engineering principles for performance and reliability
+
+This section turns architecture decisions into measurable non-functional outcomes. We use one repeated template: **Decision -> Impact -> Metric -> Guardrail**.
+
+| Principle | Decision | Impact focus | Primary metrics | Guardrail |
+|---|---|---|---|---|
+| **Performance by boundary** | Keep domain logic stable behind ports/adapters; optimize runtime adapters (FastAPI prototype to Go/Fiber MVP/Growth). | **Performance**, **Speed** | API latency p95/p99 by phase; cold-start time; throughput headroom | Keep channel contracts and core pipeline unchanged during runtime migration; roll back by adapter. |
+| **Availability by graceful degradation** | Use provider failover, idempotent reminders, and reconcile jobs instead of hard dependency on one path. | **Availability**, **Reliability** | API uptime; reminder delivery success; queue lag / backlog age | Safe fixed replies and model-only fallback when grounded data is unavailable; replay undelivered jobs. |
+| **Response-speed under burst load** | Separate chat from reminder delivery with queue workers; keep chat path thin during reminder spikes. | **Speed**, **Performance** | Webhook ack latency; assistant-turn p95; queue lag | Autoscale workers and protect chat latency when reminder volume spikes. |
+| **Always-on deterministic pipeline** | One conversation path for LINE/API/voice-text; early exits for pending states and emergency handling before full orchestration. | **Speed**, **Availability**, **Reliability** | Webhook ack latency; assistant-turn p95; early-exit rate; error-budget burn | No channel-specific bypasses for safety, redaction, or persistence ordering. |
+
+### 9.1 KPI set used across docs and deck
+
+- **Latency:** assistant-turn p95/p99 and LINE webhook ack time.
+- **Delivery:** reminder success rate and scheduled-to-sent lag.
+- **Availability:** API uptime by phase and error-budget/SLO burn.
+- **Reliability:** reminder delivery success, queue lag/age, and reconcile recovery coverage.
+- **Degradation quality:** fallback-path usage rate and reconcile recovery coverage.
+
+### 9.2 Evidence map (where we prove claims)
+
+- **CloudWatch / X-Ray:** end-to-end latency, dependency errors, trace outliers.
+- **Queue and worker metrics:** backlog depth, age, retry rate, dead-letter events.
+- **Application logs:** grounding gaps, fallback reason codes, reconcile replay counts.
+- **Cost dashboards:** per-tenant/per-phase spend split (LLM, voice, compute, queue).
+
+---
+
 ## Further reading
 
 [tdd-extended.md](https://github.com/israkir/medbuddy/tree/main/docs/tdd-extended.md) · [reminders.md](https://github.com/israkir/medbuddy/tree/main/docs/reminders.md) · [privacy.md](https://github.com/israkir/medbuddy/tree/main/docs/privacy.md) · [llm-context.md](https://github.com/israkir/medbuddy/tree/main/docs/llm-context.md) · [use-cases.md](https://github.com/israkir/medbuddy/tree/main/docs/use-cases.md)

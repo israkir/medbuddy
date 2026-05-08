@@ -62,7 +62,17 @@ async def test_simulate_notify_sets_metadata_flag() -> None:
     await svc.users.get_or_create_user(key)
     await svc.users.patch_user_profile(
         key,
-        {"locale": "en", "emergency_contact": "daughter 0912345678"},
+        {
+            "locale": "en",
+            "emergency_contacts": [
+                {
+                    "relationship": "daughter",
+                    "channel_type": "phone",
+                    "channel_value": "0912345678",
+                    "is_primary": True,
+                }
+            ],
+        },
     )
 
     llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale="en")

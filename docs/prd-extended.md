@@ -247,6 +247,24 @@ Full technical implementation details are in [`tdd-extended.md`](tdd-extended.md
 | N-6 | **Latency** | Text replies target under 5 seconds for typical inputs. Best-effort for the prototype; no SLA commitment |
 | N-7 | **Expectations** | This is a prototype suitable for small controlled pilots only. No uptime or performance guarantees |
 
+### 8.1 Non-functional posture (response speed + always-on reliability)
+
+To keep product and engineering aligned, architecture decisions are evaluated with response speed and always-on service reliability as first-priority outcomes:
+
+| Lens | Product expectation | KPI used |
+|---|---|---|
+| **Response speed** | Answers stay fast at normal and peak traffic. | Assistant-turn latency (p95/p99), webhook ack latency, queue lag/age. |
+| **Availability** | Core chat + reminder paths stay reachable during dependency issues. | API uptime, reminder delivery success %, SLO burn rate. |
+| **Reliability** | Failures recover automatically without duplicate or dropped reminders. | Reconcile recovery coverage, retry success %, idempotency error rate. |
+| **Optimization (supporting)** | Efficiency work supports speed/reliability but does not replace them as goals. | Cache hit rate, LLM calls per turn (diagnostic). |
+
+Decision reviews and pilot retrospectives should record all four fields for major changes:
+
+1. **Decision** — what architecture or product behavior changed.
+2. **Impact** — which lens is expected to improve.
+3. **Metric** — what measurable KPI confirms improvement.
+4. **Guardrail** — fallback/degradation behavior when dependencies fail.
+
 ---
 
 ## 9. Out of scope
