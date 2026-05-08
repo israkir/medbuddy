@@ -22,119 +22,17 @@ from medbuddy.models.domain import (
     ReminderHorizonPending,
 )
 from medbuddy.privacy.redact import redact_pii_text
-from medbuddy.agents.tools.interaction_check import format_interaction_reply
+from medbuddy.application.drug_grounding import (
+    education_lines_for_medication,
+    fetch_drug_grounding_text,
+    purpose_from_grounding,
+)
 from medbuddy.application.patient_llm_context import patient_context_for_llm
+from medbuddy.application.post_add_medication_reply import build_post_add_patient_reply
 from medbuddy.llm.prompts.persona import format_patient_medication_context
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
 log = logging.getLogger(__name__)
-
-
-async def _append_post_add_interaction_scan(
-    svc: AppServices,
-    *,
-    reply: str,
-    meds_updated: list[MedicationRecord],
-    saved: MedicationRecord,
-    patient_ctx: str,
-    drug_grounding: str | None,
-    locale: str,
-) -> str:
-    """Run structured interaction analysis when the list has 2+ meds (new drug vs existing)."""
-    if len(meds_updated) < 2:
-        return reply
-    checker = getattr(svc.llm, "check_interactions_structured", None)
-    if not callable(checker):
-        return reply
-    ix_query = t(
-        "medication.post_add_interaction_user_query",
-        locale=locale,
-        name=saved.name,
-    )
-    try:
-        ix_result = await checker(
-            user_message=ix_query,
-            medications=meds_updated,
-            patient_context=patient_ctx,
-            drug_grounding=drug_grounding,
-            locale=locale,
-        )
-    except Exception:
-        log.exception("add_medication: post-add interaction scan failed")
-        return reply
-    bridge = t("medication.post_add_interaction_bridge", locale=locale)
-    ix_text = format_interaction_reply(ix_result, locale=locale)
-    return f"{reply}\n\n{bridge}\n{ix_text}"
-
-
-async def _drug_grounding_text(svc: AppServices, drug_name: str) -> str | None:
-    """Fetch combined TFDA + OpenFDA grounding text for a drug name."""
-    q = drug_name.strip()
-    if not q:
-        return None
-    parts: list[str] = []
-    try:
-        tfda = await svc.drugs.fetch_tfda_snippet(q)
-        if tfda:
-            parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
-    except Exception:
-        log.debug("medication_crud: TFDA lookup failed query_len=%d", len(q))
-    try:
-        ofda = await svc.drugs.fetch_openfda_label_snippet(q)
-        if ofda:
-            parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
-    except Exception:
-        log.debug("medication_crud: OpenFDA lookup failed query_len=%d", len(q))
-    return "\n\n".join(parts) if parts else None
-
-
-def _purpose_from_grounding(grounding: str | None) -> str | None:
-    """Best-effort one-liner from grounding text for quick education cues."""
-    if not grounding:
-        return None
-    for raw in grounding.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        lowered = line.lower()
-        if lowered.startswith("tfda(") or lowered.startswith("openfda("):
-            continue
-        for sep in (":", "："):
-            if sep in line:
-                _, tail = line.split(sep, 1)
-                line = tail.strip()
-                break
-        if not line:
-            continue
-        trimmed = line[:140].rstrip(".,;: ")
-        return trimmed
-    return None
-
-
-def _education_lines_for_medication(
-    *,
-    locale: str,
-    medication_name: str,
-    purpose: str | None,
-) -> tuple[list[str], bool]:
-    if purpose:
-        lines = [
-            t(
-                "medication.education_purpose_line",
-                locale=locale,
-                name=medication_name,
-                purpose=purpose,
-            ),
-            t("medication.education_deep_dive_cta", locale=locale),
-            t("medication.education_boundary", locale=locale),
-        ]
-        return lines, True
-    lines = [
-        t("medication.education_uncertain_line", locale=locale, name=medication_name),
-        t("medication.education_deep_dive_cta", locale=locale),
-        t("medication.education_boundary", locale=locale),
-    ]
-    return lines, False
 
 
 async def persist_medication_add_from_draft(
@@ -175,57 +73,24 @@ async def persist_medication_add_from_draft(
         sync_dose_events_first=False,
         include_health_notes=True,
     )
-    drug_grounding = await _drug_grounding_text(svc, saved.name)
+    drug_grounding = await fetch_drug_grounding_text(svc, saved.name)
 
-    purpose: str | None = _purpose_from_grounding(drug_grounding)
-    try:
-        reply = await svc.llm.compose_medication_added_reply(
-            patient_context=patient_ctx,
-            drug_grounding=drug_grounding,
-            saved=saved,
-            user_message=safe_text,
-            locale=locale,
-        )
-    except Exception:
-        log.exception("add_medication: compose_medication_added_reply failed; using fallback")
-        un = t("medication.unspecified", locale=locale)
-        reply = t(
-            "medication.added",
-            locale=locale,
-            name=saved.name,
-            dosage=dose_or_schedule_display(saved.dosage, unspecified_label=un),
-            schedule=dose_or_schedule_display(saved.schedule, unspecified_label=un),
-        )
-    reply = await _append_post_add_interaction_scan(
+    reply, metadata = await build_post_add_patient_reply(
         svc,
-        reply=reply,
-        meds_updated=meds_updated,
         saved=saved,
-        patient_ctx=patient_ctx,
+        meds_updated=meds_updated,
+        patient_context=patient_ctx,
         drug_grounding=drug_grounding,
+        user_message=safe_text,
         locale=locale,
     )
-    education_lines, grounded = _education_lines_for_medication(
-        locale=locale,
-        medication_name=saved.name,
-        purpose=purpose,
-    )
-    reply = f"{reply}\n" + "\n".join(education_lines)
     log.info(
         "add_medication: user_key=%s med_id=%s name_len=%d (from_draft)",
         user_key,
         saved.id,
         len(saved.name or ""),
     )
-    return ToolResult(
-        reply=reply,
-        structured=saved,
-        metadata={
-            "education_cue_shown": "add",
-            "education_grounding_available": grounded,
-            "education_fallback_uncertain": not grounded,
-        },
-    )
+    return ToolResult(reply=reply, structured=saved, metadata=metadata)
 
 
 class ListMedicationsTool:
@@ -247,8 +112,8 @@ class ListMedicationsTool:
         body = format_patient_medication_context(medications, locale=locale)
         purpose_tags: list[str] = []
         for med in medications[:2]:
-            grounding = await _drug_grounding_text(svc, med.name)
-            purpose = _purpose_from_grounding(grounding)
+            grounding = await fetch_drug_grounding_text(svc, med.name)
+            purpose = purpose_from_grounding(grounding)
             if purpose:
                 purpose_tags.append(
                     t(
@@ -451,9 +316,9 @@ class UpdateMedicationTool:
         grounded = False
         uncertain = False
         if material_change:
-            grounding = await _drug_grounding_text(svc, updated.name)
-            purpose = _purpose_from_grounding(grounding)
-            education_lines, grounded = _education_lines_for_medication(
+            grounding = await fetch_drug_grounding_text(svc, updated.name)
+            purpose = purpose_from_grounding(grounding)
+            education_lines, grounded = education_lines_for_medication(
                 locale=locale,
                 medication_name=updated.name,
                 purpose=purpose,

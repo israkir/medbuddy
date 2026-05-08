@@ -492,11 +492,12 @@ class GeminiLLM(LLMPort):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        companion_task_key: str = "medication_added_companion",
     ) -> str:
         loc = locale or self._locale
         lang_lock = language_lock(loc)
         persona = get_system_persona(locale=loc)
-        task = t("llm.medication_added_companion", locale=loc)
+        task = t(f"llm.{companion_task_key}", locale=loc)
         drug = drug_grounding or t("llm.no_drug_data", locale=loc)
         un = t("medication.unspecified", locale=loc)
         facts = t(
@@ -542,11 +543,83 @@ class GeminiLLM(LLMPort):
             saved=saved,
             user_message=user_message,
             locale=loc,
+            companion_task_key="medication_added_companion",
+        )
+
+    async def compose_medication_added_primary(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str:
+        loc = locale or self._locale
+        return await asyncio.to_thread(
+            self._compose_medication_added_sync,
+            patient_context=patient_context,
+            drug_grounding=drug_grounding,
+            saved=saved,
+            user_message=user_message,
+            locale=loc,
+            companion_task_key="medication_added_primary_before_crosscheck",
         )
 
     # ------------------------------------------------------------------
     # NEW — structured drug interaction check
     # ------------------------------------------------------------------
+
+    def _interaction_analysis_prompt(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+        post_add_continuation: bool,
+    ) -> str:
+        loc = locale or self._locale
+        lang_lock = language_lock(loc)
+        un = t("medication.unspecified", locale=loc)
+        med_list = "\n".join(
+            f"- {m.name} {dose_or_schedule_display(m.dosage, unspecified_label=un)} "
+            f"({dose_or_schedule_display(m.schedule, unspecified_label=un)})"
+            for m in medications
+        )
+        grounding = drug_grounding or t("llm.no_drug_data", locale=loc)
+        persona = get_system_persona(locale=loc)
+        task_block = (
+            f"{t('llm.post_add_interaction_crosscheck_task', locale=loc)}\n\n"
+            f"{t('llm.interaction_structured_output_note', locale=loc)}\n\n"
+            if post_add_continuation
+            else (
+                f"{t('llm.medication_companion_interactions', locale=loc)}\n\n"
+                f"{t('llm.interaction_structured_output_note', locale=loc)}\n\n"
+            )
+        )
+        tail = (
+            ""
+            if post_add_continuation
+            else (
+                "Analyse all potential drug-drug and drug-condition interactions for this patient. "
+                "Be conservative — flag anything clinically relevant, including moderate risks. "
+                "Use the patient's actual medication list. "
+                "Always include a disclaimer that the patient should consult their doctor."
+            )
+        )
+        return (
+            f"{lang_lock}\n\n"
+            f"{persona}\n\n"
+            f"{task_block}"
+            f"Patient context:\n{patient_context}\n\n"
+            f"Current medications:\n{med_list}\n\n"
+            f"Drug reference data:\n{grounding}\n\n"
+            f"User question: {user_message}\n\n"
+            f"{tail}"
+            f"{lang_lock}"
+        )
 
     def _check_interactions_sync(
         self,
@@ -558,28 +631,13 @@ class GeminiLLM(LLMPort):
         locale: str,
     ) -> InteractionCheckResult:
         loc = locale or self._locale
-        lang_lock = language_lock(loc)
-        un = t("medication.unspecified", locale=loc)
-        med_list = "\n".join(
-            f"- {m.name} {dose_or_schedule_display(m.dosage, unspecified_label=un)} "
-            f"({dose_or_schedule_display(m.schedule, unspecified_label=un)})"
-            for m in medications
-        )
-        grounding = drug_grounding or t("llm.no_drug_data", locale=loc)
-        persona = get_system_persona(locale=loc)
-        prompt = (
-            f"{lang_lock}\n\n"
-            f"{persona}\n\n"
-            f"{t('llm.medication_companion_interactions', locale=loc)}\n\n"
-            f"{t('llm.interaction_structured_output_note', locale=loc)}\n\n"
-            f"Patient context:\n{patient_context}\n\n"
-            f"Current medications:\n{med_list}\n\n"
-            f"Drug reference data:\n{grounding}\n\n"
-            f"User question: {user_message}\n\n"
-            "Analyse all potential drug-drug and drug-condition interactions for this patient. "
-            "Be conservative — flag anything clinically relevant, including moderate risks. "
-            "Use the patient's actual medication list. "
-            "Always include a disclaimer that the patient should consult their doctor."
+        prompt = self._interaction_analysis_prompt(
+            user_message=user_message,
+            medications=medications,
+            patient_context=patient_context,
+            drug_grounding=drug_grounding,
+            locale=loc,
+            post_add_continuation=False,
         )
         return self._generate_structured_sync(self._chat_model, prompt, InteractionCheckResult)
 
@@ -595,6 +653,46 @@ class GeminiLLM(LLMPort):
         loc = locale or self._locale
         result = await asyncio.to_thread(
             self._check_interactions_sync,
+            user_message=user_message,
+            medications=medications,
+            patient_context=patient_context,
+            drug_grounding=drug_grounding,
+            locale=loc,
+        )
+        return InteractionResult(query=user_message, result=result)
+
+    def _post_add_interaction_crosscheck_sync(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+    ) -> InteractionCheckResult:
+        loc = locale or self._locale
+        prompt = self._interaction_analysis_prompt(
+            user_message=user_message,
+            medications=medications,
+            patient_context=patient_context,
+            drug_grounding=drug_grounding,
+            locale=loc,
+            post_add_continuation=True,
+        )
+        return self._generate_structured_sync(self._chat_model, prompt, InteractionCheckResult)
+
+    async def post_add_interaction_crosscheck(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+    ) -> InteractionResult:
+        loc = locale or self._locale
+        result = await asyncio.to_thread(
+            self._post_add_interaction_crosscheck_sync,
             user_message=user_message,
             medications=medications,
             patient_context=patient_context,

@@ -99,6 +99,7 @@ class MockLLM(LLMPort):
         self._orchestrator_tools_step1 = orchestrator_tools_step1
         self.last_interpret_user_turn_input: str | None = None
         self.last_health_issue_events_block: str | None = None
+        self.last_interaction_call_kind: str | None = None
         self._orch_step = 0
 
     @property
@@ -199,6 +200,25 @@ class MockLLM(LLMPort):
             drug_summary=summary,
         )
 
+    async def compose_medication_added_primary(
+        self,
+        *,
+        patient_context: str,
+        drug_grounding: str | None,
+        saved: MedicationRecord,
+        user_message: str,
+        locale: str,
+    ) -> str:
+        await asyncio.sleep(0)
+        _ = (patient_context, user_message, drug_grounding)
+        return t(
+            "mocks.llm.medication_added_primary",
+            locale=locale,
+            name=saved.name,
+            dosage=saved.dosage,
+            schedule=saved.schedule,
+        )
+
     async def resolve_medication_update(
         self,
         user_text: str,
@@ -225,6 +245,28 @@ class MockLLM(LLMPort):
         locale: str,
     ) -> InteractionResult:
         await asyncio.sleep(0)
+        self.last_interaction_call_kind = "chat"
+        med_names = [m.name for m in medications]
+        result = InteractionCheckResult(
+            medications_checked=med_names,
+            interactions=[],
+            overall_severity="none",
+            summary=t("mocks.llm.reply_template", locale=locale).format(user_message=user_message),
+            disclaimer=t("mocks.llm.interaction_disclaimer", locale=locale),
+        )
+        return InteractionResult(query=user_message, result=result)
+
+    async def post_add_interaction_crosscheck(
+        self,
+        *,
+        user_message: str,
+        medications: list[MedicationRecord],
+        patient_context: str,
+        drug_grounding: str | None,
+        locale: str,
+    ) -> InteractionResult:
+        await asyncio.sleep(0)
+        self.last_interaction_call_kind = "post_add"
         med_names = [m.name for m in medications]
         result = InteractionCheckResult(
             medications_checked=med_names,
