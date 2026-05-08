@@ -9,6 +9,7 @@ def build_agent_system_prompt(
     medication_catalog_json: str,
     patient_context_block: str,
     prior_turn_count: int = 0,
+    extra_instructions: str | None = None,
 ) -> str:
     """Locale hints reply language; catalog lists ids for remove/update tools."""
     lang_note = (
@@ -23,6 +24,8 @@ def build_agent_system_prompt(
             'for context—use them for short follow-ups (e.g. yes/no, "that one", "same as before", '
             "「同上」, pronouns), disambiguation, and continuity. Do not ignore them when choosing tools.\n"
         )
+    extra = (extra_instructions or "").strip()
+    extra_block = f"\n{extra}\n" if extra else ""
     return f"""You are MedBuddy's medication assistant. Users write in English OR Chinese (Traditional/Simplified)
 — interpret intent flexibly and call the right tools. {lang_note}{prior_note}
 Life-threatening emergencies (chest pain, can't breathe, stroke signs, severe allergic reaction, unconsciousness):
@@ -64,4 +67,4 @@ For **add_medication**, still call the tool when the latest user line is a short
 after you offered to add or reschedule a reminder — the server passes recent thread text into extraction
 so the drug name and reminder timing can be taken from prior turns.
 
-"""
+{extra_block}"""

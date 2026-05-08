@@ -86,6 +86,11 @@ def _normalize_profile_patch(patch: ProfilePatch) -> ProfilePatch:
     return out
 
 
+def normalize_profile_patch_for_storage(patch: ProfilePatch) -> ProfilePatch:
+    """Normalize locale, timezone, and contacts before persisting a raw extraction."""
+    return _normalize_profile_patch(patch)
+
+
 async def apply_profile_update_from_extracted_patch(
     svc: AppServices,
     *,

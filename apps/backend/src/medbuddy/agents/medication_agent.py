@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from medbuddy.agents.orchestrator import run_tool_agent_loop
+from medbuddy.application.profile.profile_intents import normalize_profile_patch_for_storage
+from medbuddy.llm.agent_tool_definitions import agent_tools_openai_omit
 from medbuddy.application.health_events.health_issue_event_log import maybe_record_health_issue_turn
 from medbuddy.application.pending.dose_clarification_resolve import (
     try_resolve_pending_dose_clarification,
@@ -206,6 +208,17 @@ class MedicationAgent:
         user_row = await svc.users.get_or_create_user(user_key)
         medications = await svc.users.list_medications(user_key)
 
+        loop_tools = None
+        system_suffix = None
+        if intent == Intent.UPDATE_PROFILE:
+            raw_patch = await svc.llm.extract_profile_patch(user_text, locale=locale)
+            profile_patch = normalize_profile_patch_for_storage(raw_patch)
+            if profile_patch:
+                await svc.users.patch_user_profile(user_key, profile_patch)
+                user_row = await svc.users.get_or_create_user(user_key)
+                loop_tools = agent_tools_openai_omit("update_profile")
+                system_suffix = t("agent.orchestrator_profile_saved_hint", locale=locale)
+
         orch = await run_tool_agent_loop(
             svc,
             user_key=user_key,
@@ -217,6 +230,9 @@ class MedicationAgent:
             locale=locale,
             llm=svc.llm,
             max_prior_turns=svc.settings.agent_orchestrator_history_turns,
+            interpretation=interpretation,
+            tools=loop_tools,
+            system_prompt_suffix=system_suffix,
         )
         reply = await _maybe_append_pending_reminder(
             svc, user_key=user_key, reply=orch.reply, locale=locale
