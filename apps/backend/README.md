@@ -193,7 +193,7 @@ Billing must be enabled on the project for production use of these APIs.
 
 ## Localization
 
-- **Backend:** JSON under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); server default via `MEDBUDDY_LOCALE` / `.env` (see `apps/backend/.env.example`).
+- **Backend:** JSON under `apps/backend/src/medbuddy/locales/` (`zh-TW`, `en`); server default via `MEDBUDDY_LOCALE` / `.env` (see `apps/backend/.env.example`). Patient-visible tool fallbacks include split medication-update strings (**`medication.updated`** vs **`medication.updated_with_note`**) so empty notes do not read as a dangling “Notes:” line; unknown dose/schedule placeholders use **`medication.unspecified`** (and `medication_draft_build` treats those labels as placeholders when stored).
 - **Frontend:** `i18next` + JSON under `apps/frontend/locales/`.
 
 Adding a language: add matching `*.json` in both trees and register in backend settings/loaders and `apps/frontend/i18n/index.ts` (details in the per-app READMEs).

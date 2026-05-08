@@ -301,16 +301,16 @@ class GeminiLLM(LLMPort):
     ) -> str:
         hist_lines = "\n".join(f"{turn.role}: {turn.content}" for turn in history)
         loc = locale or self._locale
-        drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        drug = drug_grounding or t("llm.no_drug_data", locale=loc)
         lang_lock = language_lock(loc)
         prompt = (
             f"{lang_lock}\n\n"
             f"{system_persona}\n\n"
-            f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
-            f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
-            f"{t('gemini.recent_conversation', locale=loc)}\n{hist_lines}\n\n"
-            f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
-            f"{t('gemini.reply_instruction', locale=loc)}\n\n"
+            f"{t('llm.patient_background', locale=loc)}\n{patient_context}\n\n"
+            f"{t('llm.reference', locale=loc)}\n{drug}\n\n"
+            f"{t('llm.recent_conversation', locale=loc)}\n{hist_lines}\n\n"
+            f"{t('llm.user_label', locale=loc)}{user_message}\n\n"
+            f"{t('llm.reply_instruction', locale=loc)}\n\n"
             f"{lang_lock}"
         )
         return self._generate_sync(self._chat_model, prompt)
@@ -341,7 +341,7 @@ class GeminiLLM(LLMPort):
 
     def _simplify_sync(self, raw_label: str, *, locale: str) -> str:
         loc = locale or self._locale
-        prompt = f"{t('gemini.simplify_intro', locale=loc)}{raw_label}"
+        prompt = f"{t('llm.simplify_intro', locale=loc)}{raw_label}"
         return self._generate_sync(self._chat_model, prompt)
 
     async def simplify_drug_text_to_patient_zh(self, raw_label: str, *, locale: str) -> str:
@@ -354,8 +354,8 @@ class GeminiLLM(LLMPort):
     def _extract_medication_sync(self, user_text: str, locale: str) -> MedicationDraft | None:
         loc = locale
         prompt = (
-            f"{t('gemini.extract_medication_intro', locale=loc)}\n"
-            f"{t('gemini.extract_medication_reminder_rules', locale=loc)}\n"
+            f"{t('llm.extract_medication_intro', locale=loc)}\n"
+            f"{t('llm.extract_medication_reminder_rules', locale=loc)}\n"
             "Return JSON only with keys: name, dosage, schedule, instructions, "
             "first_reminder_in_minutes, materialize_daily_reminders, reminder_horizon_days, "
             "needs_horizon_confirmation, daily_reminder_local_hhmm, daily_reminder_local_hhmm_list.\n"
@@ -391,7 +391,7 @@ class GeminiLLM(LLMPort):
         loc = locale
         catalog = [{"id": m.id, "name": m.name} for m in medications]
         prompt = (
-            f"{t('gemini.resolve_remove_intro', locale=loc)}\n"
+            f"{t('llm.resolve_remove_intro', locale=loc)}\n"
             f"Medications: {json.dumps(catalog, ensure_ascii=False)}\n"
             'Return JSON only: {"medication_id":"<uuid>" or null}\n'
             f"User: {user_text}"
@@ -429,7 +429,7 @@ class GeminiLLM(LLMPort):
             for m in medications
         ]
         prompt = (
-            f"{t('gemini.resolve_update_intro', locale=loc)}\n"
+            f"{t('llm.resolve_update_intro', locale=loc)}\n"
             f"Medications: {json.dumps(catalog, ensure_ascii=False)}\n"
             "Return JSON only with keys: medication_id, name, dosage, schedule, instructions, clear_instructions.\n"
             f"User: {user_text}"
@@ -454,7 +454,7 @@ class GeminiLLM(LLMPort):
 
     def _extract_vital_sync(self, user_text: str, locale: str) -> VitalLogExtraction | None:
         loc = locale
-        prompt = f"{t('gemini.extract_vital_intro', locale=loc)}\nUser: {user_text}"
+        prompt = f"{t('llm.extract_vital_intro', locale=loc)}\nUser: {user_text}"
         try:
             return self._generate_structured_sync(self._chat_model, prompt, VitalLogExtraction)
         except LLMParseError:
@@ -481,11 +481,11 @@ class GeminiLLM(LLMPort):
         loc = locale or self._locale
         lang_lock = language_lock(loc)
         persona = get_system_persona(locale=loc)
-        task = t("gemini.medication_added_companion", locale=loc)
-        drug = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        task = t("llm.medication_added_companion", locale=loc)
+        drug = drug_grounding or t("llm.no_drug_data", locale=loc)
         un = t("medication.unspecified", locale=loc)
         facts = t(
-            "gemini.added_saved_facts",
+            "llm.added_saved_facts",
             locale=loc,
             name=saved.name,
             dosage=dose_or_schedule_display(saved.dosage, unspecified_label=un),
@@ -494,7 +494,7 @@ class GeminiLLM(LLMPort):
         extra = ""
         if saved.instructions:
             extra = "\n" + t(
-                "gemini.added_notes_from_user",
+                "llm.added_notes_from_user",
                 locale=loc,
                 text=saved.instructions,
             )
@@ -502,10 +502,10 @@ class GeminiLLM(LLMPort):
         prompt = (
             f"{lang_lock}\n\n"
             f"{persona}\n\n{task}\n\n"
-            f"{t('gemini.patient_background', locale=loc)}\n{patient_context}\n\n"
-            f"{t('gemini.reference', locale=loc)}\n{drug}\n\n"
+            f"{t('llm.patient_background', locale=loc)}\n{patient_context}\n\n"
+            f"{t('llm.reference', locale=loc)}\n{drug}\n\n"
             f"{facts}{extra}{appendix}\n\n"
-            f"{t('gemini.user_label', locale=loc)}{user_message}\n\n"
+            f"{t('llm.user_label', locale=loc)}{user_message}\n\n"
             f"{lang_lock}"
         )
         return self._generate_sync(self._chat_model, prompt)
@@ -550,13 +550,13 @@ class GeminiLLM(LLMPort):
             f"({dose_or_schedule_display(m.schedule, unspecified_label=un)})"
             for m in medications
         )
-        grounding = drug_grounding or t("gemini.no_drug_data", locale=loc)
+        grounding = drug_grounding or t("llm.no_drug_data", locale=loc)
         persona = get_system_persona(locale=loc)
         prompt = (
             f"{lang_lock}\n\n"
             f"{persona}\n\n"
-            f"{t('gemini.medication_companion_interactions', locale=loc)}\n\n"
-            f"{t('gemini.interaction_structured_output_note', locale=loc)}\n\n"
+            f"{t('llm.medication_companion_interactions', locale=loc)}\n\n"
+            f"{t('llm.interaction_structured_output_note', locale=loc)}\n\n"
             f"Patient context:\n{patient_context}\n\n"
             f"Current medications:\n{med_list}\n\n"
             f"Drug reference data:\n{grounding}\n\n"

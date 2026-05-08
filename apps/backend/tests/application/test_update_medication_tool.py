@@ -46,7 +46,7 @@ async def test_update_medication_updates_dosage_schedule_and_instructions() -> N
     assert meds[0].instructions == "avoid tea right after dose"
     assert "updated aspirin" in reply.lower()
     assert "upcoming 3 days" in reply.lower()
-    assert "commonly used for" in reply.lower()
+    assert "people often take" in reply.lower()
     assert "education_cue_shown" in turn.metadata
 
 

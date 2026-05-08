@@ -41,7 +41,7 @@ The repo today centers on LINE and the HTTP API; a **dedicated mobile client** i
 | Item | Detail |
 |------|--------|
 | **Framework** | [Expo](https://docs.expo.dev/) + [expo-router](https://docs.expo.dev/router/introduction/) |
-| **Languages** | 繁體中文（台灣） and English (`apps/frontend/locales/`, **i18next**); user override in AsyncStorage |
+| **Languages** | 繁體中文（台灣） and English (`apps/frontend/locales/`, **i18next**); user override in AsyncStorage. Home (`today.*`) strings are kept in the same calm, conversational register as backend chat copy where they surface together. |
 | **Paths** | Relative to **`apps/frontend/`** |
 
 ---

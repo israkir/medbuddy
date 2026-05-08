@@ -60,8 +60,8 @@
     "medicationsLead": "Listen first, then ask your doctor or pharmacist if unsure."
   },
   "today": {
-    "greeting": "Hello—let’s take good care of you today",
-    "voiceIntro": "Speaking is often easier than typing—hold the button below to talk.",
+    "greeting": "Hello — we’ll keep today simple and on track.",
+    "voiceIntro": "If typing is a hassle, hold the button below and talk.",
     "scheduleTitle": "Medications today",
     "title": "Medications today",
     "subtitle": "Take them on schedule. Tap Listen on a dose to hear what that medicine is for. Open My medications for your full list. Hold the mic below to ask questions.",

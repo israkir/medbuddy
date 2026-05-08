@@ -70,7 +70,7 @@ Examples (original → redacted):
 
 ## Prompt instructions
 
-Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_persona`, `gemini.reply_instruction`) instruct the model how to use **only** the preferred address form provided in the patient background (when present), **not** to invent other names or echo phone numbers or raw health/contact details, and to treat **`[…]`** as masked content.
+Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_persona`, `llm.reply_instruction`) instruct the model how to use **only** the preferred address form provided in the patient background (when present), **not** to invent other names or echo phone numbers or raw health/contact details, and to treat **`[…]`** as masked content.
 
 ## Code map
 

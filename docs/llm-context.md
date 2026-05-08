@@ -41,7 +41,7 @@ Full profile text for **user-facing** strings (e.g. listing meds with profile li
 
 ### Locale scaffolding
 
-Prompts are assembled with localized headers and instructions from `apps/backend/src/medbuddy/locales/*.json` (e.g. `prompts.system_persona`, `gemini.patient_background`, `gemini.reference`, `gemini.reply_instruction`, task-specific `gemini.medication_companion_*`).
+Prompts are assembled with localized headers and instructions from `apps/backend/src/medbuddy/locales/*.json` (e.g. `prompts.system_persona`, `llm.patient_background`, `llm.reference`, `llm.reply_instruction`, task-specific `llm.medication_companion_*`).
 
 ### Deterministic tool copy vs agent-generated copy
 
@@ -99,12 +99,12 @@ Used inside tools (**Explain medication**, **Interaction check** fallback, **`co
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| `system_persona` | `get_system_persona` + optional task appendix (e.g. `gemini.medication_companion_explain` or `gemini.medication_companion_interactions`). |
+| `system_persona` | `get_system_persona` + optional task appendix (e.g. `llm.medication_companion_explain` or `llm.medication_companion_interactions`). |
 | `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
-| `drug_grounding` | Registry snippets (TFDA / OpenFDA) or placeholder `gemini.no_drug_data`. Not end-user PII. |
+| `drug_grounding` | Registry snippets (TFDA / OpenFDA) or placeholder `llm.no_drug_data`. Not end-user PII. |
 | `history` | **Redacted** turns. **Interaction fallback** passes `history=[]` in the tool. |
 | `user_message` | **Redacted** (`safe_text`). |
-| Closing | `gemini.reply_instruction`. |
+| Closing | `llm.reply_instruction`. |
 
 **Explain medication:** Drug registry fetch uses the **original** `user_text` string for the HTTP lookup to TFDA/OpenFDA; the **LLM** still sees **redacted** `safe_text` as the user line.
 

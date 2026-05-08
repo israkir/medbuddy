@@ -70,7 +70,7 @@ class ExplainMedicationTool:
 
         system_persona = get_system_persona(locale=locale)
         system_persona = (
-            f"{system_persona}\n\n{t('gemini.medication_companion_explain', locale=locale)}"
+            f"{system_persona}\n\n{t('llm.medication_companion_explain', locale=locale)}"
         )
         history_llm = redact_conversation_turns_for_llm(history)
 

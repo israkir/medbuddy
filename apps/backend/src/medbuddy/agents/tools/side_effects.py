@@ -66,7 +66,7 @@ class ReportSideEffectsTool:
 
         side_effect_persona = (
             f"{get_system_persona(locale=locale)}\n\n"
-            f"{t('gemini.medication_companion_side_effects', locale=locale)}"
+            f"{t('llm.medication_companion_side_effects', locale=locale)}"
         )
         history_llm = redact_conversation_turns_for_llm(history)
 

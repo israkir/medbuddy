@@ -172,7 +172,7 @@ class MockLLM(LLMPort):
         await asyncio.sleep(0)
         _ = (patient_context, user_message)
         summary = (drug_grounding or "").replace("\n", " ").strip()[:160] or t(
-            "gemini.no_drug_data", locale=locale
+            "llm.no_drug_data", locale=locale
         )
         return t(
             "mocks.llm.medication_added",

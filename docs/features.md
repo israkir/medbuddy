@@ -168,7 +168,7 @@ These short-circuit **before** hooks / **`run_tool_agent_loop`** when storage sa
 
 | State | Set by | Resolved by | User-visible behavior |
 |-------|--------|-------------|------------------------|
-| **Add-medication confirmation** | `AddMedicationTool` when `medication_draft_needs_add_confirmation` | `try_resolve_pending_medication_add_confirmation` | Prompt lists draft fields; user may reply **yes** / **no** (and locales’ equivalents) or send a **corrected** message; TTL from `dose_clarification_ttl_seconds`. Non-yes/no messages fall through so the user can ask a side question while pending stays active. |
+| **Add-medication confirmation** | `AddMedicationTool` when `medication_draft_needs_add_confirmation` | `try_resolve_pending_medication_add_confirmation` | Conversational preview of draft fields (`medication.add_confirm_prompt`); user may reply **yes** / **no** (and locales’ equivalents) or send a **corrected** message; TTL from `dose_clarification_ttl_seconds`. Non-yes/no messages fall through so the user can ask a side question while pending stays active. |
 | **Dose clarification** | `ConfirmDoseTool` when multiple pending dose candidates match | `try_resolve_pending_dose_clarification` | User picks option index or “all”; marks `dose_events` accordingly. |
 | **Reminder horizon** | After save when `needs_horizon_confirmation` on the draft | `try_resolve_pending_reminder_horizon` | User sends a **day count** (or week phrasing); metadata patched and reminders re-synced. |
 
@@ -194,7 +194,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 |-------|---------|
 | **Summary** | Return the user’s saved medication list with i18n framing. |
 | **User value** | Quick inventory without LLM hallucination on list contents. |
-| **Capabilities** | No LLM compose for the list body; data from `UserDataPort.list_medications` plus i18n intro / empty state. Display may use `build_patient_context_for_chat_display` for full stored lines in user-facing copy—that string is not for external LLM APIs (see `privacy.md`). |
+| **Capabilities** | No LLM compose for the list body; data from `UserDataPort.list_medications` plus i18n intro / empty state. Reply body is formatted with `format_patient_medication_context`: unknown dose or schedule is shown as the localized **`medication.unspecified`** label, and if any row is incomplete the assistant appends **`medication.list_hint_fill_dose_schedule`**. Display may use `build_patient_context_for_chat_display` for full stored lines in user-facing copy—that string is not for external LLM APIs (see `privacy.md`). |
 
 ### 4.2 `upcoming_doses`
 
@@ -210,7 +210,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 |-------|---------|
 | **Summary** | Parse natural language into a medication row; either **confirm then save** or **save immediately** when the draft is complete and passes guardrails. |
 | **User value** | Add drugs with schedule in chat without a structured form; incomplete or risky extractions are confirmed before persisting. |
-| **Capabilities** | Extraction via `LLMPort.extract_medication_draft` → `MedicationDraft`. Missing drug name → `MedicationExtractionError` → i18n `medication.add_incomplete`. When `medication_draft_needs_add_confirmation` (placeholder dose/schedule, missing user-evidence for dose+schedule in the utterance, horizon confirmation, etc.): store **`MedicationAddConfirmationPending`**, reply with **`medication.add_confirm_prompt`** (no DB row yet). **Yes** path persists via `persist_medication_add_from_draft` (sync reminders, optional **`ReminderHorizonPending`** if `needs_horizon_confirmation`). **Saved** path: reload list, `DrugDataPort` snippets for the **new** drug, `compose_medication_added_reply` with patient context (health notes may be included for contraindication-aware copy). Fallback i18n `medication.added` on compose failure. |
+| **Capabilities** | Extraction via `LLMPort.extract_medication_draft` → `MedicationDraft`. Missing drug name → `MedicationExtractionError` → i18n `medication.add_incomplete`. When `medication_draft_needs_add_confirmation` (placeholder dose/schedule, missing user-evidence for dose+schedule in the utterance, horizon confirmation, etc.): store **`MedicationAddConfirmationPending`**, reply with prose **`medication.add_confirm_prompt`** (no DB row yet). **Yes** path persists via `persist_medication_add_from_draft` (sync reminders, optional **`ReminderHorizonPending`** if `needs_horizon_confirmation`). **Saved** path: reload list, `DrugDataPort` snippets for the **new** drug, `compose_medication_added_reply` with patient context (health notes may be included for contraindication-aware copy). Fallback i18n `medication.added` on compose failure. |
 | **Implementation** | Successful add/update/removal triggers `sync_and_enqueue_reminders` when wired (§8). |
 
 ### 4.4 `remove_medication`
@@ -221,7 +221,15 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Stop tracking a drug without navigating settings. |
 | **Capabilities** | Resolve row (LLM JSON or mock match) → `delete_medication` → i18n confirmation or not-found. Reminder rebuild when configured (same hook as add). |
 
-### 4.5 `explain_medication`
+### 4.5 `update_medication`
+
+| Field | Content |
+|-------|---------|
+| **Summary** | Patch an existing medication (name, dose, schedule, instructions) after structured resolution. |
+| **User value** | Fix typos or regimen changes without deleting and re-adding the row. |
+| **Capabilities** | **`UpdateMedicationTool`**: **`resolve_medication_update`** → **`patch_medication`**. User-visible ack uses **`medication.updated`** when saved **instructions** are empty, and **`medication.updated_with_note`** when a non-empty instruction string remains; dose/schedule lines use **`medication.unspecified`** as the localized placeholder label. If **dosage** or **schedule** was in the patch, append **`medication.update_reminder_followup`**. Then **`sync_and_enqueue_reminders`** when configured (same hook as add/remove). |
+
+### 4.6 `explain_medication`
 
 | Field | Content |
 |-------|---------|
@@ -229,7 +237,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Understand medications in context of their list, with less repeated LLM cost when cached. |
 | **Capabilities** | Supabase: if `drug_personalization_cache` has a fresh row for `(user, query_fingerprint)` (fingerprint includes hash of current med list in de-identified form), return cached text, append turns, skip remote fetch and LLM. Else: `DrugDataPort` + `CachingDrugData` → `drug_reference_cache` (TTL `MEDBUDDY_DRUG_REFERENCE_CACHE_TTL_HOURS`). **`ExplainMedicationTool`**: `compose_reply` with persona, LLM-safe patient context, grounding, history. After compose: upsert personalization; `llm_meta.source` reflects `openfda` / `tfda` / model as applicable. |
 
-### 4.6 `interaction_check`
+### 4.7 `interaction_check`
 
 | Field | Content |
 |-------|---------|
@@ -237,7 +245,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Surface interaction concerns grounded on references where available. |
 | **Capabilities** | Personalization hit → reference cache → `compose_reply` with interaction add-on → optional cache save. |
 
-### 4.7 `update_profile`
+### 4.8 `update_profile`
 
 | Field | Content |
 |-------|---------|
@@ -245,7 +253,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Correct name, emergency contact, or notes without a separate settings API for every field. |
 | **Capabilities** | **`update_profile` tool** → **`LLMPort.extract_profile_patch`** → **`apply_profile_update_from_extracted_patch`** → **`UserDataPort.patch_user_profile`**. |
 
-### 4.8 `confirm_dose`
+### 4.9 `confirm_dose`
 
 | Field | Content |
 |-------|---------|
@@ -253,7 +261,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Lightweight “I took it” (or a follow-up note on a dose already taken) without a LINE postback UI—without recording intake from ambiguous symptom-only lines. |
 | **Capabilities** | **`ConfirmDoseTool`** applies those flags from **tool arguments** (sets **`taken_at`** / merges notes per `UserDataPort`). May set **dose clarification pending** when multiple candidates match. Replies: i18n **`medication.confirm_dose_*`** when the tool runs successfully. |
 
-### 4.9 `report_side_effects`
+### 4.10 `report_side_effects`
 
 | Field | Content |
 |-------|---------|
@@ -261,7 +269,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Empathetic, safety-aware guidance grounded on registry text; red-flag escalation language; not a substitute for urgent care when `emergency` applies. |
 | **Capabilities** | **`ReportSideEffectsTool`**: `patient_context_for_llm` + drug grounding + `compose_reply`-style companion path with side-effect-focused prompting (see `agents/tools/side_effects.py`). Distinct from **`explain_medication`** (hypothetical) and **`confirm_dose`** (adherence). |
 
-### 4.10 `emergency`
+### 4.11 `emergency`
 
 | Field | Content |
 |-------|---------|
@@ -269,7 +277,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Fast, deterministic safety response without LLM latency. |
 | **Capabilities** | **`MedicationAgent`** returns **`agent.emergency`** immediately (after pending-state resolvers and user-turn append). No tool or `compose_reply` body generation. **When `patients.emergency_contact` is already saved**, the same branch additionally appends the simulated outreach line used by the orchestrator **`simulate_notify_emergency_contact`** tool (i18n key `agent.emergency_with_saved_contact`) and returns **`metadata.simulated_emergency_notification = true`** so the app can surface a banner; copy avoids asking the user to add a contact "for next time." |
 
-### 4.11 `log_vital` / `request_summary` / `general_question`
+### 4.12 `log_vital` / `request_summary` / `general_question`
 
 | Field | Content |
 |-------|---------|
@@ -277,7 +285,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | **User value** | Same assistant persona without forcing everything into medication CRUD. |
 | **Capabilities** | **`request_summary`** uses the health-summary tool. **`log_vital`** and general chat: chosen by the orchestrator model; **`log_vital`** uses **`LogVitalTool`**; open questions may use **`compose_reply`** inside tools when applicable. No automatic drug API prefetch unless the tool path requests it. |
 
-### 4.12 Just-in-time medication understanding cues
+### 4.13 Just-in-time medication understanding cues
 
 | Field | Content |
 |-------|---------|
@@ -364,7 +372,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 
 ## 8. LINE dose reminders (prototype)
 
-**Summary:** After medication list changes, materialize future `dose_events`, push LINE reminders near due times, optionally chain **follow-up nudges**, and record **chat-based** adherence when the **`confirm_dose`** tool runs (§4.8).
+**Summary:** After medication list changes, materialize future `dose_events`, push LINE reminders near due times, optionally chain **follow-up nudges**, and record **chat-based** adherence when the **`confirm_dose`** tool runs (§4.9).
 
 **User value:** Lightweight adherence nudges without requiring the user to open the app; optional extra pushes if a dose is still not marked taken.
 
@@ -377,7 +385,7 @@ When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are 
 | Scheduling | `UserDataPort.sync_upcoming_dose_events` replaces future `dose_events` per medication **`raw_metadata.reminder`**: **`daily_local_hhmm_list`** (multiple instants per day) or **`daily_local_hhmm`**, else fallback `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` (`09:00`), in **`patients.timezone`**, horizon `MEDBUDDY_REMINDER_HORIZON_DAYS` (default 14, cap 90). The free-text **`schedule`** field is **display/copy**; clock instants come from structured reminder prefs populated from LLM extraction on add (and related flows), not from parsing the schedule string alone. |
 | Delivery | With Redis, `enqueue_reminder_jobs` schedules arq `send_reminder_for_dose` with `_defer_until = scheduled_at`. Worker runs `deliver_dose_reminder` → LINE `push_message`, then `reminder_sent_at`. |
 | Nudges (optional) | If **`MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES`** is non-empty (comma-separated minutes), after the primary push the worker may enqueue **`send_reminder_nudge`** jobs for follow-up LINE pushes until intervals are exhausted, the user marks doses taken, or the local day of the scheduled dose ends. Copy: **`reminder.line_push_nudge`**. |
-| Chat adherence | Orchestrator **`confirm_dose`** tool — when arguments indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.8). |
+| Chat adherence | Orchestrator **`confirm_dose`** tool — when arguments indicate intake (e.g. “I took it” / 「吃了」), **`dose_events.taken_at`** is set without LINE postback (see §4.9). |
 | Copy | Primary: **`reminder.line_push`** (`zh-TW`, `en`); welcome and pushes respect **`patients.locale`** (LINE follow may seed locale from LINE profile **`language`** first). |
 | Education CTA (optional) | When just-in-time education is enabled, reminder copy may append a short refresher CTA only if cadence gate passes (per user+medication cooldown, no duplicate on same local day, suppressed after recent explain/interaction turn). |
 | Scope | LINE push only for LINE `userId` keys; no local notifications for standalone HTTP-app users in this slice. No Flex cards or “mark taken” postback in v1. |

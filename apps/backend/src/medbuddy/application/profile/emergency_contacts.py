@@ -181,9 +181,9 @@ def emergency_contact_save_ack(rows: list[dict[str, str | bool]], *, locale: str
             detail=detail,
         )
     if len(rows) == 1:
-        return t("profile.ack_emergency_single", locale=locale, clause=clause)
+        return t("profile.ack_emergency_profile_single", locale=locale, clause=clause)
     return t(
-        "profile.ack_emergency_multi",
+        "profile.ack_emergency_profile_multi",
         locale=locale,
         count=len(rows),
         clause=clause,
