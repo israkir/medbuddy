@@ -200,6 +200,36 @@ async def test_line_tts_audio_route_serves_blob(mock_settings):
 
 
 @pytest.mark.asyncio
+async def test_follow_seeds_locale_from_line_profile_language(mock_settings):
+    """LINE profile ``language`` updates stored locale before the scripted welcome."""
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    uid = "U-follow-locale-en"
+    svc.line.seed_user_profile(uid, {"userId": uid, "displayName": "Test", "language": "en"})  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "follow",
+            "replyToken": "rt",
+            "source": {"userId": uid, "type": "user"},
+            "follow": {"isUnblocked": True},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    row = await svc.users.get_or_create_user(uid)
+    assert row["locale"] == "en"
+    msgs = svc.line.replies[-1]["messages"]  # type: ignore[index]
+    assert msgs[0]["type"] == "text"
+    assert str(msgs[0]["text"]).startswith("Welcome to MedBuddy")
+
+
+@pytest.mark.asyncio
 async def test_follow_sends_welcome_text(mock_settings):
     ms = make_mock_settings(LINE_CHANNEL_SECRET="")
     app.state.services = __import__(

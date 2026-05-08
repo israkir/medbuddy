@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Locale defaults:** LINE **follow** welcome and assistant replies seed `patients.locale` from LINE’s user profile **`language`** (with httpx `GET /v2/bot/profile/{userId}`) when it maps to `en` or `zh-TW`. Standalone **`GET /v1/app/me`** applies **`X-MedBuddy-Locale`** (device tag from Expo) or the **first** `Accept-Language` entry to update stored locale **only until** onboarding is completed, so server-side copy matches the device before the user submits onboarding.
+
+### Fixed
+
+- **Supabase schema:** `apps/backend/supabase/schema.sql` now includes explicit `GRANT` for `anon` / `authenticated` on MedBuddy tables (and `conversation_turns_id_seq`). Without these, PostgREST returns `42501 permission denied for table patients` when the backend uses `SUPABASE_PUBLISHABLE_KEY`.
+
 ### Changed
 
 - **TDD sync (standalone API docs):** Updated `docs/tdd-extended.md` to match current backend naming and responses (`require_mobile_auth`/`MobileAuthContext`, `generate_health_summary` tool name, `metadata` in `/v1/app/messages*` examples), and corrected the testing note to reflect `tests/e2e/test_user_journeys.py`.

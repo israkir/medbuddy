@@ -61,6 +61,62 @@ async def test_app_me_ok():
 
 
 @pytest.mark.asyncio
+async def test_app_me_seeds_locale_from_x_medbuddy_locale_when_not_onboarded():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    uid = "app-user-locale-hint"
+    h = {**_mobile_headers(user=uid), "X-MedBuddy-Locale": "en-US"}
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/v1/app/me", headers=h)
+    assert r.status_code == 200
+    assert r.json()["locale"] == "en"
+    assert r.json()["onboarding_completed_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_app_me_seeds_locale_from_accept_language_when_not_onboarded():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    uid = "app-user-acc-lang"
+    h = {**_mobile_headers(user=uid), "Accept-Language": "en-GB;q=0.9,zh-TW;q=0.8"}
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/v1/app/me", headers=h)
+    assert r.status_code == 200
+    assert r.json()["locale"] == "en"
+
+
+@pytest.mark.asyncio
+async def test_app_me_does_not_overwrite_locale_from_header_after_onboarding():
+    ms = make_mock_settings()
+    app.state.services = build_app_services(ms)
+    uid = "app-user-onboarded-locale"
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_onb = await client.post(
+                "/v1/app/onboarding",
+                json={
+                    "preferred_name": "Mei",
+                    "age_years": 70,
+                    "gender": None,
+                    "emergency_contacts": [],
+                    "health_notes": None,
+                    "timezone": "Asia/Taipei",
+                    "locale": "zh-TW",
+                },
+                headers=_mobile_headers(user=uid),
+            )
+    assert r_onb.status_code == 200
+    h = {**_mobile_headers(user=uid), "X-MedBuddy-Locale": "en-US"}
+    with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/v1/app/me", headers=h)
+    assert r.status_code == 200
+    assert r.json()["locale"] == "zh-TW"
+
+
+@pytest.mark.asyncio
 async def test_app_bearer_rejects_wrong_token():
     ms = make_mock_settings(MEDBUDDY_MOBILE_BEARER_TOKEN="good")
     app.state.services = build_app_services(ms)

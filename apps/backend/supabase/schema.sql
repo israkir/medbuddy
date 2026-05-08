@@ -263,3 +263,18 @@ alter table public.patients add column if not exists pending_agent_clarification
 
 comment on column public.patients.pending_agent_clarification is
     'Optional JSON: pending dose clarification (option dose_event ids + expires_at).';
+
+-- PostgREST connects as ``anon`` when using the publishable (anon) API key.
+-- RLS policies gate rows; without GRANT on the table, queries fail with
+-- ``permission denied for table …`` (SQLSTATE 42501) before policies apply.
+grant usage on schema public to anon, authenticated;
+
+grant select, insert, update, delete on table public.patients to anon, authenticated;
+grant select, insert, update, delete on table public.emergency_contacts to anon, authenticated;
+grant select, insert, update, delete on table public.medications to anon, authenticated;
+grant select, insert, update, delete on table public.conversation_turns to anon, authenticated;
+grant usage, select on sequence public.conversation_turns_id_seq to anon, authenticated;
+grant select, insert, update, delete on table public.dose_events to anon, authenticated;
+grant select, insert, update, delete on table public.health_issue_events to anon, authenticated;
+grant select, insert, update, delete on table public.drug_reference_cache to anon, authenticated;
+grant select, insert, update, delete on table public.drug_personalization_cache to anon, authenticated;

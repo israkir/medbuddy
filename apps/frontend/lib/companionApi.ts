@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Localization from 'expo-localization';
 import { Platform } from 'react-native';
 
 import i18next from '@/i18n';
@@ -36,6 +37,11 @@ export type MeProfile = {
   locale?: AppLanguage | string | null;
   onboarding_completed_at?: string | null;
 };
+
+function deviceLanguageTagForApi(): string {
+  const tag = Localization.getLocales()[0]?.languageTag?.trim();
+  return tag ?? '';
+}
 
 function mobileHeaders(contentTypeJson: boolean): Record<string, string> {
   const headers: Record<string, string> = {
@@ -80,8 +86,14 @@ export async function fetchMeProfile(): Promise<MeProfile> {
     }
   }
 
+  const meHeaders = { ...mobileHeaders(false) };
+  const deviceTag = deviceLanguageTagForApi();
+  if (deviceTag) {
+    meHeaders['X-MedBuddy-Locale'] = deviceTag;
+  }
+
   const r = await fetch(`${apiBaseUrl}/v1/app/me`, {
-    headers: mobileHeaders(false),
+    headers: meHeaders,
   });
   if (!r.ok) {
     const body = await r.text();
