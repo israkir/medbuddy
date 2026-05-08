@@ -101,7 +101,7 @@ class InteractionCheckTool:
                 drug_grounding=drug_grounding,
                 locale=locale,
             )
-            reply = _format_interaction_reply(interaction_result, locale=locale)
+            reply = format_interaction_reply(interaction_result, locale=locale)
         else:
             from medbuddy.llm.prompts.persona import get_system_persona
 
@@ -160,7 +160,7 @@ class InteractionCheckTool:
         )
 
 
-def _format_interaction_reply(result: InteractionResult, *, locale: str) -> str:
+def format_interaction_reply(result: InteractionResult, *, locale: str) -> str:
     """Render an ``InteractionResult`` as a readable patient-facing message."""
     r = result.result
     lines = [r.summary]

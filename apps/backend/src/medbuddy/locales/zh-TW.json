@@ -103,6 +103,8 @@
     "education_uncertain_line": "目前我對 {name} 的參考資料可能不完整；用途與注意事項請再和藥師或醫師確認。",
     "education_deep_dive_cta": "要我補充常見副作用或交互作用重點嗎？",
     "education_boundary": "這是一般用藥資訊，不能取代醫師或藥師指示。",
+    "post_add_interaction_user_query": "我剛把 {name} 加入用藥清單。這個新藥和我目前其他藥物或健康狀況之間，有沒有需要留意的交互作用或重要警訊？",
+    "post_add_interaction_bridge": "依你目前的完整清單先做快速交叉檢查（僅為一般衛教參考，不能取代藥師或醫師審核）：",
     "list_education_cta": "如果你願意，我可以逐一說明每個藥常見用途，例如：「Metformin 是做什麼用的？」"
   },
   "vital": {

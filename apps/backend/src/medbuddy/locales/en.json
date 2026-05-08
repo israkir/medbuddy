@@ -103,6 +103,8 @@
     "education_uncertain_line": "I may not have complete reference data for {name}; please confirm purpose and cautions with your pharmacist or clinician.",
     "education_deep_dive_cta": "Want a quick note on common side effects or interaction cautions?",
     "education_boundary": "This is general information and does not replace your doctor or pharmacist's instructions.",
+    "post_add_interaction_user_query": "I just added {name} to my medication list. Are there any drug interactions or important cautions between this new medicine and my other current medications or health conditions?",
+    "post_add_interaction_bridge": "Quick cross-check with your full list (general information only — not a substitute for your pharmacist or doctor):",
     "list_education_cta": "If you want, I can explain what each medicine is commonly used for — for example: \"What is Metformin for?\""
   },
   "vital": {
