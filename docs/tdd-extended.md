@@ -493,7 +493,7 @@ Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equiva
 |---------------------|----------------|
 | `ListMedicationsTool` / `list_medications` | Load medication list → i18n formatted reply |
 | `ListUpcomingDosesTool` / `list_upcoming_doses` | Sync dose_events → list pending rows in local-time window (~7 days) → i18n formatted schedule |
-| `AddMedicationTool` / `add_medication` | LLM extract draft → persist → drug grounding → compose acknowledgment → reminder sync |
+| `AddMedicationTool` / `add_medication` | LLM extract draft → persist → **`sync_and_enqueue_reminders`** → drug grounding → `compose_medication_added_reply` → when the reloaded list has **2+** meds, **`check_interactions_structured`** (post-add cross-check) → append education lines (`persist_medication_add_from_draft`) |
 | `UpdateMedicationTool` / `update_medication` | LLM resolve patch → update → i18n **`medication.updated`** or **`medication.updated_with_note`** (by non-empty saved instructions) → optional **`medication.update_reminder_followup`** if dose/schedule changed → reminder sync |
 | `RemoveMedicationTool` / `remove_medication` | LLM resolve target → delete → i18n confirm → reminder sync |
 | `remove_all_medications` | Delete all medications + sync reminders |
@@ -502,7 +502,7 @@ Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equiva
 | `ConfirmDoseTool` / `confirm_dose` | Apply structured **`record_pending_dose_as_taken`** / **`dose_adherence_note`** from **tool arguments** → i18n confirmation |
 | `ExplainMedicationTool` / `explain_medication` | Personalization cache check → drug reference fetch → compose → cache save |
 | `ReportSideEffectsTool` / `report_side_effects` | Side-effect oriented compose with optional drug grounding |
-| `InteractionCheckTool` / `interaction_check` | Drug reference fetch → interaction-focused compose → cache save |
+| `InteractionCheckTool` / `interaction_check` | Drug reference fetch → **`check_interactions_structured`** (fallback: interaction-focused `compose_reply`) → cache save |
 | `LogVitalTool` / `log_vital` | Structured vital extraction → persist vital log → i18n acknowledgment |
 | `GenerateHealthSummaryTool` / `generate_health_summary` | Aggregate patient context + history → structured LLM summary output |
 | `export_health_journal` | Structured journal export |
@@ -890,7 +890,7 @@ Authoritative method signatures and return types are in **`apps/backend/src/medb
 | Identity | `drug_cache_provenance_id` (property) — stored on personalized cache rows |
 | Intent / profile | `interpret_user_turn`, `extract_profile_patch(..., *, locale)`, `extract_locale_intent` |
 | Chat / orchestration | `complete_chat_with_tools`, `compose_reply`, `simplify_drug_text_to_patient_zh` |
-| Medications | `extract_medication_draft`, `resolve_medication_removal_id`, `resolve_medication_update`, `compose_medication_added_reply` (takes persisted `saved: MedicationRecord`, not a draft) |
+| Medications | `extract_medication_draft`, `resolve_medication_removal_id`, `resolve_medication_update`, `compose_medication_added_reply` (takes persisted `saved: MedicationRecord`, not a draft); **`persist_medication_add_from_draft`** may call `check_interactions_structured` immediately after when the patient’s list has more than one drug |
 | Vitals | `extract_vital_log` |
 | Safety / summary | `check_interactions_structured` → `InteractionResult`; `generate_health_summary` → domain `HealthSummary` |
 

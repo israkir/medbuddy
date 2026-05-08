@@ -22,11 +22,49 @@ from medbuddy.models.domain import (
     ReminderHorizonPending,
 )
 from medbuddy.privacy.redact import redact_pii_text
+from medbuddy.agents.tools.interaction_check import format_interaction_reply
 from medbuddy.application.patient_llm_context import patient_context_for_llm
 from medbuddy.llm.prompts.persona import format_patient_medication_context
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
 log = logging.getLogger(__name__)
+
+
+async def _append_post_add_interaction_scan(
+    svc: AppServices,
+    *,
+    reply: str,
+    meds_updated: list[MedicationRecord],
+    saved: MedicationRecord,
+    patient_ctx: str,
+    drug_grounding: str | None,
+    locale: str,
+) -> str:
+    """Run structured interaction analysis when the list has 2+ meds (new drug vs existing)."""
+    if len(meds_updated) < 2:
+        return reply
+    checker = getattr(svc.llm, "check_interactions_structured", None)
+    if not callable(checker):
+        return reply
+    ix_query = t(
+        "medication.post_add_interaction_user_query",
+        locale=locale,
+        name=saved.name,
+    )
+    try:
+        ix_result = await checker(
+            user_message=ix_query,
+            medications=meds_updated,
+            patient_context=patient_ctx,
+            drug_grounding=drug_grounding,
+            locale=locale,
+        )
+    except Exception:
+        log.exception("add_medication: post-add interaction scan failed")
+        return reply
+    bridge = t("medication.post_add_interaction_bridge", locale=locale)
+    ix_text = format_interaction_reply(ix_result, locale=locale)
+    return f"{reply}\n\n{bridge}\n{ix_text}"
 
 
 async def _drug_grounding_text(svc: AppServices, drug_name: str) -> str | None:
@@ -158,6 +196,15 @@ async def persist_medication_add_from_draft(
             dosage=dose_or_schedule_display(saved.dosage, unspecified_label=un),
             schedule=dose_or_schedule_display(saved.schedule, unspecified_label=un),
         )
+    reply = await _append_post_add_interaction_scan(
+        svc,
+        reply=reply,
+        meds_updated=meds_updated,
+        saved=saved,
+        patient_ctx=patient_ctx,
+        drug_grounding=drug_grounding,
+        locale=locale,
+    )
     education_lines, grounded = _education_lines_for_medication(
         locale=locale,
         medication_name=saved.name,

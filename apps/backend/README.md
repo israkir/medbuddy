@@ -45,7 +45,7 @@ gemini_llm    supabase_stores  drugs_http
 | **Agents** | `agents/medication_agent.py` | `MedicationAgent` — fast routing (`interpret_user_turn`) + pending/locale/emergency/contact gates, then `run_tool_agent_loop` |
 | | `agents/orchestrator.py` | `run_tool_agent_loop` — `LLMPort.complete_chat_with_tools` with prior-thread injection and registered tool execution |
 | | `agents/base.py` | `AgentTool` base class, `ToolResult` dataclass |
-| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `UpdateMedicationTool`, `RemoveMedicationTool` |
+| | `agents/tools/medication_crud.py` | `ListMedicationsTool`, `AddMedicationTool`, `UpdateMedicationTool`, `RemoveMedicationTool`; **`persist_medication_add_from_draft`** runs a structured **post-add interaction cross-check** (`check_interactions_structured`) when the patient’s list has **2+** medications after save |
 | | `agents/tools/upcoming_doses.py` | `ListUpcomingDosesTool` (`upcoming_doses` intent) |
 | | `agents/tools/drug_lookup.py` | `ExplainMedicationTool` (grounding + LLM compose + cache) |
 | | `agents/tools/interaction_check.py` | `InteractionCheckTool` |

@@ -33,7 +33,7 @@ Typical blocks in the string sent to the model:
 
 **Not** included: raw `health_notes`, `emergency_contact` strings, exact `age_years`.
 
-**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync). **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
+**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync), and **post-add** `check_interactions_structured` when `persist_medication_add_from_draft` runs with **two or more** medications on the updated list (same `patient_context_for_llm` assembly, `include_health_notes=True`). **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
 
 ### Patient context for **display** only (`build_patient_context_for_chat_display`)
 
@@ -117,14 +117,16 @@ Used inside tools (**Explain medication**, **Interaction check** fallback, **`co
 | `saved` | Authoritative `name`, `dosage`, `schedule`, optional `instructions` in the prompt. |
 | `user_message` | **Redacted** (`safe_text`). |
 
+**Follow-on call (not a separate `LLMPort` method):** when **`agents/tools/medication_crud.py`** saves a new row and the reloaded list has length **≥ 2**, it calls **`check_interactions_structured`** using the same `patient_context` and **`drug_grounding`** as the post-add compose step, with **`user_message`** set to the localized template **`medication.post_add_interaction_user_query`** (substitutes the new drug’s **name** from the saved record — not the user’s raw add utterance). **`InteractionCheckTool`** still passes **`redact_pii_text(user_text)`** for real chat turns; the post-add path builds the prompt line in code without reusing `safe_text`.
+
 ### `check_interactions_structured`
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| `user_message` | **Redacted** (`safe_text`). |
+| `user_message` | **`InteractionCheckTool`:** **Redacted** user chat line (`safe_text`). **Post-add path (`medication_crud`):** localized synthetic prompt from **`medication.post_add_interaction_user_query`** + saved drug name (adapter treats it like the user question for interaction analysis). |
 | `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
 | `medications` | Explicit list lines (name, dosage, schedule) in the adapter prompt. |
-| `drug_grounding` | OpenFDA (and optional warnings excerpt) from the user query, or placeholder. |
+| `drug_grounding` | **`InteractionCheckTool`:** OpenFDA (and optional warnings excerpt) from the **user’s chat query**, or placeholder. **Post-add path:** TFDA/OpenFDA snippets already fetched for the **newly saved** drug (same blob as `compose_medication_added_reply`), or placeholder. |
 | History | **Not** included in the structured Gemini/OpenAI prompt (unlike `compose_reply`). |
 
 ### `extract_medication_draft`

@@ -132,7 +132,7 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 |--|--|
 | **Scenario** | User adds a drug with dose/schedule in natural language. |
 | **Examples** | 「新增阿斯匹靈 100mg 每天飯後」 · `add aspirin 100mg after meals` |
-| **Outcome (save now)** | When the draft is **complete** and passes **`medication_draft_needs_add_confirmation`** guardrails: **`UserDataPort.add_medication`** → **`sync_and_enqueue_reminders`** → **`compose_medication_added_reply`** (or i18n **`medication.added`** fallback). Post-add, if **`needs_horizon_confirmation`**, a **`ReminderHorizonPending`** row may be set so the next message can supply “N days” without re-invoking add intent. |
+| **Outcome (save now)** | When the draft is **complete** and passes **`medication_draft_needs_add_confirmation`** guardrails: **`UserDataPort.add_medication`** → **`sync_and_enqueue_reminders`** → **`compose_medication_added_reply`** (or i18n **`medication.added`** fallback). If the user **already had one or more other medications** before this save, **`persist_medication_add_from_draft`** also calls **`check_interactions_structured`** (same adapter prompt family as **`interaction_check`** §3.6) and appends a short cross-check section (`medication.post_add_interaction_*`) before the usual education CTA. Post-add, if **`needs_horizon_confirmation`**, a **`ReminderHorizonPending`** row may be set so the next message can supply “N days” without re-invoking add intent. |
 | **Outcome (confirm first)** | When dose/schedule is missing, unclear, or the utterance lacks evidence the user stated both dose and schedule: **`MedicationAddConfirmationPending`** is stored; user sees conversational **`medication.add_confirm_prompt`** (prose summary of draft fields, not a rigid bullet checklist). Reply **yes** / **no** (or locale equivalents) is handled by **`try_resolve_pending_medication_add_confirmation`** before the next full turn. A **non** yes/no message **does not** clear pending—the normal agent answers (e.g. a drug question) and pending stays until resolved (**`medication.add_confirm_pending_reminder`** may append on later turns). |
 | **Incomplete** | No drug name → **`MedicationExtractionError`** → **`medication.add_incomplete`**. |
 | **Side effect** | When Supabase + reminders are configured: **dose_events** sync / LINE push — [`reminders.md`](reminders.md). |
@@ -167,7 +167,7 @@ Section titles follow **`Intent`** / tool names for readability. **`interpret_us
 |--|--|
 | **Scenario** | Drug–drug or combination questions. |
 | **Examples** | 「阿斯匹靈可以跟抗凝血藥一起吃嗎？」 · “Can I take aspirin with my blood thinner?” |
-| **Outcome** | Same pipeline as explain with **interaction-focused** system add-on; optional personalization cache. Severity labels and recommendation prefix use locale keys under **`interaction.*`**. |
+| **Outcome** | Primary path: **`check_interactions_structured`** (interaction-focused companion + full med list in the adapter); optional personalization cache. Fallback: **`compose_reply`** with interaction add-on. Severity labels and recommendation prefix use locale keys under **`interaction.*`**. See §3.3 for the **post-add** reuse of the structured path when adding a drug to an existing list. |
 
 ---
 

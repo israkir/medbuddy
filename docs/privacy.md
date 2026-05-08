@@ -38,7 +38,7 @@ The backend stores selected user turns in **`public.health_issue_events`** (Post
 
 ## User-facing vs model-facing context
 
-- **`patient_context_for_llm`** (preferred) / **`build_patient_context_for_llm`** with optional **`upcoming_doses_context`**: use for **all** prompts and cache fingerprints that should stay de-identified (`assistant_turn`, explain/interaction/side-effect/summary tools, `compose_medication_added_reply` patient block, etc.).
+- **`patient_context_for_llm`** (preferred) / **`build_patient_context_for_llm`** with optional **`upcoming_doses_context`**: use for **all** prompts and cache fingerprints that should stay de-identified (`assistant_turn`, explain/interaction/side-effect/summary tools, `compose_medication_added_reply` patient block, **`check_interactions_structured`** including the **post-add cross-check** when a second-or-later medication is saved, etc.).
 - **`build_patient_context_for_chat_display`**: use when the **same thread** should show the user their **full** stored profile snippet (e.g. listing medications together with profile lines). This string is **not** intended for external LLM APIs.
 
 Conversation rows in the database are still stored from the **original** user message (for continuity with the product). Most assistant/tool paths pass **redacted** text into the LLM; **profile update**, **locale**, and **health summary** paths may use **raw** or **unredacted** strings as documented in **[llm-context.md](./llm-context.md)**.
