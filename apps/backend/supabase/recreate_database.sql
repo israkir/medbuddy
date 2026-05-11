@@ -269,3 +269,26 @@ drop policy if exists "medbuddy_health_issue_events_anon_rw" on public.health_is
 drop policy if exists "medbuddy_drug_reference_cache_anon_rw" on public.drug_reference_cache;
 drop policy if exists "medbuddy_drug_personalization_cache_anon_rw" on public.drug_personalization_cache;
 drop policy if exists "medbuddy_emergency_contacts_anon_rw" on public.emergency_contacts;
+
+-- Match apps/backend/supabase/schema.sql: lock out publishable JWT roles on these tables.
+revoke all on table public.patients from anon, authenticated;
+revoke all on table public.emergency_contacts from anon, authenticated;
+revoke all on table public.medications from anon, authenticated;
+revoke all on table public.conversation_turns from anon, authenticated;
+revoke all on sequence public.conversation_turns_id_seq from anon, authenticated;
+revoke all on table public.dose_events from anon, authenticated;
+revoke all on table public.health_issue_events from anon, authenticated;
+revoke all on table public.drug_reference_cache from anon, authenticated;
+revoke all on table public.drug_personalization_cache from anon, authenticated;
+
+-- PostgREST ``service_role`` for backend ``SUPABASE_SERVICE_KEY`` (``sb_secret_...``).
+grant usage on schema public to service_role;
+grant all on table public.patients to service_role;
+grant all on table public.emergency_contacts to service_role;
+grant all on table public.medications to service_role;
+grant all on table public.conversation_turns to service_role;
+grant all on sequence public.conversation_turns_id_seq to service_role;
+grant all on table public.dose_events to service_role;
+grant all on table public.health_issue_events to service_role;
+grant all on table public.drug_reference_cache to service_role;
+grant all on table public.drug_personalization_cache to service_role;

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Supabase DDL parity and `service_role` grants:** `recreate_database.sql` now applies the same `revoke all … from anon, authenticated` as `schema.sql` (previously omitted while the script claimed parity). Both `schema.sql` and `recreate_database.sql` also grant `usage` on `public` and `all` on each MedBuddy table plus `conversation_turns_id_seq` to `service_role` for explicit PostgREST backend access.
 - **ARQ reminder worker startup:** Worker `on_startup` now creates a shared `httpx.AsyncClient` (matching `main.py` timeouts/limits) and passes it to `build_app_services`, then closes it in `on_shutdown`. Production mode previously required `outbound_http` from the FastAPI lifespan only, so the worker crashed with `ConfigError` before processing jobs.
 - **Drug-registry parallel fetches:** TFDA and OpenFDA requests in `fetch_drug_grounding_text`, `ExplainMedicationTool`, and `ListMedicationsTool` now run concurrently via `asyncio.gather` instead of sequentially, cutting ~200–400 ms per tool call. Per-medication groundings in `list_medications` are also gathered in parallel.
 - **Drug-grounding helper deduplicated:** `side_effects._fetch_grounding` was an inline copy of `drug_grounding.fetch_drug_grounding_text`; it now delegates to the canonical helper, removing ~15 lines of duplicate logic.
