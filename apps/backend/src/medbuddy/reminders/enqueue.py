@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from medbuddy.core.request_id import get_request_id
+
 log = logging.getLogger(__name__)
 
 
@@ -22,14 +24,24 @@ async def enqueue_reminder_jobs(redis_url: str, jobs: list[tuple[str, datetime]]
         )
         return
 
+    origin_request_id = get_request_id()
     redis = await create_pool(RedisSettings.from_dsn(redis_url))
     try:
         for dose_id, defer_until in jobs:
             dt = defer_until if defer_until.tzinfo else defer_until.replace(tzinfo=UTC)
+            scheduled_at_iso = dt.isoformat()
             if dt <= datetime.now(UTC):
-                await redis.enqueue_job("send_reminder_for_dose", dose_id)
+                await redis.enqueue_job(
+                    "send_reminder_for_dose", dose_id, scheduled_at_iso, origin_request_id
+                )
             else:
-                await redis.enqueue_job("send_reminder_for_dose", dose_id, _defer_until=dt)
+                await redis.enqueue_job(
+                    "send_reminder_for_dose",
+                    dose_id,
+                    scheduled_at_iso,
+                    origin_request_id,
+                    _defer_until=dt,
+                )
     finally:
         await redis.close()
 

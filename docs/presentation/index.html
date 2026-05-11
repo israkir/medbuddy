@@ -3676,11 +3676,33 @@ class: deep eng-proto
 
 # Observability roadmap
 
-**Prototype evidence** — Structured logs across every pipeline layer, with raw user text excluded from INFO logs. Failures counted at each port (LLM, drug registry, LINE, voice) so gaps surface immediately in CI.
+**Prototype (shipped)** — Structured logs across every pipeline layer, raw user text excluded from INFO logs. PHI redaction filter on all named loggers. Per-request `request_id` contextvar threaded through assistant turns and arq reminder jobs. Startup fail-closed checks (missing service key, invalid reminder time, HTTPS enforcement). Failures counted at each port (LLM, drug registry, LINE, voice) so gaps surface immediately in CI.
 
-**MVP &amp; Pilot evidence** — CloudWatch and X-Ray on the full request path: assistant-turn latency, intent mix, registry-grounding gaps, and LLM/voice errors all tracked. Reminder pipeline: queue depth, worker throughput, LINE push delivery, and the reconcile job are monitored separately. Dashboards cover p95 latency, weekly grounding-quality review, reminder delivery rate, and voice cost per turn.
+**MVP &amp; Pilot (next)** — `GET /metrics` (Prometheus) + OpenTelemetry spans on LLM calls, drug-registry fetches, and LINE push; propagate `request_id` as trace ID. CloudWatch / X-Ray on the full request path. Dashboards: p95/p99 assistant-turn latency, LLM error rate, registry-grounding hit rate, reminder delivery rate. Alert rules: p99 &gt; 8 s · LLM error rate &gt; 5 % · reminder delivery &lt; 95 %. Separate `/ready` (dependencies) from `/health` (process alive).
 
-**Growth evidence** — Distributed tracing across the Tokyo region and all partner tenants. Reliability targets reviewed weekly against SLOs and error budgets; prompt and answer-content reviewed on a sampling cadence.
+**Growth** — Distributed tracing across Tokyo region and all partner tenants. SLO/error-budget review weekly; prompt and answer-content reviewed on a sampling cadence. Tenant-scoped audit sampling; DLP-style PII rules extended as MAU and jurisdiction mix grow.
+
+---
+
+class: deep eng-proto
+&lt;div class="track-tag eng"&gt;ENG&lt;/div&gt;
+&lt;div class="eng-proto-strip"&gt;Future direction &lt;span class="detail"&gt;Deferred from robustness review — no sprint scheduled; each has a named unlock gate&lt;/span&gt;&lt;/div&gt;
+
+# Engineering technical roadmap
+
+Items identified in the codebase robustness review, documented as future direction. Not started; gate conditions govern sequencing.
+
+| # | Item | What | Gate |
+|---|------|------|------|
+| **O1** | **Full OTel + Prometheus stack** | `/metrics` endpoint · OpenTelemetry SDK on LLM/drug/LINE/arq paths · Grafana dashboards · alert rules | First staging env with Prometheus/Grafana or CloudWatch + X-Ray |
+| **13.2** | **Conversation memory compression** | LLM rolling summary of older turns; preserves key medication decisions beyond hard truncation cap | Pilot data shows context coherence loss in sessions &gt; 50 turns |
+| **13.3** | **Semantic drug cache keys** | Embedding-distance keys replace exact-text fingerprints; paraphrased drug queries share cache rows | Drug-grounding cache hit rate &lt; 40 % for common queries |
+| **13.4** | **API-surface rate limiting** | Token bucket per `user_key` / LINE `userId`; `429 Retry-After` | First external integrator DPA signed (OD-2) or observed burst abuse |
+| **13.5** | **Dead-letter queue + worker health** | Failed arq/SQS jobs to DLQ; `GET /internal/workers/health`; alert on DLQ depth | Move from arq to SQS (Growth infra shift) |
+| **13.6** | **Full TFDA API integration** | Replace stub with real HTTP client; route TFDA for `zh-TW`, OpenFDA for `en` | TFDA data access legally and technically confirmed (OD-1) |
+| **13.7** | **Compliance audit log** | Append-only patient-data-access log; CloudWatch + 1-year retention; SOC2 foundation | First institutional DPA request or OD-1 regulatory decision |
+
+.src[Full detail: [features.md §13 Engineering technical roadmap](https://github.com/israkir/medbuddy/blob/main/docs/features.md#13-engineering-technical-roadmap) · [TODO.md — Observability](https://github.com/israkir/medbuddy/blob/main/TODO.md)]
 
 ---
 

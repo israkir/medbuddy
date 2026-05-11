@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from datetime import datetime
 
 from medbuddy.models.domain import ConversationTurn
 from medbuddy.protocols import ConversationStorePort
@@ -19,3 +20,13 @@ class InMemoryConversationStore(ConversationStorePort):
     async def append_turn(self, line_user_id: str, turn: ConversationTurn) -> None:
         await asyncio.sleep(0)
         self._turns[line_user_id].append(turn)
+
+    async def purge_turns_older_than(self, before_utc: datetime) -> int:
+        await asyncio.sleep(0)
+        total = 0
+        for uid in list(self._turns):
+            kept = [t for t in self._turns[uid] if t.at is None or t.at >= before_utc]
+            removed = len(self._turns[uid]) - len(kept)
+            self._turns[uid] = kept
+            total += removed
+        return total

@@ -76,3 +76,21 @@ class SupabaseConversationStore(ConversationStorePort):
 
         await _run_q(q)
         log.info("DB conversation_turns.append: patient_id=%s role=%s", uid, turn.role)
+
+    async def purge_turns_older_than(self, before_utc: datetime) -> int:
+        """Delete conversation turns older than *before_utc*. Returns the number of rows deleted."""
+        cutoff = before_utc if before_utc.tzinfo else before_utc.replace(tzinfo=UTC)
+        cutoff_iso = cutoff.isoformat()
+
+        def q() -> Any:
+            return (
+                self._client.table("conversation_turns")
+                .delete()
+                .lt("created_at", cutoff_iso)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        deleted = len(resp.data or [])
+        log.info("conversation_turns.purge: deleted=%d before=%s", deleted, cutoff_iso)
+        return deleted

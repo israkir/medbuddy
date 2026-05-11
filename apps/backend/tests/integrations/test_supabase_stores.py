@@ -510,6 +510,9 @@ async def test_patch_user_profile_emergency_contacts_demotes_old_primary() -> No
             return contacts_builder
         return user_builder
 
+    rpc_builder = MagicMock()
+    rpc_builder.execute.return_value = MagicMock(data=None)
+    client.rpc = MagicMock(return_value=rpc_builder)
     client.table.side_effect = table
 
     ud = SupabaseUserData(client, load_settings({}))
@@ -532,11 +535,8 @@ async def test_patch_user_profile_emergency_contacts_demotes_old_primary() -> No
     assert insert_payload["channel_value"] == "kathy_line"
     assert insert_payload["is_primary"] is False
 
-    update_calls = contacts_builder.update.call_args_list
-    update_payloads = [c.args[0] for c in update_calls]
-    assert any(
-        p == {"is_primary": False} for p in update_payloads
-    ), "expected demote-others update to set is_primary=False"
-    assert any(
-        p == {"is_primary": True} for p in update_payloads
-    ), "expected promote-latest update to set is_primary=True"
+    client.rpc.assert_called_once()
+    rpc_args = client.rpc.call_args
+    assert rpc_args[0][0] == "medbuddy_set_emergency_primary"
+    rpc_params = rpc_args[0][1]
+    assert rpc_params["p_contact_id"] == new_inserted_id

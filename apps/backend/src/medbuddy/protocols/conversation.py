@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from medbuddy.models.domain import ConversationTurn
@@ -13,3 +14,5 @@ class ConversationStorePort(Protocol):
     ) -> list[ConversationTurn]: ...
 
     async def append_turn(self, line_user_id: str, turn: ConversationTurn) -> None: ...
+
+    async def purge_turns_older_than(self, before_utc: datetime) -> int: ...

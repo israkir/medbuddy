@@ -217,26 +217,15 @@ class SupabaseProfileMixin:
             return
         latest_id = rows[0]["id"]
 
-        def demote_others() -> Any:
-            return (
-                self._client.table("emergency_contacts")
-                .update({"is_primary": False})
-                .eq("patient_id", patient_id)
-                .neq("id", latest_id)
-                .execute()
-            )
+        # Single atomic UPDATE: is_primary = (id = latest_id) for all rows of this patient.
+        # This replaces two sequential UPDATEs that had a race window between them.
+        def set_primary() -> Any:
+            return self._client.rpc(
+                "medbuddy_set_emergency_primary",
+                {"p_patient_id": patient_id, "p_contact_id": latest_id},
+            ).execute()
 
-        await _run_q(demote_others)
-
-        def promote_latest() -> Any:
-            return (
-                self._client.table("emergency_contacts")
-                .update({"is_primary": True})
-                .eq("id", latest_id)
-                .execute()
-            )
-
-        await _run_q(promote_latest)
+        await _run_q(set_primary)
 
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]:
         row = await self._select_user_row(line_user_id)

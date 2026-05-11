@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Header, Request
 from fastapi.responses import PlainTextResponse
@@ -40,3 +40,25 @@ async def reminders_reconcile(
     ids = await svc.users.list_dose_event_ids_for_reconcile(before_utc=now)
     await enqueue_reminder_jobs_now(settings.redis_url, ids)
     return {"enqueued": len(ids), "status": "ok"}
+
+
+@router.post("/internal/conversations/purge")
+async def conversations_purge(
+    request: Request,
+    x_cron_secret: str | None = Header(None, alias="X-Cron-Secret"),
+) -> dict[str, int | str]:
+    """Delete conversation turns older than MEDBUDDY_CONVERSATION_RETENTION_DAYS (default 90).
+
+    Intended for a nightly cron job. Authenticated with the same X-Cron-Secret header
+    used by the reminders reconcile endpoint.
+    """
+    settings = get_settings()
+    if not settings.cron_secret or not secrets.compare_digest(
+        (x_cron_secret or ""), settings.cron_secret
+    ):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    svc: AppServices = request.app.state.services
+    cutoff = datetime.now(UTC) - timedelta(days=settings.conversation_retention_days)
+    deleted = await svc.conversations.purge_turns_older_than(cutoff)
+    return {"deleted": deleted, "cutoff_days": settings.conversation_retention_days, "status": "ok"}

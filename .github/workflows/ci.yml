@@ -40,7 +40,7 @@ jobs:
         env:
           MEDBUDDY_INTEGRATION: mock
           MOCK_EXTERNAL_SERVICES: "true"
-        run: cd apps/backend && "$GITHUB_WORKSPACE/.venv/bin/pytest" -q
+        run: cd apps/backend && "$GITHUB_WORKSPACE/.venv/bin/pytest" -q --cov=medbuddy --cov-fail-under=65 --cov-report=term-missing
 
   frontend:
     runs-on: ubuntu-latest

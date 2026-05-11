@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from contextvars import ContextVar
 
 import httpx
 from fastapi import FastAPI, Request
@@ -19,17 +18,15 @@ from medbuddy.channels.line.routes import router as line_router
 from medbuddy.config import get_settings
 from medbuddy.container import build_app_services
 from medbuddy.core.logging import configure_logging
+from medbuddy.core.request_id import get_request_id, set_request_id
 
 log = logging.getLogger(__name__)
-
-# Per-request correlation ID — set by RequestIdMiddleware, read by the exception handler.
-_request_id: ContextVar[str] = ContextVar("request_id", default="")
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         rid = str(uuid.uuid4())
-        _request_id.set(rid)
+        set_request_id(rid)
         response = await call_next(request)
         response.headers["X-Request-Id"] = rid
         return response
@@ -93,7 +90,7 @@ app.include_router(api_router)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    rid = _request_id.get("")
+    rid = get_request_id()
     log.exception("Unhandled exception request_id=%s path=%s", rid, request.url.path)
     return JSONResponse(
         status_code=500,
