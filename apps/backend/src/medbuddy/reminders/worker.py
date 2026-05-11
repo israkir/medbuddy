@@ -9,6 +9,7 @@ from arq.connections import RedisSettings
 
 from medbuddy.config import get_settings
 from medbuddy.container import build_app_services
+from medbuddy.core.request_id import set_request_id
 from medbuddy.reminders.deliver import deliver_dose_reminder, deliver_dose_reminder_nudge
 
 
@@ -22,9 +23,16 @@ async def shutdown(ctx: dict[str, Any]) -> None:
     _ = ctx
 
 
-async def send_reminder_for_dose(ctx: dict[str, Any], dose_event_id: str) -> None:
+async def send_reminder_for_dose(
+    ctx: dict[str, Any],
+    dose_event_id: str,
+    scheduled_at_iso: str | None = None,
+    origin_request_id: str | None = None,
+) -> None:
+    if origin_request_id:
+        set_request_id(origin_request_id)
     svc = ctx["services"]
-    await deliver_dose_reminder(svc, dose_event_id)
+    await deliver_dose_reminder(svc, dose_event_id, scheduled_at_iso=scheduled_at_iso)
 
 
 async def send_reminder_nudge(

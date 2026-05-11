@@ -55,11 +55,23 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Observability
 
-- [ ] Implement an end-to-end **observability system**: centralized structured logs, distributed tracing, core service metrics, dashboards, and alert rules for backend/API/worker health and LLM/STT error budgets.
+**Foundation shipped (robustness sprints):** Structured logs with PHI redaction (`PhiRedactFilter`), per-request `request_id` contextvar threaded through all paths including arq jobs, persona body gated to DEBUG. Startup checks (missing Supabase service key, invalid reminder time, HTTPS enforcement for voice replies).
 
-- [ ] Optional: JSON logs, correlation IDs; readiness vs liveness; metrics/alerts (LINE vs **`/v1/app`**, LLM/STT failures).
+**Next layer — full metrics + tracing stack (O1):** Gate: first staging environment with Prometheus/Grafana or CloudWatch + X-Ray configured.
+
+- [ ] **`GET /metrics`** — Prometheus exposition format via `prometheus-fastapi-instrumentator` or equivalent; counts/histograms for assistant-turn latency, LLM error rate, drug-grounding hit rate, reminder delivery rate, conversation-purge count.
+
+- [ ] **OpenTelemetry instrumentation** — `SpanProcessor` on `LLMPort.complete_chat_with_tools`, drug-registry HTTP calls, LINE push, and arq job delivery; propagate the existing `request_id` contextvar as the trace/span ID so logs and traces correlate without an additional field.
+
+- [ ] **Dashboards** — p95/p99 assistant-turn latency; LLM call error rate; drug-grounding hit/miss ratio; reminder delivery rate; conversation-purge deleted-rows count.
+
+- [ ] **Alert rules** — p99 > 8 s, LLM error rate > 5 %, reminder delivery < 95 %, purge job last-run > 25 h.
+
+- [ ] **Readiness vs liveness** — Separate `/ready` (DB reachable, LLM provider reachable) from `/health` (process alive) for load-balancer vs orchestrator use.
 
 - [ ] **Performance and LLM cost:** Profile end-to-end application performance (assistant turns, reminders, mobile API); estimate and track **token usage** per path/provider; optimize prompts, context windows, caching, and model/routing choices to reduce latency and cost.
+
+**Further future (see [`docs/features.md §13`](docs/features.md#13-engineering-technical-roadmap)):** Conversation memory compression (§13.2) · Semantic drug cache keys (§13.3) · API rate limiting (§13.4) · Dead-letter queue + worker health endpoint (§13.5) · Full TFDA API (§13.6) · Compliance audit log (§13.7).
 
 ### Security and resilience
 

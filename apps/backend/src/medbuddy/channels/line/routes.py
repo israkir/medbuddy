@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from linebot.v3 import WebhookParser
 from linebot.v3.exceptions import InvalidSignatureError
 
+from medbuddy.channels.line.idempotency import mark_and_check_line_event_seen
 from medbuddy.channels.line.orchestrator import handle_line_event
 from medbuddy.config import Settings, get_settings
 from medbuddy.deps import get_services
@@ -86,8 +87,18 @@ async def line_webhook(
             detail,
         )
 
+    redis_url = svc.settings.redis_url
     for event in events:
-        await handle_line_event(event.to_dict(), svc)
+        payload = event.to_dict()
+        event_id = payload.get("webhookEventId") or ""
+        if redis_url and event_id:
+            already_seen = await mark_and_check_line_event_seen(redis_url, event_id)
+            if already_seen:
+                log.info(
+                    "LINE webhook: duplicate event skipped webhook_event_id=%r", event_id
+                )
+                continue
+        await handle_line_event(payload, svc)
 
     log.info("LINE webhook: batch completed OK")
     return {"status": "ok"}

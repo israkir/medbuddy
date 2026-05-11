@@ -470,7 +470,87 @@ These are **not** backlog items or deferred features — they are deliberate exc
 
 ---
 
-## 13. Future feature directions
+## 13. Engineering technical roadmap
+
+These are backend hardening items identified in the codebase robustness review that are documented here as future direction. None of them are started; each has a named unlock condition.
+
+### 13.1 Full observability stack (O1)
+
+**What:** Prometheus-compatible `/metrics` endpoint, OpenTelemetry instrumentation on the full request path, and structured alert rules.
+
+**Why deferred:** The logging foundation (structured logs, `request_id` correlation, PHI redaction filter) was established in the robustness sprints. The `/metrics` + OTel layer is a meaningful additional dependency surface and is best added when the first staging environment with a real Prometheus/Grafana stack is provisioned.
+
+**Scope when built:**
+- `GET /metrics` (Prometheus exposition format) via `prometheus-fastapi-instrumentator` or equivalent
+- OpenTelemetry SDK: `SpanProcessor` on LLM calls, drug-registry fetches, LINE push, and arq job delivery — using the `request_id` contextvar already threaded through all paths (see `core/request_id.py`)
+- Dashboards: p95/p99 assistant-turn latency, LLM call error rate, drug-grounding hit rate, reminder delivery rate, conversation retention purge count
+- Alert rules: p99 > 8 s, LLM error rate > 5 %, reminder delivery < 95 %
+
+**Gate:** First staging or production environment with Prometheus/Grafana or CloudWatch + X-Ray configured.
+
+---
+
+### 13.2 Conversation memory compression
+
+**What:** When `conversation_turns` exceeds the agent history cap, use an LLM call to produce a rolling summary that preserves key facts (medication decisions, confirmed allergies, stated preferences) without sending the full raw history.
+
+**Why deferred:** Hard-capped truncation (`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`, default 12) is sufficient for the pilot cohort. Compression adds an extra LLM call per turn on long-running conversations and requires careful prompt design to avoid hallucinating facts.
+
+**Gate:** Pilot data shows users with > 50 conversation turns or measurable loss of context coherence in longer sessions.
+
+---
+
+### 13.3 Semantic / embedding-based drug cache keys
+
+**What:** Replace normalized exact-text fingerprints in `drug_reference_cache` and `drug_personalization_cache` with embedding-distance keys so paraphrased queries ("What is metformin for?" vs. "Explain metformin") share cached results.
+
+**Why deferred:** Exact-key normalization is fast and free. Embedding lookup requires a vector store or cosine-similarity query, adds latency, and needs privacy analysis (embedding inputs are redacted text, but the embedding model is another external call).
+
+**Gate:** Drug-grounding cache hit rate (logged per turn) falls below 40 % for the pilot cohort's most common queries, indicating exact matching is too narrow.
+
+---
+
+### 13.4 API-surface rate limiting
+
+**What:** Token-bucket per `user_key` on `/v1/app` endpoints and per LINE `userId` on the webhook handler; return `429 Too Many Requests` with a `Retry-After` header.
+
+**Why deferred:** Pilot cohort is small and controlled; a shared Bearer token reduces per-user abuse surface. Rate limiting at the edge (ALB, Render, Nginx) is viable for MVP.
+
+**Gate:** First external integrator DPA signed (OD-2), or organic abuse signals in logs (high burst from a single user key).
+
+---
+
+### 13.5 Dead-letter queue and worker health endpoint
+
+**What:** Route failed arq/SQS reminder jobs to a DLQ with retry metadata; expose `GET /internal/workers/health` for queue depth and last-processed timestamp; add Slack/PagerDuty alert when DLQ depth > 0.
+
+**Why deferred:** The existing reconcile endpoint (`POST /internal/reminders/reconcile`) provides a manual recovery path sufficient for the pilot. A DLQ adds dependency on SQS (MVP infra) and a separate consumer.
+
+**Gate:** Move from Render/arq to AWS SQS (Growth-phase infra shift).
+
+---
+
+### 13.6 Full TFDA API integration
+
+**What:** Replace the `_fetch_tfda_snippet` stub with a real HTTP client to the Taiwan Food and Drug Administration drug database; route TFDA queries for `zh-TW` patients and OpenFDA for `en` patients; merge results in the shared `DrugDataPort` cache.
+
+**Why deferred:** TFDA does not expose a public REST API equivalent to OpenFDA. The stub is a placeholder until a legal/technical path to the data is confirmed.
+
+**Gate:** TFDA data access confirmed as legally and technically viable (noted in features.md §12 non-goals and `prd-extended.md` OD-1).
+
+---
+
+### 13.7 Compliance audit log
+
+**What:** Append-only event log of data-access operations (patient read, medication write, LLM call with de-identified key) to CloudWatch Logs with a 1-year retention policy; foundation for SOC2 Type II and Taiwan regulatory review (OD-1).
+
+**Why deferred:** Pilot is a controlled internal cohort. The structured logs from the robustness sprints (with PHI redaction) are the foundation; a separate audit channel adds storage cost and review process overhead not yet justified at pilot scale.
+
+**Gate:** First institutional partner conversation that asks for a DPA (same trigger as T2.3 API hardening) or OD-1 regulatory classification decision.
+
+---
+
+## 14. Future feature directions
 
 Features are grouped into three tiers gated by market and maturity signals, not by calendar. No tier graduates without its named trigger. Authoritative gate definitions live in [`prd-extended.md §13`](prd-extended.md#13-open-decisions).
 
@@ -514,4 +594,4 @@ Do not begin engineering on any T3 feature before OD-1 and OD-5 are resolved.
 
 ## Document map
 
-Index: [`../README.md`](../README#documentation). Design: [`tdd.md`](tdd.md) · [`tdd-extended.md`](tdd-extended.md). Flows: [`use-cases.md`](use-cases.md). LINE dose pushes: [`reminders.md`](reminders.md). PII: [`privacy.md`](privacy.md). **Reference mobile (Expo):** [`frontend-expo.md`](frontend-expo.md). Backend: [`../apps/backend/README.md`](../apps/backend/README.md). Frontend dev: [`../apps/frontend/README.md`](../apps/frontend/README.md).
+Index: [`../README.md`](../README#documentation). Design: [`tdd.md`](tdd.md) · [`tdd-extended.md`](tdd-extended.md). Flows: [`use-cases.md`](use-cases.md). LINE dose pushes: [`reminders.md`](reminders.md). PII: [`privacy.md`](privacy.md). **Reference mobile (Expo):** [`frontend-expo.md`](frontend-expo.md). Backend: [`../apps/backend/README.md`](../apps/backend/README.md). Frontend dev: [`../apps/frontend/README.md`](../apps/frontend/README.md). Production checklist: [`../TODO.md`](../TODO.md).

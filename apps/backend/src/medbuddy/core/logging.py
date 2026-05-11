@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import sys
 
+from medbuddy.privacy.log_filter import PhiRedactFilter
+
 
 def configure_logging(level_name: str) -> None:
     """Apply consistent stdout logging for app and server loggers."""
@@ -18,5 +20,8 @@ def configure_logging(level_name: str) -> None:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
         force=True,
     )
+    phi_filter = PhiRedactFilter()
     for name in ("medbuddy", "uvicorn", "uvicorn.error", "uvicorn.access", "arq"):
-        logging.getLogger(name).setLevel(level)
+        lg = logging.getLogger(name)
+        lg.setLevel(level)
+        lg.addFilter(phi_filter)

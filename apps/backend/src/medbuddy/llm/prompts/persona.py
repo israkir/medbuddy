@@ -237,10 +237,6 @@ def build_patient_context_for_llm(
         result = f"{base}\n\n{upcoming_doses_context.strip()}"
     else:
         result = base
-    log.info(
-        "build_patient_context_for_llm complete locale=%s chars=%d:\n%s",
-        locale,
-        len(result),
-        result,
-    )
+    log.info("build_patient_context_for_llm complete locale=%s chars=%d", locale, len(result))
+    log.debug("build_patient_context_for_llm body:\n%s", result)
     return result

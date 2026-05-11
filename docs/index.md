@@ -77,6 +77,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | What does PII redaction cover? | [`privacy.md`](privacy.md) — Redaction behavior |
 | What do OD-1/OD-5/T1/T2/T3 codes mean? | [`prd-extended.md` §13 Open decisions](prd-extended.md#13-open-decisions) — codes &amp; abbreviations |
 | What's left before production? | [`../TODO.md`](../TODO.md) |
+| What backend hardening items are deferred for later? | [`features.md §13`](features.md#13-engineering-technical-roadmap) — OTel/metrics, memory compression, semantic cache, rate limiting, DLQ, TFDA, audit log |
 | How do I add a new LLM adapter? | [`tdd-extended.md`](tdd-extended.md) §16 Extension points |
 | How do I add a new orchestrator tool? | [`tdd-extended.md`](tdd-extended.md) §16.4, [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How does Python map to Go/Fiber modules? | [`go-port-mapping.md`](go-port-mapping.md) |

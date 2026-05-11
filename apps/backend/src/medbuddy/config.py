@@ -7,6 +7,7 @@ Each env-var name is canonical (one name per setting, no aliases).
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
@@ -91,6 +92,8 @@ class Settings:
     # Optional comma-separated allowlist; ``None`` = built-in defaults; ``all_non_off_topic`` alone = capture mode.
     health_issue_log_intents: tuple[str, ...] | None
     health_issue_summary_events_limit: int
+
+    conversation_retention_days: int
 
     cors_allowed_origins: tuple[str, ...] = field(default_factory=tuple)
     reminder_nudge_intervals_minutes: tuple[int, ...] = field(default_factory=tuple)
@@ -231,6 +234,18 @@ def _line_voice_replies(env: Mapping[str, str]) -> str:
     raise ConfigError(msg)
 
 
+def _reminder_local_time(env: Mapping[str, str]) -> str:
+    raw = _str(env, "MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME", "09:00")
+    if not re.fullmatch(r"\d{2}:\d{2}", raw):
+        msg = f"MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME must be HH:MM (24-hour, zero-padded); got {raw!r}"
+        raise ConfigError(msg)
+    hour, minute = int(raw[:2]), int(raw[3:])
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        msg = f"MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME must be a valid time 00:00–23:59; got {raw!r}"
+        raise ConfigError(msg)
+    return raw
+
+
 def _assert_real_mode_secrets(env: Mapping[str, str], llm_provider: LlmProvider) -> None:
     """Raise ConfigError at startup if any secret required in real mode is absent."""
     required: list[tuple[str, str]] = [
@@ -248,6 +263,16 @@ def _assert_real_mode_secrets(env: Mapping[str, str], llm_provider: LlmProvider)
     if missing:
         joined = "; ".join(missing)
         msg = f"Missing required secrets for real mode: {joined}"
+        raise ConfigError(msg)
+
+    voice_replies = _line_voice_replies(env)
+    public_base_url = _str(env, "PUBLIC_BASE_URL", "http://localhost:8000")
+    if voice_replies != "off" and not public_base_url.lower().startswith("https:"):
+        msg = (
+            f"PUBLIC_BASE_URL must be HTTPS when MEDBUDDY_LINE_VOICE_REPLIES={voice_replies!r}. "
+            "LINE requires HTTPS for audio content URLs. "
+            f"Got PUBLIC_BASE_URL={public_base_url!r}."
+        )
         raise ConfigError(msg)
 
 
@@ -292,7 +317,7 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         mobile_bearer_token=_str(env, "MEDBUDDY_MOBILE_BEARER_TOKEN"),
         redis_url=_str(env, "REDIS_URL"),
         cron_secret=_str(env, "MEDBUDDY_CRON_SECRET"),
-        reminder_default_local_time=_str(env, "MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME", "09:00"),
+        reminder_default_local_time=_reminder_local_time(env),
         reminder_horizon_days=_int(env, "MEDBUDDY_REMINDER_HORIZON_DAYS", default=14, ge=1, le=90),
         profile_completion_nudge_every_n_user_turns=_int(
             env,
@@ -318,6 +343,9 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         ),
         reminder_nudge_intervals_minutes=_nudge_intervals(
             env, "MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES"
+        ),
+        conversation_retention_days=_int(
+            env, "MEDBUDDY_CONVERSATION_RETENTION_DAYS", default=90, ge=1, le=3650
         ),
         cors_allowed_origins=_cors_origins(env),
     )

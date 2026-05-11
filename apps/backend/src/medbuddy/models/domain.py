@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
+
+_domain_log = logging.getLogger(__name__)
+_PENDING_SCHEMA_VERSION = 1
 
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
@@ -172,6 +176,7 @@ class DoseClarificationPending:
 
     def to_json(self) -> dict[str, Any]:
         return {
+            "schema_version": _PENDING_SCHEMA_VERSION,
             "kind": self.kind,
             "option_ids": list(self.option_ids),
             "pending_note": self.pending_note,
@@ -181,6 +186,12 @@ class DoseClarificationPending:
     @classmethod
     def from_json(cls, data: Any) -> DoseClarificationPending | None:
         if not isinstance(data, dict):
+            return None
+        sv = data.get("schema_version", 0)
+        if sv > _PENDING_SCHEMA_VERSION:
+            _domain_log.warning(
+                "DoseClarificationPending: unknown schema_version=%s; discarding stale row", sv
+            )
             return None
         kind = data.get("kind")
         if kind not in ("pending_taken", "note_on_taken"):
@@ -229,6 +240,7 @@ class ReminderHorizonPending:
 
     def to_json(self) -> dict[str, Any]:
         return {
+            "schema_version": _PENDING_SCHEMA_VERSION,
             "kind": REMINDER_HORIZON_PENDING_KIND,
             "medication_id": self.medication_id,
             "medication_name": self.medication_name,
@@ -238,6 +250,12 @@ class ReminderHorizonPending:
     @classmethod
     def from_json(cls, data: Any) -> "ReminderHorizonPending | None":
         if not isinstance(data, dict):
+            return None
+        sv = data.get("schema_version", 0)
+        if sv > _PENDING_SCHEMA_VERSION:
+            _domain_log.warning(
+                "ReminderHorizonPending: unknown schema_version=%s; discarding stale row", sv
+            )
             return None
         if data.get("kind") != REMINDER_HORIZON_PENDING_KIND:
             return None
@@ -357,6 +375,7 @@ class MedicationAddConfirmationPending:
 
     def to_json(self) -> dict[str, Any]:
         return {
+            "schema_version": _PENDING_SCHEMA_VERSION,
             "kind": MEDICATION_ADD_CONFIRM_KIND,
             "draft": _medication_draft_to_json(self.draft),
             "expires_at": self.expires_at.replace(tzinfo=UTC).isoformat(),
@@ -365,6 +384,13 @@ class MedicationAddConfirmationPending:
     @classmethod
     def from_json(cls, data: Any) -> MedicationAddConfirmationPending | None:
         if not isinstance(data, dict):
+            return None
+        sv = data.get("schema_version", 0)
+        if sv > _PENDING_SCHEMA_VERSION:
+            _domain_log.warning(
+                "MedicationAddConfirmationPending: unknown schema_version=%s; discarding stale row",
+                sv,
+            )
             return None
         if data.get("kind") != MEDICATION_ADD_CONFIRM_KIND:
             return None

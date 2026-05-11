@@ -32,6 +32,7 @@ def _real_secrets() -> dict[str, str]:
         "MEDBUDDY_CRON_SECRET": "cron",
         "LLM_PROVIDER": "gemini",
         "GEMINI_API_KEY": "gkey",
+        "MEDBUDDY_LINE_VOICE_REPLIES": "off",
     }
 
 

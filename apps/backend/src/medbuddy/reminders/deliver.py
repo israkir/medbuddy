@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import random
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
+
+_NUDGE_JITTER_SECONDS = 30  # ±30 s applied at enqueue time to spread fan-out
 
 from medbuddy.services import AppServices
 from medbuddy.core.i18n import t
@@ -30,8 +33,17 @@ def _should_append_education_cta(
     return (local_dt.date().toordinal() % every_n_days) == slot and day_bucket >= 0
 
 
-async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
-    """Load the row, push LINE text, then mark sent. Returns True if a push was attempted."""
+async def deliver_dose_reminder(
+    svc: AppServices,
+    dose_event_id: str,
+    scheduled_at_iso: str | None = None,
+) -> bool:
+    """Load the row, push LINE text, then mark sent. Returns True if a push was attempted.
+
+    ``scheduled_at_iso`` is the ISO-8601 timestamp baked into the arq job at enqueue time.
+    If it no longer matches the live row (e.g. the event was rescheduled or deleted and
+    recreated), the job is dropped to avoid double-firing on a stale id.
+    """
     payload = await svc.users.get_dose_event_for_reminder(dose_event_id)
     if payload is None:
         log.info(
@@ -39,6 +51,18 @@ async def deliver_dose_reminder(svc: AppServices, dose_event_id: str) -> bool:
             dose_event_id,
         )
         return False
+
+    if scheduled_at_iso is not None:
+        live_iso = payload.scheduled_at.isoformat()
+        if live_iso != scheduled_at_iso:
+            log.info(
+                "reminder skip: scheduled_at mismatch dose_event_id=%s "
+                "expected=%s actual=%s (row rescheduled or recreated)",
+                dose_event_id,
+                scheduled_at_iso,
+                live_iso,
+            )
+            return False
 
     locale = payload.user_locale
     un = t("medication.unspecified", locale=locale)
@@ -133,7 +157,8 @@ async def deliver_dose_reminder_nudge(
     elif ok and expected_nudge_count + 1 < max_n:
         nxt = expected_nudge_count + 1
         delay_min = intervals[nxt]
-        defer_until = datetime.now(UTC) + timedelta(minutes=delay_min)
+        jitter = random.uniform(-_NUDGE_JITTER_SECONDS, _NUDGE_JITTER_SECONDS)
+        defer_until = datetime.now(UTC) + timedelta(minutes=delay_min, seconds=jitter)
         await enqueue_reminder_nudge_job(svc.settings.redis_url, dose_event_id, nxt, defer_until)
     return True
 
@@ -144,5 +169,6 @@ async def _enqueue_first_nudge(svc: AppServices, dose_event_id: str) -> None:
     if not intervals or not redis_url:
         return
     delay_min = intervals[0]
-    defer_until = datetime.now(UTC) + timedelta(minutes=delay_min)
+    jitter = random.uniform(-_NUDGE_JITTER_SECONDS, _NUDGE_JITTER_SECONDS)
+    defer_until = datetime.now(UTC) + timedelta(minutes=delay_min, seconds=jitter)
     await enqueue_reminder_nudge_job(redis_url, dose_event_id, 0, defer_until)

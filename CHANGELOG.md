@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **LINE webhook idempotency (S2):** A Redis `SETNX` keyed on `webhookEventId` (5-minute TTL) deduplicates events before dispatch. LINE retries and slow-200 re-deliveries are silently skipped. Falls back gracefully (always-process) when `REDIS_URL` is unset so mock mode is unaffected. New module: `channels/line/idempotency.py`.
+
 - **Supabase RLS tightened:** All eight tables now deny access to the `anon` and `authenticated` roles. The backend exclusively uses `SUPABASE_SERVICE_KEY` (service_role), which bypasses RLS without requiring explicit policies. Legacy open `using (true)` policies are dropped by `supabase/migrations/restrict_rls_to_service_role.sql`. `SUPABASE_PUBLISHABLE_KEY` is retained in config for local tooling but is no longer used by the server.
 - **Supabase service-key fail-closed:** `create_supabase_client` now raises `ConfigError` if `SUPABASE_SERVICE_KEY` is absent, regardless of integration mode. Previously it silently fell back to the publishable/anon key, causing confusing 4xx errors under the new closed-RLS policies.
 - **Constant-time cron secret comparison:** `POST /internal/reminders/reconcile` now uses `secrets.compare_digest` for the `X-Cron-Secret` header check, matching the pattern already used for `MEDBUDDY_MOBILE_BEARER_TOKEN`.
@@ -20,10 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Drug-registry timeouts and retry:** `HttpDrugData` uses a structured `httpx.Timeout(connect=3, read=4, write=3, pool=3)` and retries once with random jitter on `TimeoutException` / `ConnectError`. Dropped the unused `timeout: float` constructor parameter.
 - **`outbound_http` single-owner:** `build_app_services` now raises `ConfigError` in real mode when `outbound_http` is `None`, eliminating the silent fallback that could construct a second untracked `AsyncClient`. The lifespan in `main.py` is the sole owner.
 - **`make_mock_settings` deduplicated:** `tests/conftest.py` previously duplicated the helper from `tests/helpers.py`; it now imports from the canonical location.
+- **Reminder job `scheduled_at` version check (R3):** `send_reminder_for_dose` now receives the `scheduled_at` ISO timestamp baked in at enqueue time. If the live row's `scheduled_at` no longer matches (row rescheduled or recreated), the job is dropped with an INFO log instead of double-firing.
+- **Nudge fan-out jitter (R4):** Nudge `defer_until` offsets receive ±30 s random jitter at enqueue time, spreading concurrent pushes across the minute boundary.
+- **Emergency-contact atomic set-primary (R5):** The two-step demote-then-promote UPDATE sequence is replaced by a single Postgres function call (`medbuddy_set_emergency_primary`), eliminating the race window where a concurrent insert could leave multiple `is_primary = true` rows. Migration: `supabase/migrations/set_emergency_primary_fn.sql`.
+- **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` format validated (O5):** `load_settings` now rejects values that are not zero-padded `HH:MM` (e.g. `"9:0"`, `"25:00"`) at startup with a `ConfigError`.
+- **`PUBLIC_BASE_URL` HTTPS enforced for voice replies (O6):** In real mode, if `MEDBUDDY_LINE_VOICE_REPLIES` is not `"off"`, startup raises `ConfigError` when `PUBLIC_BASE_URL` is not `https://…`. LINE's CDN requires HTTPS for audio content URLs.
+- **PHI persona body gated to DEBUG (S3):** `build_patient_context_for_llm` now logs `chars=N` at INFO and the full body only at DEBUG — patient names, meds, and demographics no longer appear in production INFO logs. `PhiRedactFilter` added to all named loggers via `core/logging.py`; it masks emails, phone numbers, and known PHI field names from structured log record extras.
+- **Pending JSONB `schema_version` field (R6):** `DoseClarificationPending`, `ReminderHorizonPending`, and `MedicationAddConfirmationPending` now write `schema_version: 1` in `to_json()`. `from_json()` accepts version-0 rows (pre-migration, backward-compatible) and discards any future version it does not understand with a WARNING log.
+- **`request_id` propagated into arq jobs (F5):** `enqueue_reminder_jobs` captures the current `request_id` contextvar and passes it as a job arg. `send_reminder_for_dose` restores it at task entry so reminder-delivery log lines are linkable to the web-turn that scheduled them. `_request_id` contextvar extracted to `core/request_id.py`.
+- **Conversation history retention endpoint (P6):** `POST /internal/conversations/purge` (same `X-Cron-Secret` auth as reconcile) deletes `conversation_turns` older than `MEDBUDDY_CONVERSATION_RETENTION_DAYS` (default 90). `ConversationStorePort.purge_turns_older_than` added; `InMemoryConversationStore` and `SupabaseConversationStore` implement it. The `(patient_id, created_at)` index required for the range scan was already present in `schema.sql`.
 
 ### Tests
 
 - **Locale-aware LINE follow tests (O3):** Added `test_follow_seeds_zhtw_locale_from_line_profile_language`, `test_follow_unknown_language_falls_back_to_default_locale`, and `test_follow_no_profile_language_uses_stored_locale` to cover the locale-seeding logic shipped on this branch.
+- **Pending JSONB version tests (R6):** `tests/test_pending_schema_version.py` covers version-0 backward compat, roundtrip, and future-version rejection for all three pending types.
+- **Reminder version-check and conversation-purge tests (R3/P6):** `tests/reminders/test_reminder_version_jitter.py` covers `scheduled_at` mismatch skip, happy-path match, and the `/internal/conversations/purge` endpoint.
+- **CI coverage gate (O4):** `pytest` in CI now runs with `--cov=medbuddy --cov-fail-under=65`; build fails if overall coverage drops below 65 %.
 
 ### Added
 
