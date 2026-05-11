@@ -85,6 +85,7 @@ class MockDoseEventMixin:
                     "name": med.name,
                     "dosage": med.dosage,
                     "schedule": med.schedule,
+                    "is_indefinite": bool(med.is_indefinite),
                     "scheduled_at": at,
                     "reminder_sent_at": None,
                     "taken_at": None,
@@ -114,6 +115,7 @@ class MockDoseEventMixin:
         return DoseEventReminderPayload(
             dose_event_id=dose_event_id,
             line_user_id=str(d["line_user_id"]),
+            medication_id=str(d.get("medication_id") or ""),
             medication_name=str(d["name"]),
             dosage=str(d["dosage"]),
             schedule=str(d["schedule"]),
@@ -121,6 +123,7 @@ class MockDoseEventMixin:
             user_timezone=str(d["timezone"]),
             user_locale=str(d["user_locale"]),
             is_nudge=False,
+            medication_is_indefinite=bool(d.get("is_indefinite", False)),
         )
 
     async def get_dose_event_for_nudge(
@@ -149,6 +152,7 @@ class MockDoseEventMixin:
         return DoseEventReminderPayload(
             dose_event_id=dose_event_id,
             line_user_id=str(d["line_user_id"]),
+            medication_id=str(d.get("medication_id") or ""),
             medication_name=str(d["name"]),
             dosage=str(d["dosage"]),
             schedule=str(d["schedule"]),
@@ -156,6 +160,7 @@ class MockDoseEventMixin:
             user_timezone=tz_name,
             user_locale=str(d["user_locale"]),
             is_nudge=True,
+            medication_is_indefinite=bool(d.get("is_indefinite", False)),
         )
 
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:
@@ -442,3 +447,28 @@ class MockDoseEventMixin:
             and d.get("taken_at") is None
             and d.get("missed_at") is None
         ]
+
+    async def list_patients_with_indefinite_medications(self) -> list[str]:
+        await asyncio.sleep(0)
+        out: list[str] = []
+        for line_uid, meds in self._meds.items():
+            if any(getattr(m, "is_indefinite", False) for m in meds):
+                out.append(line_uid)
+        return out
+
+    async def count_future_dose_events(
+        self, medication_id: str, *, now_utc: datetime | None = None
+    ) -> int:
+        await asyncio.sleep(0)
+        now = now_utc if now_utc is not None else datetime.now(UTC)
+        now = now if now.tzinfo else now.replace(tzinfo=UTC)
+        n = 0
+        for d in self._doses.values():
+            if str(d.get("medication_id")) != medication_id:
+                continue
+            if d.get("taken_at") is not None or d.get("missed_at") is not None:
+                continue
+            sched = d.get("scheduled_at")
+            if isinstance(sched, datetime) and sched > now:
+                n += 1
+        return n

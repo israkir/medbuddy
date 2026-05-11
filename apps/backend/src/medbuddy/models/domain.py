@@ -106,6 +106,8 @@ class MedicationDraft:
     needs_horizon_confirmation: bool = False
     daily_reminder_local_hhmm: str | None = None
     daily_reminder_local_hhmm_list: list[str] | None = None
+    # Chronic / lifelong meds: keep reminders rolling forever (cron + delivery-time top-up).
+    is_indefinite: bool = False
 
 
 @dataclass
@@ -116,6 +118,7 @@ class MedicationRecord:
     schedule: str
     instructions: str | None = None
     raw_metadata: dict[str, Any] = field(default_factory=dict)
+    is_indefinite: bool = False
 
 
 # Structured vital rows use ``routing_intent`` = ``Intent.LOG_VITAL.value``.
@@ -167,6 +170,7 @@ class DoseEventReminderPayload:
 
     dose_event_id: str
     line_user_id: str
+    medication_id: str
     medication_name: str
     dosage: str
     schedule: str
@@ -174,6 +178,7 @@ class DoseEventReminderPayload:
     user_timezone: str
     user_locale: str
     is_nudge: bool = False
+    medication_is_indefinite: bool = False
 
 
 @dataclass(frozen=True)
@@ -317,6 +322,7 @@ def _medication_draft_to_json(draft: MedicationDraft) -> dict[str, Any]:
         "needs_horizon_confirmation": draft.needs_horizon_confirmation,
         "daily_reminder_local_hhmm": draft.daily_reminder_local_hhmm,
         "daily_reminder_local_hhmm_list": list(dl) if dl else None,
+        "is_indefinite": draft.is_indefinite,
     }
 
 
@@ -378,6 +384,8 @@ def _medication_draft_from_dict(data: Any) -> MedicationDraft | None:
         daily_reminder_local_hhmm_list = [
             str(x).strip() for x in raw_list if str(x).strip()
         ] or None
+    indef_raw = data.get("is_indefinite")
+    is_indefinite = bool(indef_raw) if isinstance(indef_raw, bool) else False
     return MedicationDraft(
         name=name,
         dosage=dosage,
@@ -389,6 +397,7 @@ def _medication_draft_from_dict(data: Any) -> MedicationDraft | None:
         needs_horizon_confirmation=needs_horizon_confirmation,
         daily_reminder_local_hhmm=daily_reminder_local_hhmm,
         daily_reminder_local_hhmm_list=daily_reminder_local_hhmm_list,
+        is_indefinite=is_indefinite,
     )
 
 

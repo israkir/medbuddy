@@ -88,6 +88,9 @@ class Settings:
     reminder_horizon_days: int
     profile_completion_nudge_every_n_user_turns: int
     reminder_education_cta_every_n_days: int
+    chronic_resync_cron_hour_utc: int
+    chronic_resync_cron_minute_utc: int
+    chronic_delivery_topup_threshold: int
     # Optional comma-separated allowlist; ``None`` = built-in defaults; ``all_non_off_topic`` alone = capture mode.
     health_issue_log_intents: tuple[str, ...] | None
     health_issue_summary_events_limit: int
@@ -322,6 +325,15 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
             default=5,
             ge=0,
             le=30,
+        ),
+        chronic_resync_cron_hour_utc=_int(
+            env, "MEDBUDDY_CHRONIC_RESYNC_CRON_HOUR_UTC", default=3, ge=0, le=23
+        ),
+        chronic_resync_cron_minute_utc=_int(
+            env, "MEDBUDDY_CHRONIC_RESYNC_CRON_MINUTE_UTC", default=15, ge=0, le=59
+        ),
+        chronic_delivery_topup_threshold=_int(
+            env, "MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD", default=3, ge=0, le=100
         ),
         health_issue_log_intents=_optional_health_issue_log_intents(env),
         health_issue_summary_events_limit=_int(

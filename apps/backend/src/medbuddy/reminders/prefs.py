@@ -148,6 +148,13 @@ def reminder_compose_appendix(saved: MedicationRecord, locale: str) -> str:
     if not isinstance(rem, dict):
         return ""
     lines: list[str] = []
+    # Chronic / lifelong meds short-circuit horizon copy: no day count, no "how many days?" ask.
+    if saved.is_indefinite:
+        fm = rem.get("first_reminder_in_minutes")
+        if isinstance(fm, (int, float)) and int(fm) > 0:
+            lines.append(t("llm.added_first_reminder_only", locale=locale, minutes=int(fm)))
+        lines.append(t("llm.added_indefinite", locale=locale))
+        return "\n\n" + "\n".join(lines)
     if rem.get("needs_horizon_confirmation"):
         lines.append(t("llm.added_ask_reminder_horizon", locale=locale))
     fm = rem.get("first_reminder_in_minutes")

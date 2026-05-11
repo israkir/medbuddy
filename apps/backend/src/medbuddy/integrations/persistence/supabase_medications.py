@@ -16,6 +16,9 @@ def _run_q(fn: Any) -> Any:
     return asyncio.to_thread(fn)
 
 
+_MED_SELECT_COLUMNS = "id, name, dosage, schedule, instructions, is_indefinite, raw_metadata"
+
+
 def _med_row_to_record(row: dict[str, Any]) -> MedicationRecord:
     raw = row.get("raw_metadata")
     if not isinstance(raw, dict):
@@ -28,6 +31,7 @@ def _med_row_to_record(row: dict[str, Any]) -> MedicationRecord:
         schedule=row["schedule"],
         instructions=ins if isinstance(ins, str) or ins is None else str(ins),
         raw_metadata=raw,
+        is_indefinite=bool(row.get("is_indefinite", False)),
     )
 
 
@@ -47,7 +51,7 @@ class SupabaseMedicationMixin:
         def q() -> Any:
             return (
                 self._client.table("medications")
-                .select("id, name, dosage, schedule, instructions, raw_metadata")
+                .select(_MED_SELECT_COLUMNS)
                 .eq("patient_id", uid)
                 .order("id")
                 .execute()
@@ -67,6 +71,7 @@ class SupabaseMedicationMixin:
             "dosage": draft.dosage.strip(),
             "schedule": draft.schedule.strip(),
             "instructions": ins or None,
+            "is_indefinite": bool(draft.is_indefinite),
             "raw_metadata": {"reminder": reminder_blob_from_draft(draft)},
         }
 
@@ -124,7 +129,7 @@ class SupabaseMedicationMixin:
         def select_one() -> Any:
             return (
                 self._client.table("medications")
-                .select("id, name, dosage, schedule, instructions, raw_metadata")
+                .select(_MED_SELECT_COLUMNS)
                 .eq("patient_id", uid)
                 .eq("id", medication_id)
                 .limit(1)
@@ -190,6 +195,44 @@ class SupabaseMedicationMixin:
             n,
         )
         return n
+
+    async def list_patients_with_indefinite_medications(self) -> list[str]:
+        """Return ``external_user_id`` values for patients with at least one chronic med.
+
+        Used by the daily chronic-resync cron. Service-role key bypasses RLS.
+        """
+
+        def q_med_patients() -> Any:
+            return (
+                self._client.table("medications")
+                .select("patient_id")
+                .eq("is_indefinite", True)
+                .execute()
+            )
+
+        resp = await _run_q(q_med_patients)
+        rows = resp.data or []
+        patient_ids: list[str] = []
+        seen: set[str] = set()
+        for r in rows:
+            pid = str(r.get("patient_id") or "")
+            if pid and pid not in seen:
+                seen.add(pid)
+                patient_ids.append(pid)
+        if not patient_ids:
+            return []
+
+        def q_patients() -> Any:
+            return (
+                self._client.table("patients")
+                .select("external_user_id")
+                .in_("id", patient_ids)
+                .execute()
+            )
+
+        presp = await _run_q(q_patients)
+        prows = presp.data or []
+        return [str(r["external_user_id"]) for r in prows if r.get("external_user_id")]
 
     async def patch_medication(
         self, line_user_id: str, medication_id: str, fields: dict[str, Any]

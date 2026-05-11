@@ -35,6 +35,7 @@ class MockMedicationMixin:
             schedule=draft.schedule.strip(),
             instructions=ins or None,
             raw_metadata={"reminder": reminder_blob_from_draft(draft)},
+            is_indefinite=bool(draft.is_indefinite),
         )
         self._meds.setdefault(line_user_id, []).append(rec)
         return rec
@@ -82,6 +83,7 @@ class MockMedicationMixin:
                 schedule=m.schedule,
                 instructions=m.instructions,
                 raw_metadata=raw,
+                is_indefinite=m.is_indefinite,
             )
             meds[i] = updated
             return updated
@@ -151,6 +153,7 @@ class MockMedicationMixin:
                 schedule=schedule,
                 instructions=instructions,
                 raw_metadata=dict(m.raw_metadata),
+                is_indefinite=m.is_indefinite,
             )
             meds[i] = updated
             return updated

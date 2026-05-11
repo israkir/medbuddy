@@ -114,3 +114,55 @@ def test_apply_one_off_reminder_dose_default_fills_placeholder() -> None:
     out = apply_one_off_reminder_dose_default(d, unspecified_label=un, locale="en")
     assert out.dosage != un
     assert "pill" in out.dosage.lower()
+
+
+def test_extraction_indefinite_en_suppresses_horizon_ask() -> None:
+    """Chronic English phrasing → is_indefinite=True forces needs_horizon_confirmation=False."""
+    ext = MedicationExtraction(
+        name="Losartan",
+        dosage="50mg",
+        schedule="once daily",
+        is_indefinite=True,
+        # Even if the extraction (wrongly) flagged horizon-confirmation, the builder must suppress it.
+        needs_horizon_confirmation=True,
+        reminder_horizon_days=30,
+        daily_reminder_local_hhmm="08:00",
+    )
+    d = medication_draft_from_extraction(ext, unspecified="unspecified")
+    assert d is not None
+    assert d.is_indefinite is True
+    assert d.needs_horizon_confirmation is False
+    assert d.materialize_daily_reminders is True
+    # Horizon days are dropped so the server default applies on every refill.
+    assert d.reminder_horizon_days is None
+
+
+def test_extraction_indefinite_zh_round_trips() -> None:
+    """Chronic Chinese phrasing snapshot — is_indefinite=True is honored."""
+    ext = MedicationExtraction(
+        name="降血壓藥",
+        dosage="50mg",
+        schedule="每日一次",
+        is_indefinite=True,
+        daily_reminder_local_hhmm="08:00",
+    )
+    d = medication_draft_from_extraction(ext, unspecified="未註明")
+    assert d is not None
+    assert d.is_indefinite is True
+    assert d.needs_horizon_confirmation is False
+
+
+def test_extraction_finite_preserves_existing_horizon_behavior() -> None:
+    """Default extraction (no chronic signal) keeps existing horizon-confirmation behaviour."""
+    ext = MedicationExtraction(
+        name="Aspirin",
+        dosage="100mg",
+        schedule="once daily",
+        needs_horizon_confirmation=True,
+        materialize_daily_reminders=False,
+    )
+    d = medication_draft_from_extraction(ext, unspecified="unspecified")
+    assert d is not None
+    assert d.is_indefinite is False
+    assert d.needs_horizon_confirmation is True
+    assert d.materialize_daily_reminders is False

@@ -123,6 +123,16 @@ class UserDataPort(Protocol):
         """Replace future pending dose rows and return ``(dose_event_id, scheduled_at)`` for enqueue."""
         ...
 
+    async def list_patients_with_indefinite_medications(self) -> list[str]:
+        """Return ``external_user_id`` values for patients with at least one chronic medication."""
+        ...
+
+    async def count_future_dose_events(
+        self, medication_id: str, *, now_utc: datetime | None = None
+    ) -> int:
+        """Count pending (not taken / not missed) dose rows scheduled strictly in the future."""
+        ...
+
     async def get_dose_event_for_reminder(
         self, dose_event_id: str
     ) -> DoseEventReminderPayload | None: ...

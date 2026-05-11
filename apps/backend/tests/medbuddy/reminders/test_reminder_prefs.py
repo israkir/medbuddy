@@ -6,10 +6,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from medbuddy.core.i18n import t
+from medbuddy.models.domain import MedicationRecord
 from medbuddy.reminders.dose_schedule import iter_scheduled_dose_times_utc
 from medbuddy.reminders.prefs import (
     ReminderPrefs,
     iter_dose_instants_for_medication,
+    reminder_compose_appendix,
     reminder_prefs_from_metadata,
 )
 
@@ -130,3 +133,66 @@ def test_reminder_prefs_from_metadata_daily_list() -> None:
     )
     assert p.daily_local_hhmm_list == ("08:00", "12:30", "18:30")
     assert p.horizon_days == 2
+
+
+def test_reminder_compose_appendix_indefinite_uses_added_indefinite_copy() -> None:
+    """Chronic meds skip horizon copy and surface the long-term reminder line."""
+    saved = MedicationRecord(
+        id="m1",
+        name="Losartan",
+        dosage="50mg",
+        schedule="QD",
+        raw_metadata={
+            "reminder": {
+                "materialize_daily": True,
+                "horizon_days": 14,
+                "needs_horizon_confirmation": False,
+            }
+        },
+        is_indefinite=True,
+    )
+    appendix = reminder_compose_appendix(saved, "en")
+    assert t("llm.added_indefinite", locale="en") in appendix
+    assert "14 days" not in appendix
+    assert t("llm.added_daily_horizon_days", locale="en", days=14) not in appendix
+
+
+def test_reminder_compose_appendix_finite_unchanged() -> None:
+    """Finite meds keep emitting the day-count line."""
+    saved = MedicationRecord(
+        id="m2",
+        name="Aspirin",
+        dosage="100mg",
+        schedule="QD",
+        raw_metadata={
+            "reminder": {
+                "materialize_daily": True,
+                "horizon_days": 14,
+                "needs_horizon_confirmation": False,
+            }
+        },
+        is_indefinite=False,
+    )
+    appendix = reminder_compose_appendix(saved, "en")
+    assert t("llm.added_daily_horizon_days", locale="en", days=14) in appendix
+    assert t("llm.added_indefinite", locale="en") not in appendix
+
+
+def test_reminder_compose_appendix_indefinite_never_asks_horizon() -> None:
+    """Even if needs_horizon_confirmation leaked into metadata, indefinite suppresses the ask."""
+    saved = MedicationRecord(
+        id="m3",
+        name="Levothyroxine",
+        dosage="50mcg",
+        schedule="QD",
+        raw_metadata={
+            "reminder": {
+                "materialize_daily": True,
+                "needs_horizon_confirmation": True,
+            }
+        },
+        is_indefinite=True,
+    )
+    appendix = reminder_compose_appendix(saved, "zh-TW")
+    assert t("llm.added_indefinite", locale="zh-TW") in appendix
+    assert t("llm.added_ask_reminder_horizon", locale="zh-TW") not in appendix
