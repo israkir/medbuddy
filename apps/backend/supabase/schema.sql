@@ -1,9 +1,9 @@
 -- MedBuddy Postgres schema for a new Supabase project (greenfield).
 -- The backend connects with SUPABASE_SERVICE_KEY (service_role), which bypasses RLS.
--- anon/authenticated table grants are revoked; see migrations/restrict_rls_to_service_role.sql.
+-- anon/authenticated table grants are revoked (drop legacy policies + revoke statements below).
 --
--- This file is not an incremental migration path. Existing deployments should use
--- explicit migrations (or ALTER) to reconcile drift.
+-- Canonical DDL: this file for idempotent apply, and apps/backend/supabase/recreate_database.sql
+-- for a full reset. Older databases should diff against this file and apply ALTER / missing blocks.
 
 create extension if not exists "pgcrypto";
 
@@ -272,6 +272,23 @@ begin
     return new;
 end;
 $$;
+
+-- Atomic set-primary for emergency_contacts (single UPDATE; avoids a race on is_primary).
+create or replace function public.medbuddy_set_emergency_primary(
+    p_patient_id uuid,
+    p_contact_id uuid
+)
+returns void
+language plpgsql
+as $$
+begin
+    update public.emergency_contacts
+    set    is_primary = (id = p_contact_id)
+    where  patient_id = p_patient_id;
+end;
+$$;
+
+grant execute on function public.medbuddy_set_emergency_primary(uuid, uuid) to service_role;
 
 drop trigger if exists patients_touch_updated_at on public.patients;
 create trigger patients_touch_updated_at

@@ -219,6 +219,20 @@ begin
 end;
 $$;
 
+create or replace function public.medbuddy_set_emergency_primary(
+    p_patient_id uuid,
+    p_contact_id uuid
+)
+returns void
+language plpgsql
+as $$
+begin
+    update public.emergency_contacts
+    set    is_primary = (id = p_contact_id)
+    where  patient_id = p_patient_id;
+end;
+$$;
+
 drop trigger if exists patients_touch_updated_at on public.patients;
 create trigger patients_touch_updated_at
     before update on public.patients
@@ -292,3 +306,5 @@ grant all on table public.dose_events to service_role;
 grant all on table public.health_issue_events to service_role;
 grant all on table public.drug_reference_cache to service_role;
 grant all on table public.drug_personalization_cache to service_role;
+
+grant execute on function public.medbuddy_set_emergency_primary(uuid, uuid) to service_role;

@@ -541,7 +541,7 @@ Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`,
 
 ## 6. Data model
 
-Schema lives in `apps/backend/supabase/schema.sql`. All tables use UUIDs and UTC timestamps. The backend accesses Supabase via **`SUPABASE_SERVICE_KEY`** (Supabase Secret API key, `sb_secret_...`), which bypasses RLS; `anon`/`authenticated` table grants have been revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`). Existing deployments need explicit migrations to match schema changes — the SQL file is greenfield DDL only.
+Schema lives in `apps/backend/supabase/schema.sql` (full reset: `apps/backend/supabase/recreate_database.sql`). All tables use UUIDs and UTC timestamps. The backend accesses Supabase via **`SUPABASE_SERVICE_KEY`** (Supabase Secret API key, `sb_secret_...`), which bypasses RLS; `anon`/`authenticated` table grants are revoked in those files. Older databases should diff against `schema.sql` and apply `ALTER` or missing sections manually.
 
 ### 6.1 Entity-relationship overview
 
@@ -1036,7 +1036,7 @@ When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, th
 
 ### 10.4 Supabase access
 
-The backend uses `SUPABASE_SERVICE_KEY`, the Supabase **Secret** API key (`sb_secret_...`), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`) — the publishable key cannot reach any table directly. In production mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
+The backend uses `SUPABASE_SERVICE_KEY`, the Supabase **Secret** API key (`sb_secret_...`), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked in `apps/backend/supabase/schema.sql` — the publishable key cannot reach any table directly. In production mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
 
 ### 10.5 Internal endpoints
 
