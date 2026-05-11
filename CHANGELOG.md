@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - **Presentation deck refresh:** Added architecture-style SVG visuals for conversation/reminder/privacy flows, converted tech stack to a compact table, expanded milestones visualization, and improved slide text contrast handling in `docs/presentation/index.html`.
+- **Presentation deck spacing:** Tightened vertical spacing between the pipeline diagrams and the bullet text for the single conversation and reminders flow slides in `docs/presentation/index.html`.
 - **Wedge visualization upgrade:** Replaced the static "triple intersection" wedge art with a D3-rendered diagram and refined layout styling (label chips, spacing, and center badge) for clearer readability in presentations.
 - **TDD alignment:** Updated [`docs/tdd-extended.md`](docs/tdd-extended.md) component map (`integrations/{persistence,stt,tts}/…`, voice-related modules, `vital_logs` table, `patients.pending_agent_clarification`) and removed leftover "engineering exploratory" wording for LINE voice.
   - [`TODO.md`](TODO.md): documented **`POST /v1/app/messages/voice`** in the Expo integration summary.
