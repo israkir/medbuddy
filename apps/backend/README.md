@@ -223,6 +223,8 @@ The repo-root `Dockerfile` runs [`docker-entrypoint-web.sh`](../../docker-entryp
 
 **Safety net:** `POST /internal/reminders/reconcile` with `X-Cron-Secret` re-enqueues overdue, unsent rows.
 
+**Chronic / indefinite-duration meds:** rows flagged with `medications.is_indefinite = true` (chronic phrasing such as *"long-term"* / *"終身"* / *"慢性病用藥"* extracted by `MedicationExtraction.is_indefinite`) skip the "how many days?" follow-up at save time and have their rolling window refilled forever by two paths registered in the same arq worker: the daily cron `resync_chronic_meds_cron` (default **03:15 UTC**, configurable via `MEDBUDDY_CHRONIC_RESYNC_CRON_HOUR_UTC` / `MEDBUDDY_CHRONIC_RESYNC_CRON_MINUTE_UTC`) and an inline top-up inside `deliver_dose_reminder` that fires when fewer than `MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD` (default **3**) future doses remain for the just-fired med.
+
 Full reference: [`docs/reminders.md`](../../docs/reminders.md).
 
 ---

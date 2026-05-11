@@ -71,6 +71,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | How is a LINE voice message handled? | [`use-cases.md`](use-cases.md) §1.1 |
 | How does default reply language get set before onboarding? | LINE **`follow`**: profile **`language`** → **`patients.locale`**; app: **`GET /v1/app/me`** + **`X-MedBuddy-Locale`** — [`use-cases.md`](use-cases.md) §1.1–1.2, [`tdd-extended.md`](tdd-extended.md) §7 (`GET /v1/app/me`), [`features.md`](features.md) §1.1 |
 | How are dose events scheduled? | [`reminders.md`](reminders.md) |
+| How do chronic / lifelong meds (no end date) work? | [`reminders.md` §Chronic / indefinite-duration medications](reminders.md#chronic--indefinite-duration-medications) — `medications.is_indefinite`, daily `resync_chronic_meds_cron`, delivery-time top-up, `MEDBUDDY_CHRONIC_*` settings |
 | What env vars do I need? | [`../apps/backend/README.md`](../apps/backend/README.md) — Key environment variables |
 | What is the Supabase schema? | [`tdd-extended.md`](tdd-extended.md) §6 Data model |
 | Is the Expo app the primary product? | No — see [`frontend-expo.md`](frontend-expo.md) |
