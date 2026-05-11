@@ -6,15 +6,15 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
-_domain_log = logging.getLogger(__name__)
-_PENDING_SCHEMA_VERSION = 1
-
 from medbuddy.llm.schemas import (
     HealthSummaryResult,
     InteractionCheckResult,
     MedicationSummaryItem,
 )
 from medbuddy.core.i18n import t
+
+_domain_log = logging.getLogger(__name__)
+_PENDING_SCHEMA_VERSION = 1
 
 __all__ = [
     "AgentTurnResult",

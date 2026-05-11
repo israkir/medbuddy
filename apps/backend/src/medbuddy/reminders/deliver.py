@@ -10,10 +10,10 @@ from zoneinfo import ZoneInfo
 
 _NUDGE_JITTER_SECONDS = 30  # ±30 s applied at enqueue time to spread fan-out
 
-from medbuddy.services import AppServices
-from medbuddy.core.i18n import t
-from medbuddy.llm.medication_draft_build import dose_or_schedule_display
-from medbuddy.reminders.enqueue import enqueue_reminder_nudge_job
+from medbuddy.services import AppServices  # noqa: E402
+from medbuddy.core.i18n import t  # noqa: E402
+from medbuddy.llm.medication_draft_build import dose_or_schedule_display  # noqa: E402
+from medbuddy.reminders.enqueue import enqueue_reminder_nudge_job  # noqa: E402
 
 log = logging.getLogger(__name__)
 

@@ -20,7 +20,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Configuration and secrets
 
-- [ ] Production: **`MEDBUDDY_INTEGRATION=real`** (or **`MOCK_EXTERNAL_SERVICES=false`**); never run mocks in prod.
+- [ ] Production: **`MEDBUDDY_INTEGRATION=production`** (or **`MOCK_EXTERNAL_SERVICES=false`**); never run mocks in prod.
 
 - [ ] Set **`MEDBUDDY_MOBILE_BEARER_TOKEN`** for **`/v1/app`** protected routes when not in mock dev.
 
