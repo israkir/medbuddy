@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -18,14 +16,7 @@ from medbuddy.integrations.persistence.supabase_profile import _user_row_to_dict
 from medbuddy.integrations.persistence.supabase_stores import SupabaseUserData
 from medbuddy.models.domain import ConversationTurn, MedicationDraft
 
-
-def _b64url_json(obj: object) -> str:
-    raw = json.dumps(obj, separators=(",", ":")).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def _fake_jwt(payload: dict[str, object]) -> str:
-    return f"{_b64url_json({'alg': 'none'})}.{_b64url_json(payload)}.sig"
+_FAKE_SB_SECRET = "sb_secret_01234567890123456789012_abcd1234"
 
 
 def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,8 +36,7 @@ def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) 
         load_settings(
             {
                 "SUPABASE_URL": "https://example.supabase.co",
-                "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "service_role"}),
-                "SUPABASE_PUBLISHABLE_KEY": "anon-key",
+                "SUPABASE_SERVICE_KEY": _FAKE_SB_SECRET,
             }
         )
     )
@@ -54,55 +44,81 @@ def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) 
     assert kwargs_captured.get("follow_redirects") is True
 
 
-def test_create_supabase_client_rejects_anon_jwt_role() -> None:
-    with pytest.raises(ConfigError, match="service_role"):
+def test_create_supabase_client_production_rejects_invalid_secret_shape() -> None:
+    """Invalid secrets must fail before PostgREST calls."""
+    pytest.importorskip("supabase")
+    with pytest.raises(ConfigError, match="sb_secret_"):
         create_supabase_client(
             load_settings(
                 {
+                    "MEDBUDDY_INTEGRATION": "production",
+                    "MEDBUDDY_MOBILE_BEARER_TOKEN": "tok",
+                    "LINE_CHANNEL_SECRET": "sec",
+                    "LINE_CHANNEL_ACCESS_TOKEN": "acc",
                     "SUPABASE_URL": "https://example.supabase.co",
-                    "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "anon"}),
+                    "SUPABASE_SERVICE_KEY": "not-a-jwt-placeholder",
+                    "MEDBUDDY_CRON_SECRET": "cron",
+                    "LLM_PROVIDER": "gemini",
+                    "GEMINI_API_KEY": "gkey",
+                    "MEDBUDDY_LINE_VOICE_REPLIES": "off",
                 }
             )
         )
 
 
-def test_create_supabase_client_rejects_authenticated_jwt_role() -> None:
-    with pytest.raises(ConfigError, match="service_role"):
+def test_create_supabase_client_rejects_sb_publishable_as_service_key() -> None:
+    with pytest.raises(ConfigError, match="publishable"):
         create_supabase_client(
             load_settings(
                 {
                     "SUPABASE_URL": "https://example.supabase.co",
-                    "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "authenticated"}),
+                    "SUPABASE_SERVICE_KEY": "sb_publishable_01234567890123456789012_abcd1234",
                 }
             )
         )
 
 
-def test_create_supabase_client_rejects_non_service_jwt_role() -> None:
-    with pytest.raises(ConfigError, match="service_role"):
+def test_create_supabase_client_accepts_sb_secret_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("supabase")
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MagicMock())
+    monkeypatch.setattr("supabase.create_client", lambda *a, **k: MagicMock())
+    sk = "sb_secret_01234567890123456789012_abcd1234"
+    create_supabase_client(
+        load_settings(
+            {
+                "MEDBUDDY_INTEGRATION": "production",
+                "MEDBUDDY_MOBILE_BEARER_TOKEN": "tok",
+                "LINE_CHANNEL_SECRET": "sec",
+                "LINE_CHANNEL_ACCESS_TOKEN": "acc",
+                "SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_SERVICE_KEY": sk,
+                "MEDBUDDY_CRON_SECRET": "cron",
+                "LLM_PROVIDER": "gemini",
+                "GEMINI_API_KEY": "gkey",
+                "MEDBUDDY_LINE_VOICE_REPLIES": "off",
+            }
+        )
+    )
+
+
+def test_create_supabase_client_rejects_legacy_jwt_service_key() -> None:
+    """Legacy JWT service_role keys are not accepted (sb_secret_ only)."""
+    with pytest.raises(ConfigError, match="sb_secret_"):
         create_supabase_client(
             load_settings(
                 {
                     "SUPABASE_URL": "https://example.supabase.co",
-                    "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "supabase_admin"}),
+                    "SUPABASE_SERVICE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.sig",
                 }
             )
         )
 
 
-def test_create_supabase_client_rejects_jwt_missing_role_claim() -> None:
-    with pytest.raises(ConfigError, match="service_role"):
-        create_supabase_client(
-            load_settings(
-                {
-                    "SUPABASE_URL": "https://example.supabase.co",
-                    "SUPABASE_SERVICE_KEY": _fake_jwt({"sub": "x"}),
-                }
-            )
-        )
-
-
-def test_create_supabase_client_accepts_service_role_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_supabase_client_accepts_sb_secret_in_mock_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pytest.importorskip("supabase")
     monkeypatch.setattr("httpx.Client", lambda **kwargs: MagicMock())
     monkeypatch.setattr("supabase.create_client", lambda *a, **k: MagicMock())
@@ -110,8 +126,7 @@ def test_create_supabase_client_accepts_service_role_jwt(monkeypatch: pytest.Mon
         load_settings(
             {
                 "SUPABASE_URL": "https://example.supabase.co",
-                "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "service_role"}),
-                "SUPABASE_PUBLISHABLE_KEY": "anon-key",
+                "SUPABASE_SERVICE_KEY": _FAKE_SB_SECRET,
             }
         )
     )

@@ -531,7 +531,7 @@ Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`,
 
 ## 6. Data model
 
-Schema lives in `apps/backend/supabase/schema.sql`. All tables use UUIDs and UTC timestamps. The backend accesses Supabase via the **`service_role` key** (`SUPABASE_SERVICE_KEY`), which bypasses RLS; `anon`/`authenticated` table grants have been revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`). Existing deployments need explicit migrations to match schema changes — the SQL file is greenfield DDL only.
+Schema lives in `apps/backend/supabase/schema.sql`. All tables use UUIDs and UTC timestamps. The backend accesses Supabase via **`SUPABASE_SERVICE_KEY`** (Supabase Secret API key, `sb_secret_...`), which bypasses RLS; `anon`/`authenticated` table grants have been revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`). Existing deployments need explicit migrations to match schema changes — the SQL file is greenfield DDL only.
 
 ### 6.1 Entity-relationship overview
 
@@ -1012,7 +1012,7 @@ Pydantic models in `llm/schemas.py` back provider JSON extraction. Domain wrappe
 
 ### 10.2 LINE webhook authentication
 
-`channels/line/signature.py` implements HMAC-SHA256 verification of the `X-Line-Signature` header using `LINE_CHANNEL_SECRET`. Verification is bypassed **only** when `LINE_CHANNEL_SECRET` is empty and `MEDBUDDY_INTEGRATION=mock` (local development). In production (`RENDER=true`), mock mode is always forced off.
+`channels/line/signature.py` implements HMAC-SHA256 verification of the `X-Line-Signature` header using `LINE_CHANNEL_SECRET`. Verification is bypassed **only** when `LINE_CHANNEL_SECRET` is empty and `MEDBUDDY_INTEGRATION=mock` (local development).
 
 ### 10.3 Mobile API authentication
 
@@ -1026,7 +1026,7 @@ When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, th
 
 ### 10.4 Supabase access
 
-The backend uses `SUPABASE_SERVICE_KEY` (service-role key), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`) — the publishable key cannot reach any table directly. `SUPABASE_PUBLISHABLE_KEY` is kept in config for optional local-dev reads only. In production mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
+The backend uses `SUPABASE_SERVICE_KEY`, the Supabase **Secret** API key (`sb_secret_...`), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`) — the publishable key cannot reach any table directly. In production mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
 
 ### 10.5 Internal endpoints
 
@@ -1034,11 +1034,7 @@ The backend uses `SUPABASE_SERVICE_KEY` (service-role key), which bypasses RLS a
 
 ### 10.6 Production safeguards
 
-When `RENDER=true` (Render web service), `load_settings()` enforces:
-- `MEDBUDDY_INTEGRATION` forced to `production`
-- `DEBUG = false`
-
-This prevents accidental mock mode in production regardless of dashboard environment variable mistakes.
+Deploy with **`MEDBUDDY_INTEGRATION=production`** and production secrets. There is no automatic override from platform env vars such as `RENDER`.
 
 ### 10.7 Logging policy
 
@@ -1241,7 +1237,7 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 
 | Variable | Values | Default | Notes |
 |----------|--------|---------|-------|
-| `MEDBUDDY_INTEGRATION` | `mock` / `production` | `mock` | Aliases: `local`/`dev` → mock. Use `production` for production mode. Raises `ConfigError` on unrecognised values. |
+| `MEDBUDDY_INTEGRATION` | `mock` / `production` | `mock` | Omit or empty defaults to `mock`. Raises `ConfigError` on unrecognised values. |
 
 ### 15.2 LINE
 
@@ -1281,8 +1277,7 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | Variable | Notes |
 |----------|-------|
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | **Required in production mode.** Service-role key — bypasses RLS. Never use the publishable/anon key for the backend client. |
-| `SUPABASE_PUBLISHABLE_KEY` | Optional; kept for local-dev reads. Not used by the Supabase client in production mode. |
+| `SUPABASE_SERVICE_KEY` | **Required in production mode.** Supabase Secret API key (`sb_secret_...` only). Never use the publishable key for the backend client. |
 
 ### 15.6 Reminders
 
@@ -1313,7 +1308,6 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | `LOG_LEVEL` | `INFO` | `medbuddy.*` and `uvicorn.error` log level |
 | `DEBUG` | `false` | FastAPI debug mode |
 | `PORT` | `8000` | Injected by Render at runtime |
-| `RENDER` | — | Set by Render; triggers production safety overrides |
 
 ---
 

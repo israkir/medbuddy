@@ -28,7 +28,7 @@ def _real_secrets() -> dict[str, str]:
         "LINE_CHANNEL_SECRET": "sec",
         "LINE_CHANNEL_ACCESS_TOKEN": "acc",
         "SUPABASE_URL": "https://x.supabase.co",
-        "SUPABASE_SERVICE_KEY": "service-key",
+        "SUPABASE_SERVICE_KEY": "sb_secret_01234567890123456789012_abcd1234",
         "MEDBUDDY_CRON_SECRET": "cron",
         "LLM_PROVIDER": "gemini",
         "GEMINI_API_KEY": "gkey",
@@ -47,34 +47,22 @@ def test_production_mode_missing_secrets_raises_at_startup() -> None:
         load_settings({"MEDBUDDY_INTEGRATION": "production"})
 
 
-def test_integration_mode_aliases() -> None:
-    for alias in ("local", "dev"):
-        s = load_settings({"MEDBUDDY_INTEGRATION": alias})
-        assert s.is_mock is True
-    s = load_settings({"MEDBUDDY_INTEGRATION": "production", **_real_secrets()})
-    assert s.is_mock is False
-
-
-def test_legacy_mock_external_services_true_maps_to_mock_mode() -> None:
-    s = load_settings({"MOCK_EXTERNAL_SERVICES": "true"})
+def test_empty_medbuddy_integration_defaults_to_mock() -> None:
+    s = load_settings({})
     assert s.integration_mode == IntegrationMode.MOCK
     assert s.is_mock is True
 
 
-def test_legacy_mock_external_services_false_maps_to_production_mode() -> None:
-    s = load_settings({"MOCK_EXTERNAL_SERVICES": "false", **_real_secrets()})
-    assert s.integration_mode == IntegrationMode.PRODUCTION
-    assert s.is_mock is False
+def test_mock_external_services_env_is_ignored() -> None:
+    """MOCK_EXTERNAL_SERVICES is no longer read; integration mode is MEDBUDDY_INTEGRATION only."""
+    s = load_settings({"MOCK_EXTERNAL_SERVICES": "false"})
+    assert s.integration_mode == IntegrationMode.MOCK
 
 
 def test_invalid_integration_mode_raises_config_error() -> None:
-    with pytest.raises(ConfigError, match="MEDBUDDY_INTEGRATION"):
-        load_settings({"MEDBUDDY_INTEGRATION": "staging"})
-
-
-def test_invalid_legacy_mock_external_services_raises_config_error() -> None:
-    with pytest.raises(ConfigError, match="MOCK_EXTERNAL_SERVICES"):
-        load_settings({"MOCK_EXTERNAL_SERVICES": "maybe"})
+    for bad in ("staging", "local", "dev", "default"):
+        with pytest.raises(ConfigError, match="MEDBUDDY_INTEGRATION"):
+            load_settings({"MEDBUDDY_INTEGRATION": bad})
 
 
 def test_debug_defaults_to_false() -> None:

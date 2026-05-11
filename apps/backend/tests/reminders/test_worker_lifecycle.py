@@ -12,7 +12,9 @@ from tests.helpers import make_mock_settings
 
 
 @pytest.mark.asyncio
-async def test_worker_startup_mock_integration_no_shared_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_worker_startup_mock_integration_no_shared_http_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(worker, "get_settings", lambda: make_mock_settings())
     ctx: dict = {}
     await worker.startup(ctx)

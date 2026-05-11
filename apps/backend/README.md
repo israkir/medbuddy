@@ -129,12 +129,9 @@ Switch without code changes:
 
 | Variable | Values | Notes |
 |----------|--------|-------|
-| **`MEDBUDDY_INTEGRATION`** | `mock` / `production` | Aliases: `local`/`dev` → mock. **Overrides** `MOCK_EXTERNAL_SERVICES` when set. |
-| **`MOCK_EXTERNAL_SERVICES`** | `true` / `false` | `true` = in-memory adapters for LINE/STT/LLM/drugs/storage/users. Default `false`. |
+| **`MEDBUDDY_INTEGRATION`** | `mock` / `production` | Omit or empty defaults to **`mock`**. Only these two values are accepted. |
 
 [`config.py`](src/medbuddy/config.py) loads `apps/backend/.env` first, then a `.env` in the working directory (so a repo-root `.env` overrides). `make be-dev-mock` exports `MEDBUDDY_INTEGRATION=mock`; `make be-dev-production` exports `MEDBUDDY_INTEGRATION=production`.
-
-When **`RENDER=true`** (Render web services), settings force `MOCK_EXTERNAL_SERVICES=false`, `DEBUG=false`, and `MEDBUDDY_INTEGRATION=production` — a mis-set dashboard env cannot re-enable mocks in production.
 
 ---
 
@@ -149,7 +146,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | **STT** | `integrations/mocks/stt.py` | `integrations/stt/stt_google.py` — needs `GOOGLE_SPEECH_PROJECT_ID` and Application Default Credentials |
 | **TTS (LINE m4a replies)** | `integrations/mocks/tts.py` | `integrations/tts/tts_google.py` — same ADC/project as STT; server needs **ffmpeg** (`Dockerfile` installs it) |
 | **Drugs** | `integrations/mocks/drugs.py` | `integrations/drugs_http.py` — OpenFDA HTTP (no key) + TFDA stub |
-| **Users / turns** | In-memory mocks | `integrations/persistence/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are set; install `[supabase]` extra, apply `supabase/schema.sql` |
+| **Users / turns** | In-memory mocks | `integrations/persistence/supabase_stores.py` when `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (`sb_secret_...`) are set; install `[supabase]` extra, apply `supabase/schema.sql` |
 | **Drug caches** | No-op | `integrations/persistence/supabase_drug_caches.py` + `integrations/caching_drugs.py` (Supabase required) |
 
 **Key environment variables** (see [`.env.example`](.env.example)):
@@ -165,7 +162,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service-account JSON for Google client libraries (or use workload identity/metadata credentials) |
 | `PUBLIC_BASE_URL` | Public **HTTPS** origin (LINE webhooks, LINE **audio** URLs for TTS; see `config.py`) |
 | `MEDBUDDY_LINE_VOICE_REPLIES` | `audio_inbound` (default), `always`, or `off` — text+m4a LINE replies when TTS is available |
-| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Postgres persistence (use anon key, never service role) |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Postgres via PostgREST: Supabase **Secret** API key (`sb_secret_...` only). Not `sb_publishable_...` (no direct table access after `restrict_rls_to_service_role.sql`) |
 | `REDIS_URL` | arq job queue for dose reminders |
 | `MEDBUDDY_MOBILE_BEARER_TOKEN` | Auth token for `/v1/app` protected routes |
 | `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` |
@@ -265,7 +262,7 @@ Health checks:
 cd apps/backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-export MOCK_EXTERNAL_SERVICES=true
+export MEDBUDDY_INTEGRATION=mock
 uvicorn medbuddy.main:app --reload --host 0.0.0.0 --port 8000
 pytest -q
 ```

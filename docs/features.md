@@ -327,7 +327,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 
 **Capabilities**
 
-When `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set and the `supabase` extra is installed, `UserDataPort` and `ConversationStorePort` use Postgres (schema `apps/backend/supabase/schema.sql`). The backend connects with the **service-role key** (`SUPABASE_SERVICE_KEY`); `anon`/`authenticated` grants have been revoked.
+When `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set and the `supabase` extra is installed, `UserDataPort` and `ConversationStorePort` use Postgres (schema `apps/backend/supabase/schema.sql`). The backend connects with the Supabase **Secret** API key (`sb_secret_...`); `anon`/`authenticated` grants have been revoked.
 
 | Layer | Tables / behavior | Role |
 |-------|-------------------|------|
@@ -367,7 +367,7 @@ When `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set and the `supabase` extra 
 
 **Configuration**
 
-- `MEDBUDDY_INTEGRATION` and per-env tokens drive `build_app_services` in `container.py`. On Render (`RENDER=true`), `load_settings()` forces `production` mode regardless of env.
+- `MEDBUDDY_INTEGRATION` and per-env tokens drive `build_app_services` in `container.py`. Set `MEDBUDDY_INTEGRATION=production` on hosted environments; there is no `RENDER`-based override in `load_settings()`.
 
 ---
 
