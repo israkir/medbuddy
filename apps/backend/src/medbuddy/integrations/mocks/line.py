@@ -12,6 +12,7 @@ class MockLineClient(LineMessagingPort):
     def __init__(self) -> None:
         self.replies: list[dict[str, Any]] = []
         self.pushes: list[dict[str, Any]] = []
+        self.loading_indicators: list[dict[str, Any]] = []
         self._content_by_message_id: dict[str, bytes] = {}
         self._profile_by_user_id: dict[str, dict[str, Any]] = {}
 
@@ -53,3 +54,7 @@ class MockLineClient(LineMessagingPort):
     async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
         await asyncio.sleep(0)
         return self._profile_by_user_id.get(user_id)
+
+    async def send_chat_loading_indicator(self, user_id: str, *, seconds: int = 20) -> None:
+        await asyncio.sleep(0)
+        self.loading_indicators.append({"user_id": user_id, "seconds": seconds})

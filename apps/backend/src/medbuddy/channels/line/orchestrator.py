@@ -197,6 +197,10 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
         log.info("LINE flow: user_id=%s inbound audio message_id=%s", line_user_id, mid)
         row = await svc.users.get_or_create_user(line_user_id)
         loc = effective_user_locale(row.get("locale"))
+
+        # Show typing dots immediately — user sees feedback while STT + LLM run
+        await svc.line.send_chat_loading_indicator(line_user_id, seconds=30)
+
         raw = await svc.line.get_message_content(str(mid))
         try:
             user_text = await svc.stt.transcribe_m4a(raw, language_code=loc)

@@ -90,6 +90,7 @@ async def test_orchestrator_text_message_runs_assistant(mock_settings):
     )
     line = svc.line
     assert hasattr(line, "replies")
+    assert not line.loading_indicators  # type: ignore[attr-defined]
     assert len(line.replies) == 1
     assert line.replies[0]["type"] == "batch"  # type: ignore[index]
     msgs = line.replies[0]["messages"]  # type: ignore[index]
@@ -120,6 +121,7 @@ async def test_orchestrator_audio_message_replies_text_after_stt(mock_settings):
         svc,
     )
     line = svc.line
+    assert line.loading_indicators == [{"user_id": "Uabc", "seconds": 30}]  # type: ignore[attr-defined]
     assert len(line.replies) == 1
     msgs = line.replies[0]["messages"]  # type: ignore[index]
     assert len(msgs) == 2
@@ -151,6 +153,7 @@ async def test_orchestrator_audio_inbound_voice_off_sends_text_only(mock_setting
         },
         svc,
     )
+    assert svc.line.loading_indicators == [{"user_id": "Uabc", "seconds": 30}]  # type: ignore[attr-defined]
     msgs = svc.line.replies[0]["messages"]  # type: ignore[index]
     assert len(msgs) == 1
     assert msgs[0]["type"] == "text"
@@ -376,6 +379,7 @@ async def test_orchestrator_audio_stt_error_replies_with_generic_error(mock_sett
     )
     line = svc.line
     assert hasattr(line, "replies")
+    assert line.loading_indicators == [{"user_id": "Uabc", "seconds": 30}]  # type: ignore[attr-defined]
     assert len(line.replies) == 1
     reply = line.replies[0]["messages"][0]  # type: ignore[index]
     assert reply["type"] == "text"

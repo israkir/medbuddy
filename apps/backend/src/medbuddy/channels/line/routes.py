@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 
 from linebot.v3 import WebhookParser
 from linebot.v3.exceptions import InvalidSignatureError
@@ -19,6 +20,13 @@ from medbuddy.services import AppServices
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/line", tags=["line"])
+
+
+async def _run_event(payload: dict[str, Any], svc: AppServices) -> None:
+    try:
+        await handle_line_event(payload, svc)
+    except Exception:
+        log.error("LINE webhook: background event handler failed", exc_info=True)
 
 
 @router.get("/media/audio/{audio_id}")
@@ -45,6 +53,7 @@ def _skip_line_signature_verification(settings: Settings) -> bool:
 @router.post("/webhook")
 async def line_webhook(
     request: Request,
+    background: BackgroundTasks,
     svc: AppServices = Depends(get_services),
 ) -> dict[str, str]:
     settings = get_settings()
@@ -96,7 +105,7 @@ async def line_webhook(
             if already_seen:
                 log.info("LINE webhook: duplicate event skipped webhook_event_id=%r", event_id)
                 continue
-        await handle_line_event(payload, svc)
+        background.add_task(_run_event, payload, svc)
 
-    log.info("LINE webhook: batch completed OK")
+    log.info("LINE webhook: batch accepted OK, processing in background")
     return {"status": "ok"}
