@@ -3,6 +3,8 @@
 This document maps every Python module that carries business logic to its Go/Fiber equivalent.
 The mapping is designed to be as mechanical as possible: one Python file → one Go file, one Python `Protocol` → one Go `interface`.
 
+**Python paths:** Module paths in the tables below are relative to **`apps/backend/src/medbuddy/`** (the `medbuddy` installable package). Top-level files such as `config.py`, `main.py`, and `container.py` sit at the root of that tree.
+
 ---
 
 ## Naming conventions

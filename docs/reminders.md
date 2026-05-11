@@ -133,7 +133,7 @@ If Redis or the **arq** process restarts, some due rows may never get a job. A l
 | Hook after medication changes | `apps/backend/src/medbuddy/reminders/lifecycle.py` (called from medication CRUD tools after successful add/update/remove) |
 | Supabase persistence | `apps/backend/src/medbuddy/integrations/persistence/supabase_dose_events.py` · `supabase_stores.py` |
 | User IANA zone helpers | `apps/backend/src/medbuddy/core/timezone.py` |
-| LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `protocols/line.py` |
+| LINE push | `apps/backend/src/medbuddy/integrations/line_client.py` · `apps/backend/src/medbuddy/protocols/line.py` |
 | Reconcile route | `apps/backend/src/medbuddy/channels/internal/routes.py` |
 
 ## LINE quotas
@@ -142,8 +142,8 @@ Push messages can count against LINE plan quotas; reminder copy is kept short. T
 
 ## Tests
 
-- `apps/backend/tests/reminders/test_dose_schedule.py` — daily instant generation.
-- `apps/backend/tests/reminders/test_dose_reminder_deliver.py` — mock LINE push and idempotency.
-- `apps/backend/tests/test_user_timezone.py` — IANA validation / defaults.
+- `apps/backend/tests/medbuddy/reminders/test_dose_schedule.py` — daily instant generation.
+- `apps/backend/tests/medbuddy/reminders/test_dose_reminder_deliver.py` — mock LINE push and idempotency.
+- `apps/backend/tests/medbuddy/core/test_user_timezone.py` — IANA validation / defaults.
 
 Run **`make be-test`** from the repository root.

@@ -47,7 +47,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 
 **Implementation**
 
-- `channels/line/` webhook + `channels/line/orchestrator.py` (STT, `run_assistant_text_turn`, optional TTS batch reply).
+- `apps/backend/src/medbuddy/channels/line/` — webhook, `orchestrator.py` (STT, `run_assistant_text_turn`, optional TTS batch reply), `idempotency.py`.
 - `line-bot-sdk`: `WebhookParser` / `SignatureValidator`, `AsyncMessagingApi` / `AsyncMessagingApiBlob` for replies and blob download.
 
 <p align="center">

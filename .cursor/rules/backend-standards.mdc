@@ -8,9 +8,9 @@ alwaysApply: false
 
 ## Tooling (do not fight the config)
 
-- **Python** `>=3.11`. Package: `src/medbuddy/`; tests: `tests/`.
+- **Python** `>=3.11`. Paths from repo: `apps/backend/src/medbuddy/` (package import `medbuddy`); tests mirror under `apps/backend/tests/medbuddy/`. Keep `apps/backend/tests/conftest.py` and `apps/backend/tests/helpers.py` at the `apps/backend/tests/` root.
 - **Format / lint**: Black + Ruff per `pyproject.toml` (line length 100, `py311`). Run `make be-lint` or pre-commit before commit.
-- **Tests**: `pytest` + `pytest-asyncio` (`asyncio_mode = auto`). New behavior or fixes need tests unless trivial (explain in PR).
+- **Tests**: `pytest` + `pytest-asyncio` (`asyncio_mode = auto`). New behavior or fixes need tests unless trivial (explain in PR). Place new tests under `tests/medbuddy/<same path as src/medbuddy/>`. Under `application/`, keep resolver tests in `profile/`, `pending/`, `health_events/`; keep cross-cutting assistant/orchestrator flows at `tests/medbuddy/application/` root. Tool-focused tests live under `tests/medbuddy/agents/tools/`.
 
 ## Python style and maintainability
 
@@ -34,7 +34,7 @@ Logging must stay consistent with **Security** above: no tokens, credentials, ra
 - **FastAPI** entry: `medbuddy.main` (routers). **Settings:** `medbuddy.config` — frozen dataclass loaded via `load_settings()` / cached `get_settings()` (env vars), not pydantic-settings.
 - **Channels**: LINE in `channels/line/`; standalone app REST in `channels/api/`. Shared ops routes (`/health`, reminders reconcile) in `channels/internal/routes.py`.
 - **Application**: Shared use cases in `application/` (e.g. `assistant_turn.py`) — no duplicated LLM / drug / history logic in `channels/*`.
-- **Ports / integrations**: Protocols in `protocols/`; adapters in `integrations/` (`mocks/` + concrete implementations). Shared types in `engine/`. Extend these patterns; avoid one-off integration modules elsewhere.
+- **Ports / integrations**: Protocols in `protocols/`; adapters in `integrations/` (`mocks/` + concrete implementations). Shared domain shapes in `models/`. Extend these patterns; avoid one-off integration modules elsewhere.
 
 Dependency direction: **HTTP handlers** → **application use cases** → **protocols** ← **integrations**. Do not import concrete integrations from domain/application layers when a protocol already exists.
 
