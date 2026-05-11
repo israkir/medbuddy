@@ -199,71 +199,16 @@ alter table public.drug_reference_cache enable row level security;
 alter table public.drug_personalization_cache enable row level security;
 alter table public.emergency_contacts enable row level security;
 
--- Permissive policies for ``anon`` (publishable / legacy anon key). Tighten when you attach
--- Supabase Auth and can scope rows (e.g. ``auth.uid()``).
+-- The backend exclusively uses the service_role key (SUPABASE_SERVICE_KEY), which bypasses RLS
+-- automatically. No anon policies are created. Drop any legacy open policies that may exist.
 drop policy if exists "medbuddy_patients_anon_rw" on public.patients;
-create policy "medbuddy_patients_anon_rw"
-    on public.patients
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_medications_anon_rw" on public.medications;
-create policy "medbuddy_medications_anon_rw"
-    on public.medications
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_conversation_turns_anon_rw" on public.conversation_turns;
-create policy "medbuddy_conversation_turns_anon_rw"
-    on public.conversation_turns
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_dose_events_anon_rw" on public.dose_events;
-create policy "medbuddy_dose_events_anon_rw"
-    on public.dose_events
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_health_issue_events_anon_rw" on public.health_issue_events;
-create policy "medbuddy_health_issue_events_anon_rw"
-    on public.health_issue_events
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_drug_reference_cache_anon_rw" on public.drug_reference_cache;
-create policy "medbuddy_drug_reference_cache_anon_rw"
-    on public.drug_reference_cache
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_drug_personalization_cache_anon_rw" on public.drug_personalization_cache;
-create policy "medbuddy_drug_personalization_cache_anon_rw"
-    on public.drug_personalization_cache
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_emergency_contacts_anon_rw" on public.emergency_contacts;
-create policy "medbuddy_emergency_contacts_anon_rw"
-    on public.emergency_contacts
-    for all
-    to anon
-    using (true)
-    with check (true);
 
 -- Ephemeral agent state (dose disambiguation). Safe to clear anytime.
 alter table public.dose_events add column if not exists missed_at timestamptz;
@@ -292,20 +237,17 @@ alter table public.drug_reference_cache alter column updated_at set default now(
 alter table public.drug_reference_cache alter column created_at set not null;
 alter table public.drug_reference_cache alter column updated_at set not null;
 
--- PostgREST connects as ``anon`` when using the publishable (anon) API key.
--- RLS policies gate rows; without GRANT on the table, queries fail with
--- ``permission denied for table …`` (SQLSTATE 42501) before policies apply.
-grant usage on schema public to anon, authenticated;
-
-grant select, insert, update, delete on table public.patients to anon, authenticated;
-grant select, insert, update, delete on table public.emergency_contacts to anon, authenticated;
-grant select, insert, update, delete on table public.medications to anon, authenticated;
-grant select, insert, update, delete on table public.conversation_turns to anon, authenticated;
-grant usage, select on sequence public.conversation_turns_id_seq to anon, authenticated;
-grant select, insert, update, delete on table public.dose_events to anon, authenticated;
-grant select, insert, update, delete on table public.health_issue_events to anon, authenticated;
-grant select, insert, update, delete on table public.drug_reference_cache to anon, authenticated;
-grant select, insert, update, delete on table public.drug_personalization_cache to anon, authenticated;
+-- The backend uses service_role (bypasses RLS). Revoke any previously granted anon/authenticated
+-- table access so the publishable key cannot reach data even if a policy is accidentally added.
+revoke all on table public.patients from anon, authenticated;
+revoke all on table public.emergency_contacts from anon, authenticated;
+revoke all on table public.medications from anon, authenticated;
+revoke all on table public.conversation_turns from anon, authenticated;
+revoke all on sequence public.conversation_turns_id_seq from anon, authenticated;
+revoke all on table public.dose_events from anon, authenticated;
+revoke all on table public.health_issue_events from anon, authenticated;
+revoke all on table public.drug_reference_cache from anon, authenticated;
+revoke all on table public.drug_personalization_cache from anon, authenticated;
 
 -- Keep ``updated_at`` in sync on UPDATE (append-only tables omit ``updated_at``).
 create or replace function public.medbuddy_touch_updated_at()

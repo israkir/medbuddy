@@ -90,8 +90,8 @@ def build_app_services(
     # Real mode — every dep must be present; fail fast with ConfigError.
     if not settings.line_channel_access_token:
         raise ConfigError("LINE_CHANNEL_ACCESS_TOKEN is required in real mode")
-    if not settings.supabase_url or not settings.supabase_publishable_key:
-        raise ConfigError("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in real mode")
+    if not settings.supabase_url or not settings.supabase_service_key:
+        raise ConfigError("SUPABASE_URL and SUPABASE_SERVICE_KEY are required in real mode")
 
     line = LineHttpClient(channel_access_token=settings.line_channel_access_token)
     llm = _build_llm(settings)

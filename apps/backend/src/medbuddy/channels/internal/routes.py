@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Header, Request
@@ -26,7 +27,9 @@ async def reminders_reconcile(
 ) -> dict[str, int | str]:
     """Re-enqueue due doses that never received a push (secret header; optional safety net)."""
     settings = get_settings()
-    if not settings.cron_secret or (x_cron_secret or "") != settings.cron_secret:
+    if not settings.cron_secret or not secrets.compare_digest(
+        (x_cron_secret or ""), settings.cron_secret
+    ):
         raise HTTPException(status_code=401, detail="unauthorized")
     if not settings.redis_url.strip():
         raise HTTPException(status_code=503, detail="redis not configured")
