@@ -14,7 +14,11 @@ from medbuddy.integrations.persistence.supabase_conversations import SupabaseCon
 from medbuddy.integrations.persistence.supabase_dose_events import _parse_ts
 from medbuddy.integrations.persistence.supabase_profile import _user_row_to_dict
 from medbuddy.integrations.persistence.supabase_stores import SupabaseUserData
-from medbuddy.models.domain import ConversationTurn, MedicationDraft
+from medbuddy.models.domain import (
+    ConversationTurn,
+    HealthConditionInput,
+    MedicationDraft,
+)
 
 _FAKE_SB_SECRET = "sb_secret_01234567890123456789012_abcd1234"
 
@@ -151,7 +155,6 @@ def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:
         "age_years",
         "gender",
         "emergency_contacts",
-        "health_notes",
         "onboarding_completed_at",
         "timezone",
         "locale",
@@ -327,7 +330,6 @@ async def test_save_onboarding_profile_updates_row() -> None:
                     "age_years": None,
                     "gender": None,
                     "emergency_contact": None,
-                    "health_notes": None,
                     "onboarding_completed_at": None,
                 }
             ]
@@ -342,7 +344,19 @@ async def test_save_onboarding_profile_updates_row() -> None:
                     "age_years": 72,
                     "gender": "female",
                     "emergency_contact": "son 0912",
-                    "health_notes": "DM",
+                    "onboarding_completed_at": "2026-04-07T12:00:00+00:00",
+                }
+            ]
+        ),
+        MagicMock(
+            data=[
+                {
+                    "id": "00000000-0000-0000-0000-000000000099",
+                    "external_user_id": "ext-onb",
+                    "preferred_name": "May",
+                    "age_years": 72,
+                    "gender": "female",
+                    "emergency_contact": "son 0912",
                     "onboarding_completed_at": "2026-04-07T12:00:00+00:00",
                 }
             ]
@@ -362,11 +376,33 @@ async def test_save_onboarding_profile_updates_row() -> None:
         data=[{"id": "00000000-0000-0000-0000-0000000000aa"}]
     )
 
+    hc_sel = MagicMock()
+    hc_sel.eq.return_value = hc_sel
+    hc_sel.execute.return_value = MagicMock(data=[])
+    hc_builder = MagicMock()
+    hc_builder.select.return_value = hc_sel
+    hc_builder.insert.return_value = hc_builder
+    hc_builder.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "category": "condition",
+                "name": "DM",
+                "severity": None,
+                "notes": None,
+                "is_active": True,
+                "created_at": "2026-04-07T12:00:00+00:00",
+            }
+        ]
+    )
+
     client = MagicMock()
 
     def table(name: str) -> MagicMock:
         if name == "emergency_contacts":
             return contacts_builder
+        if name == "patient_health_conditions":
+            return hc_builder
         return user_builder
 
     client.table.side_effect = table
@@ -380,7 +416,7 @@ async def test_save_onboarding_profile_updates_row() -> None:
         emergency_contacts=[
             {"relationship": "son", "channel_type": "phone", "channel_value": "0912"}
         ],
-        health_notes="DM",
+        health_conditions=[HealthConditionInput(name="DM", category="condition")],
         locale="en",
     )
     assert out["preferred_name"] == "May"
@@ -415,7 +451,6 @@ async def test_patch_user_profile_merges_fields() -> None:
                     "preferred_name": None,
                     "age_years": None,
                     "emergency_contact": None,
-                    "health_notes": None,
                     "onboarding_completed_at": None,
                 }
             ]
@@ -429,7 +464,6 @@ async def test_patch_user_profile_merges_fields() -> None:
                     "preferred_name": "Lin",
                     "age_years": 68,
                     "emergency_contact": None,
-                    "health_notes": None,
                     "onboarding_completed_at": None,
                 }
             ]
@@ -506,7 +540,6 @@ async def test_patch_user_profile_accepts_gender() -> None:
                     "age_years": None,
                     "gender": None,
                     "emergency_contact": None,
-                    "health_notes": None,
                     "onboarding_completed_at": None,
                 }
             ]
@@ -521,7 +554,6 @@ async def test_patch_user_profile_accepts_gender() -> None:
                     "age_years": None,
                     "gender": "male",
                     "emergency_contact": None,
-                    "health_notes": None,
                     "onboarding_completed_at": None,
                 }
             ]
@@ -548,7 +580,6 @@ async def test_patch_user_profile_emergency_contacts_demotes_old_primary() -> No
         "preferred_name": None,
         "age_years": None,
         "gender": None,
-        "health_notes": None,
         "onboarding_completed_at": None,
         "timezone": "Asia/Taipei",
         "locale": "zh-TW",

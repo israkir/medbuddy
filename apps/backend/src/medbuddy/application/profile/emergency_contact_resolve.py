@@ -119,7 +119,11 @@ async def try_resolve_emergency_contact_from_message(
     if not eligible:
         return None
 
-    patch = await svc.llm.extract_profile_patch(user_text, locale=locale)
+    await svc.users.get_or_create_user(user_key)
+    patch = await svc.llm.extract_profile_patch(
+        user_text,
+        locale=locale,
+    )
     patch = _strip_conflicting_fields_for_contact_line(patch, user_text)
 
     merged = _merge_contacts_with_patch(patch, user_text)

@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from medbuddy.core.i18n import t
+from medbuddy.models.domain import HealthConditionRecord
 from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 from medbuddy.application.profile.emergency_contacts import (
     emergency_contact_hint,
@@ -83,11 +84,10 @@ def format_patient_medication_context(meds: list, *, locale: str) -> str:
 
 
 def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str:
-    """Plain-language facts from light onboarding (name, age, notes). Empty if unset."""
+    """Plain-language facts from light onboarding (name, age, gender, contact). Empty if unset."""
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
-    notes = user_row.get("health_notes")
     contact = _profile_contact_hint(user_row)
     parts: list[str] = []
     if isinstance(name, str) and name.strip():
@@ -102,8 +102,6 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
                 label=gender_option_label(gender_key, locale=locale),
             )
         )
-    if isinstance(notes, str) and notes.strip():
-        parts.append(t("prompts.demographics_notes", locale=locale, notes=notes.strip()))
     if isinstance(contact, str) and contact.strip():
         parts.append(t("prompts.demographics_contact", locale=locale, contact=contact.strip()))
     if not parts:
@@ -112,23 +110,63 @@ def format_patient_demographics(user_row: dict[str, Any], *, locale: str) -> str
     return f"{header}\n" + "\n".join(parts)
 
 
+def _health_condition_display_line(c: HealthConditionRecord) -> str:
+    parts = [c.name]
+    if c.severity:
+        parts.append(f"({c.severity})")
+    if c.notes:
+        parts.append(f"— {c.notes}")
+    return " ".join(parts)
+
+
+def format_health_conditions_block_for_llm(
+    conditions: list[HealthConditionRecord],
+    *,
+    locale: str,
+) -> str:
+    """Grouped allergies / conditions / history for external LLM context."""
+    if not conditions:
+        return ""
+    by_cat: dict[str, list[HealthConditionRecord]] = {
+        "allergy": [],
+        "condition": [],
+        "history": [],
+    }
+    for c in conditions:
+        key = c.category if c.category in by_cat else "condition"
+        by_cat[key].append(c)
+    lines: list[str] = []
+    if by_cat["allergy"]:
+        items = "; ".join(_health_condition_display_line(c) for c in by_cat["allergy"])
+        lines.append(t("prompts.llm_health_allergies", locale=locale, items=items))
+    if by_cat["condition"]:
+        items = "; ".join(_health_condition_display_line(c) for c in by_cat["condition"])
+        lines.append(t("prompts.llm_health_conditions", locale=locale, items=items))
+    if by_cat["history"]:
+        items = "; ".join(_health_condition_display_line(c) for c in by_cat["history"])
+        lines.append(t("prompts.llm_health_history", locale=locale, items=items))
+    if not lines:
+        return ""
+    intro = t("prompts.llm_health_structured_intro", locale=locale)
+    return intro + "\n" + "\n".join(lines)
+
+
 def format_patient_profile_signals_for_llm(
     user_row: dict[str, Any],
     *,
     locale: str,
     include_health_notes: bool = False,
+    health_conditions: list[HealthConditionRecord] | None = None,
 ) -> str:
     """Coarse cues for the model: preferred form of address when set; age band (not exact age);
-    gender label; health-notes / emergency-contact signals (raw strings omitted unless
-    ``include_health_notes=True``).
+    gender label; structured health conditions and emergency-contact signals.
 
-    When ``include_health_notes=True`` the actual health notes text is included
-    so the model can cross-check drug contraindications or allergy conflicts.
+    When ``include_health_notes=True`` (legacy name: **structured health detail**), include the
+    full grouped allergies/conditions/history block for drug-safety checks.
     """
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
-    notes = user_row.get("health_notes")
     contact = _profile_contact_hint(user_row)
     parts: list[str] = []
     if isinstance(name, str) and name.strip():
@@ -149,27 +187,33 @@ def format_patient_profile_signals_for_llm(
                 label=gender_option_label(gender_key, locale=locale),
             )
         )
-    if isinstance(notes, str) and notes.strip():
-        if include_health_notes:
-            parts.append(
-                t("prompts.llm_signal_health_notes_full", locale=locale, notes=notes.strip())
-            )
-        else:
-            parts.append(t("prompts.llm_signal_has_health_notes", locale=locale))
     if isinstance(contact, str) and contact.strip():
         parts.append(t("prompts.llm_signal_has_emergency_contact", locale=locale))
+    hc_list = health_conditions or []
+    hc_block = format_health_conditions_block_for_llm(hc_list, locale=locale)
+    if hc_block.strip():
+        if include_health_notes:
+            parts.append(
+                t("prompts.llm_signal_health_conditions_detail", locale=locale, body=hc_block)
+            )
+        else:
+            parts.append(t("prompts.llm_signal_has_health_conditions", locale=locale))
     if not parts:
         return ""
     header = t("prompts.llm_profile_signals_header", locale=locale)
     return f"{header}\n" + "\n".join(f"- {p}" for p in parts)
 
 
-def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
+def format_profile_gaps(
+    user_row: dict[str, Any],
+    *,
+    locale: str,
+    active_health_condition_count: int = 0,
+) -> str:
     """List profile dimensions not stored yet (so the model can ask when helpful)."""
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
-    notes = user_row.get("health_notes")
     contact = _profile_contact_hint(user_row)
     gaps: list[str] = []
     if not (isinstance(name, str) and name.strip()):
@@ -180,8 +224,8 @@ def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
         gaps.append(t("prompts.gap_gender", locale=locale))
     if not (isinstance(contact, str) and contact.strip()):
         gaps.append(t("prompts.gap_contact", locale=locale))
-    if not (isinstance(notes, str) and notes.strip()):
-        gaps.append(t("prompts.gap_health_notes", locale=locale))
+    if active_health_condition_count <= 0:
+        gaps.append(t("prompts.gap_health_conditions", locale=locale))
     if not gaps:
         return ""
     intro = t("prompts.profile_gaps_intro", locale=locale)
@@ -189,11 +233,13 @@ def format_profile_gaps(user_row: dict[str, Any], *, locale: str) -> str:
 
 
 def build_patient_context_for_chat_display(
-    user_row: dict[str, Any], meds: list, *, locale: str
+    user_row: dict[str, Any], meds: list, *, locale: str, active_health_condition_count: int = 0
 ) -> str:
     """User-facing summary including stored profile text (not for third-party LLMs)."""
     demo = format_patient_demographics(user_row, locale=locale)
-    gaps = format_profile_gaps(user_row, locale=locale)
+    gaps = format_profile_gaps(
+        user_row, locale=locale, active_health_condition_count=active_health_condition_count
+    )
     med_part = format_patient_medication_context(meds, locale=locale)
     blocks: list[str] = []
     if demo:
@@ -212,17 +258,22 @@ def build_patient_context_for_llm(
     locale: str,
     upcoming_doses_context: str | None = None,
     include_health_notes: bool = False,
+    health_conditions: list[HealthConditionRecord] | None = None,
 ) -> str:
     """De-identified profile cues plus medications — safe for external model APIs.
 
     Pass ``include_health_notes=True`` for safety-critical calls (add_medication,
-    interaction_check, explain_medication) so the model can detect contraindications
-    or allergy conflicts from the patient's stored health notes.
+    interaction_check, explain_medication) so the model receives the full structured
+    allergies/conditions/history block when available.
     """
+    hc_list = health_conditions or []
     signals = format_patient_profile_signals_for_llm(
-        user_row, locale=locale, include_health_notes=include_health_notes
+        user_row,
+        locale=locale,
+        include_health_notes=include_health_notes,
+        health_conditions=hc_list,
     )
-    gaps = format_profile_gaps(user_row, locale=locale)
+    gaps = format_profile_gaps(user_row, locale=locale, active_health_condition_count=len(hc_list))
     med_part = format_patient_medication_context(meds, locale=locale)
     blocks: list[str] = []
     if signals:

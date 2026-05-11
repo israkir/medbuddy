@@ -1,9 +1,18 @@
--- MedBuddy Postgres schema for a new Supabase project (greenfield).
--- The backend connects with SUPABASE_SERVICE_KEY (service_role), which bypasses RLS.
--- anon/authenticated table grants are revoked (drop legacy policies + revoke statements below).
+-- MedBuddy Postgres schema: **fresh / greenfield / ongoing idempotent apply**.
 --
--- Canonical DDL: this file for idempotent apply, and apps/backend/supabase/recreate_database.sql
--- for a full reset. Older databases should diff against this file and apply ALTER / missing blocks.
+-- - No `DROP TABLE` here — safe for a new empty `public`. Table DDL is expressed
+--   in `CREATE TABLE … IF NOT EXISTS` with the full column set (no legacy column drops
+--   or backfill `UPDATE` blocks in this file).
+-- - Tactical `DROP POLICY` / `DROP TRIGGER IF EXISTS` keeps reruns idempotent when
+--   cleaning legacy policies or replacing triggers.
+--
+-- The backend uses SUPABASE_SERVICE_KEY (service_role), which bypasses RLS.
+-- `anon` / `authenticated` table grants are revoked (see policy + revoke block below).
+--
+-- **Full data wipe + rebuild in one shot:** ``apps/backend/supabase/recreate_database.sql``
+-- (drops MedBuddy tables, then recreates DDL to match this file’s end state). Keep the two
+-- files in sync when you change schema. Older databases that predate a column should add
+-- it with a one-off `ALTER TABLE` (or diff against `recreate_database.sql`).
 
 create extension if not exists "pgcrypto";
 
@@ -12,11 +21,11 @@ create table if not exists public.patients (
     external_user_id text not null unique,
     preferred_name text,
     age_years integer,
-    health_notes text,
     onboarding_completed_at timestamptz,
     gender text,
     timezone text default 'Asia/Taipei',
     locale text default 'zh-TW',
+    pending_agent_clarification jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
@@ -41,10 +50,31 @@ create index if not exists emergency_contacts_patient_id_idx
 create unique index if not exists emergency_contacts_patient_channel_unique_idx
     on public.emergency_contacts (patient_id, channel_type, channel_value);
 
+create table if not exists public.patient_health_conditions (
+    id uuid primary key default gen_random_uuid(),
+    patient_id uuid not null references public.patients (id) on delete cascade,
+    category text not null check (category in ('allergy', 'condition', 'history')),
+    name text not null,
+    severity text,
+    notes text,
+    is_active boolean not null default true,
+    source text not null default 'user',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create unique index if not exists uq_patient_health_conditions
+    on public.patient_health_conditions (patient_id, lower(name), category);
+
+create index if not exists idx_patient_health_conditions_patient
+    on public.patient_health_conditions (patient_id, is_active, created_at desc);
+
 comment on column public.patients.timezone is
     'IANA timezone name; default Asia/Taipei; used for medication reminder local times and push copy.';
 comment on column public.patients.locale is
     'App UI language: en or zh-TW (standalone app); default zh-TW.';
+comment on column public.patients.pending_agent_clarification is
+    'Optional JSON: pending dose clarification (option dose_event ids + expires_at).';
 
 create table if not exists public.medications (
     id uuid primary key default gen_random_uuid(),
@@ -197,6 +227,7 @@ alter table public.health_issue_events enable row level security;
 alter table public.drug_reference_cache enable row level security;
 alter table public.drug_personalization_cache enable row level security;
 alter table public.emergency_contacts enable row level security;
+alter table public.patient_health_conditions enable row level security;
 
 -- The backend exclusively uses the service_role key (SUPABASE_SERVICE_KEY), which bypasses RLS
 -- automatically. No anon policies are created. Drop any legacy open policies that may exist.
@@ -208,38 +239,14 @@ drop policy if exists "medbuddy_health_issue_events_anon_rw" on public.health_is
 drop policy if exists "medbuddy_drug_reference_cache_anon_rw" on public.drug_reference_cache;
 drop policy if exists "medbuddy_drug_personalization_cache_anon_rw" on public.drug_personalization_cache;
 drop policy if exists "medbuddy_emergency_contacts_anon_rw" on public.emergency_contacts;
-
--- Ephemeral agent state (dose disambiguation). Safe to clear anytime.
-alter table public.dose_events add column if not exists missed_at timestamptz;
-alter table public.patients add column if not exists pending_agent_clarification jsonb;
-
-comment on column public.patients.pending_agent_clarification is
-    'Optional JSON: pending dose clarification (option dose_event ids + expires_at).';
-
--- Row audit timestamps (existing deployments: add columns if missing).
-alter table public.patients add column if not exists created_at timestamptz not null default now();
-alter table public.patients add column if not exists updated_at timestamptz not null default now();
-alter table public.medications add column if not exists created_at timestamptz not null default now();
-alter table public.medications add column if not exists updated_at timestamptz not null default now();
-alter table public.dose_events add column if not exists created_at timestamptz not null default now();
-alter table public.dose_events add column if not exists updated_at timestamptz not null default now();
-
-alter table public.drug_reference_cache add column if not exists created_at timestamptz;
-alter table public.drug_reference_cache add column if not exists updated_at timestamptz;
-update public.drug_reference_cache
-set
-    created_at = fetched_at,
-    updated_at = fetched_at
-where created_at is null or updated_at is null;
-alter table public.drug_reference_cache alter column created_at set default now();
-alter table public.drug_reference_cache alter column updated_at set default now();
-alter table public.drug_reference_cache alter column created_at set not null;
-alter table public.drug_reference_cache alter column updated_at set not null;
+drop policy if exists "medbuddy_patient_health_conditions_anon_rw"
+    on public.patient_health_conditions;
 
 -- The backend uses service_role (bypasses RLS). Revoke any previously granted anon/authenticated
 -- table access so the publishable key cannot reach data even if a policy is accidentally added.
 revoke all on table public.patients from anon, authenticated;
 revoke all on table public.emergency_contacts from anon, authenticated;
+revoke all on table public.patient_health_conditions from anon, authenticated;
 revoke all on table public.medications from anon, authenticated;
 revoke all on table public.conversation_turns from anon, authenticated;
 revoke all on sequence public.conversation_turns_id_seq from anon, authenticated;
@@ -254,6 +261,7 @@ revoke all on table public.drug_personalization_cache from anon, authenticated;
 grant usage on schema public to service_role;
 grant all on table public.patients to service_role;
 grant all on table public.emergency_contacts to service_role;
+grant all on table public.patient_health_conditions to service_role;
 grant all on table public.medications to service_role;
 grant all on table public.conversation_turns to service_role;
 grant all on sequence public.conversation_turns_id_seq to service_role;
@@ -313,6 +321,12 @@ create trigger drug_reference_cache_touch_updated_at
 drop trigger if exists emergency_contacts_touch_updated_at on public.emergency_contacts;
 create trigger emergency_contacts_touch_updated_at
     before update on public.emergency_contacts
+    for each row execute function public.medbuddy_touch_updated_at();
+
+drop trigger if exists patient_health_conditions_touch_updated_at
+    on public.patient_health_conditions;
+create trigger patient_health_conditions_touch_updated_at
+    before update on public.patient_health_conditions
     for each row execute function public.medbuddy_touch_updated_at();
 
 drop trigger if exists drug_personalization_cache_touch_updated_at

@@ -19,7 +19,6 @@ _PHI_ATTRS: frozenset[str] = frozenset(
         "preferred_name",
         "contact_name",
         "channel_value",
-        "health_notes",
         "user_text",
         "safe_text",
         "display_name",

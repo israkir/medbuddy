@@ -32,12 +32,17 @@ def append_profile_completion_nudge_if_due(
     reply: str,
     locale: str,
     history_before_latest_user_message: list[ConversationTurn],
+    active_health_condition_count: int = 0,
 ) -> str:
     """Append a short footer when profile gaps exist and this turn hits the nudge cadence."""
     interval = settings.profile_completion_nudge_every_n_user_turns
     if interval <= 0:
         return reply
-    if not format_profile_gaps(user_row, locale=locale).strip():
+    if not format_profile_gaps(
+        user_row,
+        locale=locale,
+        active_health_condition_count=active_health_condition_count,
+    ).strip():
         return reply
     idx = current_user_turn_index(history_before_latest_user_message)
     phase = _stable_phase(user_key, interval)

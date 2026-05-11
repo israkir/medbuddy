@@ -72,7 +72,7 @@ export default function OnboardingScreen() {
         age_years,
         gender,
         emergency_contact: contact.trim(),
-        health_notes: notes.trim(),
+        notes: notes.trim(),
         locale,
       });
       await setAppLanguage(locale);

@@ -13,6 +13,7 @@ from medbuddy.agents.tools.health_summary import GenerateHealthSummaryTool
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.channels.api.auth import MobileAuthContext, require_mobile_auth
 from medbuddy.channels.api.schemas import (
+    HealthConditionResponse,
     HealthSummaryResponse,
     MeResponse,
     MedicationSummaryItemResponse,
@@ -21,6 +22,7 @@ from medbuddy.channels.api.schemas import (
     MessageVoiceReply,
     OnboardingSubmit,
 )
+from medbuddy.models.domain import HealthConditionInput
 from medbuddy.core.locale import effective_user_locale, locale_from_client_language_headers
 from medbuddy.core.timezone import effective_user_timezone
 from medbuddy.deps import get_services
@@ -47,19 +49,31 @@ def _onboarding_ts_iso(value: Any) -> str | None:
     return str(value)
 
 
-def _me_response(app_user_id: str, row: dict[str, Any]) -> MeResponse:
+async def _me_response(svc: AppServices, app_user_id: str, row: dict[str, Any]) -> MeResponse:
     g = row.get("gender")
     gender_str = g if isinstance(g, str) and g.strip() else None
     tz_raw = row.get("timezone")
     tz_str = effective_user_timezone(tz_raw if isinstance(tz_raw, str) else None)
     loc_str = effective_user_locale(row.get("locale"))
+    hc_rows = await svc.users.list_health_conditions(app_user_id, active_only=True)
+    health_conditions = [
+        HealthConditionResponse(
+            id=r.id,
+            category=r.category,
+            name=r.name,
+            severity=r.severity,
+            notes=r.notes,
+            is_active=r.is_active,
+        )
+        for r in hc_rows
+    ]
     return MeResponse(
         app_user_id=app_user_id,
         preferred_name=row.get("preferred_name"),
         age_years=row.get("age_years"),
         gender=gender_str,
         emergency_contacts=row.get("emergency_contacts") or [],
-        health_notes=row.get("health_notes"),
+        health_conditions=health_conditions,
         timezone=tz_str,
         locale=loc_str,
         onboarding_completed_at=_onboarding_ts_iso(row.get("onboarding_completed_at")),
@@ -103,7 +117,7 @@ async def app_me(
         )
         if hinted is not None:
             row = await svc.users.patch_user_profile(ctx.app_user_id, {"locale": hinted})
-    return _me_response(ctx.app_user_id, row)
+    return await _me_response(svc, ctx.app_user_id, row)
 
 
 @router.post("/onboarding", response_model=MeResponse)
@@ -113,17 +127,28 @@ async def app_complete_onboarding(
     svc: AppServices = Depends(get_services),
 ) -> MeResponse:
     """Save first-run onboarding answers (name, age, gender, optional notes and family contact)."""
+    hc_inputs = [
+        HealthConditionInput(
+            name=item.name.strip(),
+            category=item.category,
+            severity=item.severity,
+            notes=item.notes,
+            action="add",
+        )
+        for item in body.health_conditions
+        if item.name.strip()
+    ]
     row = await svc.users.save_onboarding_profile(
         ctx.app_user_id,
         preferred_name=body.preferred_name,
         age_years=body.age_years,
         gender=body.gender.value if body.gender is not None else None,
         emergency_contacts=[c.model_dump(exclude_none=True) for c in body.emergency_contacts],
-        health_notes=body.health_notes,
+        health_conditions=hc_inputs or None,
         timezone=body.timezone,
         locale=body.locale.value,
     )
-    return _me_response(ctx.app_user_id, row)
+    return await _me_response(svc, ctx.app_user_id, row)
 
 
 @router.post("/messages", response_model=MessageReply)

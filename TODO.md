@@ -34,7 +34,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Persistence and media
 
-- [ ] **Supabase** (or other DB) is wired — ensure **`apps/backend/supabase/schema.sql`** is applied (or **`recreate_database.sql`** for a clean reset) and schema drift is reconciled in your deployment process.
+- [ ] **Supabase** (or other DB) is wired — ensure **`apps/backend/supabase/schema.sql`** is applied (or **`recreate_database.sql`** for a full destructive reset in one file) and reconcile drift in your deployment process.
 
 
 ### Drug caches (`drug_reference_cache`, `drug_personalization_cache`)

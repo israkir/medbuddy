@@ -35,6 +35,8 @@ __all__ = [
     "TurnInterpretation",
     "HEALTH_ROUTING_INTENT_VITAL",
     "HealthIssueEventRecord",
+    "HealthConditionRecord",
+    "HealthConditionInput",
 ]
 
 
@@ -118,6 +120,30 @@ class MedicationRecord:
 
 # Structured vital rows use ``routing_intent`` = ``Intent.LOG_VITAL.value``.
 HEALTH_ROUTING_INTENT_VITAL = Intent.LOG_VITAL.value
+
+
+@dataclass(frozen=True)
+class HealthConditionRecord:
+    """One persisted row in ``patient_health_conditions``."""
+
+    id: str
+    category: str
+    name: str
+    severity: str | None
+    notes: str | None
+    is_active: bool
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class HealthConditionInput:
+    """Add/remove payload for ``UserDataPort.upsert_health_conditions``."""
+
+    name: str
+    category: Literal["allergy", "condition", "history"] = "condition"
+    severity: str | None = None
+    notes: str | None = None
+    action: Literal["add", "remove"] = "add"
 
 
 @dataclass(frozen=True)

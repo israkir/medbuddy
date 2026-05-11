@@ -101,7 +101,7 @@ async def test_app_me_does_not_overwrite_locale_from_header_after_onboarding():
                     "age_years": 70,
                     "gender": None,
                     "emergency_contacts": [],
-                    "health_notes": None,
+                    "health_conditions": [],
                     "timezone": "Asia/Taipei",
                     "locale": "zh-TW",
                 },
@@ -215,7 +215,14 @@ async def test_app_onboarding_saves_profile():
                             "is_primary": False,
                         },
                     ],
-                    "health_notes": "對青黴素過敏",
+                    "health_conditions": [
+                        {
+                            "category": "allergy",
+                            "name": "Penicillin",
+                            "severity": None,
+                            "notes": None,
+                        }
+                    ],
                     "timezone": "Asia/Taipei",
                     "locale": "zh-TW",
                 },
@@ -237,6 +244,8 @@ async def test_app_onboarding_saves_profile():
     secondary = data["emergency_contacts"][1]
     assert secondary["is_primary"] is False
     assert secondary["channel_type"] == "phone"
+    assert len(data.get("health_conditions") or []) == 1
+    assert data["health_conditions"][0]["name"] == "Penicillin"
 
     with patch("medbuddy.channels.api.auth.get_settings", return_value=ms):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

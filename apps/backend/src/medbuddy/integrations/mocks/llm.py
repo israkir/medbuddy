@@ -6,6 +6,8 @@ from typing import Any
 from medbuddy.core.i18n import t
 from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.llm.schemas import (
+    HealthConditionItem,
+    HealthConditionsExtraction,
     HealthSummaryResult,
     InteractionCheckResult,
     MedicationUpdateResolution,
@@ -14,6 +16,7 @@ from medbuddy.llm.schemas import (
 )
 from medbuddy.models.domain import (
     ConversationTurn,
+    HealthConditionRecord,
     HealthSummary,
     Intent,
     InteractionResult,
@@ -79,6 +82,8 @@ class MockLLM(LLMPort):
         interaction_tool_medication_id: str | None = None,
         orchestrator_text_only: bool = False,
         orchestrator_tools_step1: list[tuple[str, str]] | None = None,
+        health_conditions_extraction: HealthConditionsExtraction | None = None,
+        drug_condition_concerns: list[str] | None = None,
     ) -> None:
         self._intent = intent
         self._locale = locale
@@ -97,6 +102,8 @@ class MockLLM(LLMPort):
         self._interaction_tool_medication_id = interaction_tool_medication_id
         self._orchestrator_text_only = orchestrator_text_only
         self._orchestrator_tools_step1 = orchestrator_tools_step1
+        self._health_conditions_extraction = health_conditions_extraction
+        self._drug_condition_concerns = drug_condition_concerns
         self.last_interpret_user_turn_input: str | None = None
         self.last_health_issue_events_block: str | None = None
         self.last_interaction_call_kind: str | None = None
@@ -123,12 +130,40 @@ class MockLLM(LLMPort):
             dose_adherence_note=self._dose_adherence_note,
         )
 
-    async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
+    async def extract_profile_patch(
+        self,
+        user_text: str,
+        *,
+        locale: str,
+    ) -> ProfilePatch:
         await asyncio.sleep(0)
         _ = (user_text, locale)
         if self._profile_patch is not None:
             return dict(self._profile_patch)
         return {}
+
+    async def extract_health_conditions(
+        self,
+        user_text: str,
+        *,
+        locale: str,
+    ) -> list[HealthConditionItem]:
+        await asyncio.sleep(0)
+        _ = (user_text, locale)
+        if self._health_conditions_extraction is not None:
+            return list(self._health_conditions_extraction.conditions)
+        return []
+
+    async def check_drug_condition_interactions(
+        self,
+        drug_name: str,
+        conditions: list[HealthConditionRecord],
+        *,
+        locale: str,
+    ) -> list[str]:
+        await asyncio.sleep(0)
+        _ = (drug_name, conditions, locale)
+        return list(self._drug_condition_concerns or [])
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         await asyncio.sleep(0)

@@ -28,10 +28,6 @@ def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
         contacts = normalize_emergency_contacts(patch.get("emergency_contacts"))
         if contacts:
             parts.append(emergency_contact_save_ack(contacts, locale=locale))
-    if "health_notes" in patch:
-        n = patch["health_notes"]
-        if isinstance(n, str) and n.strip():
-            parts.append(t("profile.ack_notes", locale=locale, notes=n.strip()))
     if "gender" in patch:
         gk = normalized_profile_gender(patch.get("gender"))
         if gk:
@@ -62,6 +58,7 @@ def _profile_ack_summary(patch: ProfilePatch, *, locale: str) -> str:
 def _normalize_profile_patch(patch: ProfilePatch) -> ProfilePatch:
     """Normalize locale/timezone fields; drop invalid entries."""
     out = dict(patch)
+    out.pop("health_notes", None)
     if "locale" in out:
         norm_locale = normalize_locale_patch(out["locale"])
         if norm_locale is None:

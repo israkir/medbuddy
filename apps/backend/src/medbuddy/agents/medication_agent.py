@@ -211,13 +211,21 @@ class MedicationAgent:
         loop_tools = None
         system_suffix = None
         if intent == Intent.UPDATE_PROFILE:
-            raw_patch = await svc.llm.extract_profile_patch(user_text, locale=locale)
+            raw_patch = await svc.llm.extract_profile_patch(
+                user_text,
+                locale=locale,
+            )
             profile_patch = normalize_profile_patch_for_storage(raw_patch)
             if profile_patch:
                 await svc.users.patch_user_profile(user_key, profile_patch)
                 user_row = await svc.users.get_or_create_user(user_key)
-                loop_tools = agent_tools_openai_omit("update_profile")
-                system_suffix = t("agent.orchestrator_profile_saved_hint", locale=locale)
+                loop_tools = agent_tools_openai_omit("update_profile", "manage_health_conditions")
+                saved_fields = list(profile_patch.keys())
+                system_suffix = t(
+                    "agent.orchestrator_profile_saved_hint_fields",
+                    locale=locale,
+                    fields=", ".join(saved_fields),
+                )
 
         orch = await run_tool_agent_loop(
             svc,
@@ -237,6 +245,7 @@ class MedicationAgent:
         reply = await _maybe_append_pending_reminder(
             svc, user_key=user_key, reply=orch.reply, locale=locale
         )
+        hc_for_nudge = await svc.users.list_health_conditions(user_key, active_only=True)
         reply = append_profile_completion_nudge_if_due(
             settings=svc.settings,
             user_key=user_key,
@@ -244,6 +253,7 @@ class MedicationAgent:
             reply=reply,
             locale=locale,
             history_before_latest_user_message=history,
+            active_health_condition_count=len(hc_for_nudge),
         )
 
         await svc.conversations.append_turn(
