@@ -248,6 +248,20 @@ revoke all on table public.health_issue_events from anon, authenticated;
 revoke all on table public.drug_reference_cache from anon, authenticated;
 revoke all on table public.drug_personalization_cache from anon, authenticated;
 
+-- PostgREST uses ``service_role`` for ``SUPABASE_SERVICE_KEY`` / ``sb_secret_...``.
+-- Explicit grants document intent and avoid ``42501`` on non-default or self-hosted
+-- Postgres where table owner privileges do not already cover ``service_role``.
+grant usage on schema public to service_role;
+grant all on table public.patients to service_role;
+grant all on table public.emergency_contacts to service_role;
+grant all on table public.medications to service_role;
+grant all on table public.conversation_turns to service_role;
+grant all on sequence public.conversation_turns_id_seq to service_role;
+grant all on table public.dose_events to service_role;
+grant all on table public.health_issue_events to service_role;
+grant all on table public.drug_reference_cache to service_role;
+grant all on table public.drug_personalization_cache to service_role;
+
 -- Keep ``updated_at`` in sync on UPDATE (append-only tables omit ``updated_at``).
 create or replace function public.medbuddy_touch_updated_at()
 returns trigger
