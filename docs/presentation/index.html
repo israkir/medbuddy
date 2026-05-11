@@ -1463,7 +1463,7 @@
       margin-bottom: 0;
     }
     .remark-slide-content.single-conversation-slide ul {
-      margin: 0.1em 0 0 1.1em;
+      margin: -5.1em 0 0 1.1em;
       font-size: 0.9em;
       line-height: 1.18;
     }
@@ -1474,6 +1474,14 @@
       width: auto !important;
       max-width: 100%;
       max-height: 42vh !important;
+    }
+    .remark-slide-content.reminders-flow-slide ul {
+      margin: -5.1em 0 0 1.1em;
+      font-size: 0.9em;
+      line-height: 1.18;
+    }
+    .remark-slide-content.reminders-flow-slide ul li {
+      margin: 0.08em 0;
     }
     .sys-context-wrap.proto-impl.privacy-boundary svg {
       width: auto !important;
@@ -3403,7 +3411,7 @@ class: deep eng-proto single-conversation-slide
   <text class="sc-legend-text" x="890" y="220" fill="#ca8a04">- - → early-exit path</text>
 </svg>
 </div>
-<div style="margin-top:-2.1em">
+<div>
 <ul>
   <li>Single channel entrypoint: <code>run_assistant_text_turn()</code> is a thin bridge to <code>MedicationAgent.run()</code>.</li>
   <li>Deterministic ordering: pending-state resolvers and emergency/off-topic checks run before tool dispatch.</li>
@@ -3500,7 +3508,7 @@ class: deep eng-proto reminders-flow-slide
   <text class="sc-legend-text" x="848" y="244">Reconcile (purple dashed)</text>
 </svg>
 </div>
-<div style="margin-top:-2.1em">
+<div>
 <ul>
   <li>Medication writes call <code>sync_and_enqueue_reminders</code>: rebuild future <code>dose_events</code>, then enqueue with <code>_defer_until</code>.</li>
   <li>Reconcile is a guarded safety net: cron + secret header re-enqueues <strong>due + unsent</strong> rows when worker/Redis delivery is interrupted.</li>
