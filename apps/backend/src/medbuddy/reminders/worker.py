@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import httpx
 from arq.connections import RedisSettings
 
 from medbuddy.config import get_settings
@@ -16,11 +17,21 @@ from medbuddy.reminders.deliver import deliver_dose_reminder, deliver_dose_remin
 async def startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     ctx["settings"] = settings
-    ctx["services"] = build_app_services(settings)
+    outbound_http: httpx.AsyncClient | None = None
+    if not settings.is_mock:
+        # Same defaults as ``main.py`` lifespan — HttpDrugData shares this client.
+        outbound_http = httpx.AsyncClient(
+            timeout=httpx.Timeout(20.0),
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+        )
+    ctx["outbound_http"] = outbound_http
+    ctx["services"] = build_app_services(settings, outbound_http=outbound_http)
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    _ = ctx
+    client = ctx.get("outbound_http")
+    if isinstance(client, httpx.AsyncClient):
+        await client.aclose()
 
 
 async def send_reminder_for_dose(

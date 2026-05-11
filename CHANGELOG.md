@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **ARQ reminder worker startup:** Worker `on_startup` now creates a shared `httpx.AsyncClient` (matching `main.py` timeouts/limits) and passes it to `build_app_services`, then closes it in `on_shutdown`. Production mode previously required `outbound_http` from the FastAPI lifespan only, so the worker crashed with `ConfigError` before processing jobs.
 - **Drug-registry parallel fetches:** TFDA and OpenFDA requests in `fetch_drug_grounding_text`, `ExplainMedicationTool`, and `ListMedicationsTool` now run concurrently via `asyncio.gather` instead of sequentially, cutting ~200–400 ms per tool call. Per-medication groundings in `list_medications` are also gathered in parallel.
 - **Drug-grounding helper deduplicated:** `side_effects._fetch_grounding` was an inline copy of `drug_grounding.fetch_drug_grounding_text`; it now delegates to the canonical helper, removing ~15 lines of duplicate logic.
 - **Drug-registry timeouts and retry:** `HttpDrugData` uses a structured `httpx.Timeout(connect=3, read=4, write=3, pool=3)` and retries once with random jitter on `TimeoutException` / `ConnectError`. Dropped the unused `timeout: float` constructor parameter.
@@ -35,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
+- **ARQ worker lifecycle:** `tests/reminders/test_worker_lifecycle.py` covers mock startup (no shared HTTP client) and production-path startup/shutdown (shared `httpx.AsyncClient` closed). `tests/conftest.py` sets `REDIS_URL` via `setdefault` so importing `medbuddy.reminders.worker` (which resolves `WorkerSettings.redis_settings` at import time) does not require a live Redis in the environment.
 - **Locale-aware LINE follow tests (O3):** Added `test_follow_seeds_zhtw_locale_from_line_profile_language`, `test_follow_unknown_language_falls_back_to_default_locale`, and `test_follow_no_profile_language_uses_stored_locale` to cover the locale-seeding logic shipped on this branch.
 - **Pending JSONB version tests (R6):** `tests/test_pending_schema_version.py` covers version-0 backward compat, roundtrip, and future-version rejection for all three pending types.
 - **Reminder version-check and conversation-purge tests (R3/P6):** `tests/reminders/test_reminder_version_jitter.py` covers `scheduled_at` mismatch skip, happy-path match, and the `/internal/conversations/purge` endpoint.
