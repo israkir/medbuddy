@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **LINE webhook and voice UX:** `POST /v1/line/webhook` returns immediately after parse and idempotency, scheduling each event on FastAPI `BackgroundTasks` (failures logged in `_run_event`). Inbound **audio** starts LINE's chat loading indicator before download/STT/LLM. New `LineMessagingPort.send_chat_loading_indicator` on `LineHttpClient` and `MockLineClient.loading_indicators`; tests cover the audio vs text paths.
+
 ### Security
 
 - **LINE webhook idempotency (S2):** A Redis `SETNX` keyed on `webhookEventId` (5-minute TTL) deduplicates events before dispatch. LINE retries and slow-200 re-deliveries are silently skipped. Falls back gracefully (always-process) when `REDIS_URL` is unset so mock mode is unaffected. New module: `apps/backend/src/medbuddy/channels/line/idempotency.py`.

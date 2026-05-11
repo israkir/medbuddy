@@ -147,3 +147,26 @@ class LineHttpClient(LineMessagingPort):
             log.warning("LINE profile: invalid JSON user_id_prefix=%s", (user_id or "")[:8])
             return None
         return data if isinstance(data, dict) else None
+
+    async def send_chat_loading_indicator(self, user_id: str, *, seconds: int = 20) -> None:
+        url = "https://api.line.me/v2/bot/chat/loading/start"
+        headers = {
+            "Authorization": f"Bearer {self._channel_access_token}",
+            "Content-Type": "application/json",
+        }
+        payload = {"chatId": user_id, "loadingSeconds": max(5, min(60, seconds))}
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(url, json=payload, headers=headers, timeout=5.0)
+            if r.status_code not in (200, 202):
+                log.warning(
+                    "LINE loading indicator: unexpected status=%s user_id_prefix=%s",
+                    r.status_code,
+                    (user_id or "")[:8],
+                )
+        except Exception:
+            log.warning(
+                "LINE loading indicator: request failed user_id_prefix=%s",
+                (user_id or "")[:8],
+                exc_info=True,
+            )

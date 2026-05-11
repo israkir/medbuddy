@@ -22,6 +22,8 @@ class LineMessagingPort(Protocol):
 
     async def get_user_profile(self, user_id: str) -> dict[str, Any] | None: ...
 
+    async def send_chat_loading_indicator(self, user_id: str, *, seconds: int = 20) -> None: ...
+
 
 class LineAudioBlobStorePort(Protocol):
     """Short-lived publicly URL-addressable audio payloads for LINE ``originalContentUrl``."""
