@@ -97,8 +97,12 @@ def build_app_services(
     llm = _build_llm(settings)
     stt, tts = _build_stt_tts(settings)
 
-    outbound = outbound_http or httpx.AsyncClient(timeout=httpx.Timeout(20.0))
-    drugs_http = HttpDrugData(locale=settings.locale, http_client=outbound)
+    if outbound_http is None:
+        raise ConfigError(
+            "outbound_http must be provided by the lifespan context in real mode — "
+            "call build_app_services with the shared AsyncClient from main.py"
+        )
+    drugs_http = HttpDrugData(locale=settings.locale, http_client=outbound_http)
 
     sb_client = create_supabase_client(settings)
     user_data = SupabaseUserData(sb_client, settings)

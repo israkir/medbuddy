@@ -10,7 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Supabase RLS tightened:** All eight tables now deny access to the `anon` and `authenticated` roles. The backend exclusively uses `SUPABASE_SERVICE_KEY` (service_role), which bypasses RLS without requiring explicit policies. Legacy open `using (true)` policies are dropped by `supabase/migrations/restrict_rls_to_service_role.sql`. `SUPABASE_PUBLISHABLE_KEY` is retained in config for local tooling but is no longer used by the server.
+- **Supabase service-key fail-closed:** `create_supabase_client` now raises `ConfigError` if `SUPABASE_SERVICE_KEY` is absent, regardless of integration mode. Previously it silently fell back to the publishable/anon key, causing confusing 4xx errors under the new closed-RLS policies.
 - **Constant-time cron secret comparison:** `POST /internal/reminders/reconcile` now uses `secrets.compare_digest` for the `X-Cron-Secret` header check, matching the pattern already used for `MEDBUDDY_MOBILE_BEARER_TOKEN`.
+
+### Fixed
+
+- **Drug-registry parallel fetches:** TFDA and OpenFDA requests in `fetch_drug_grounding_text`, `ExplainMedicationTool`, and `ListMedicationsTool` now run concurrently via `asyncio.gather` instead of sequentially, cutting ~200–400 ms per tool call. Per-medication groundings in `list_medications` are also gathered in parallel.
+- **Drug-grounding helper deduplicated:** `side_effects._fetch_grounding` was an inline copy of `drug_grounding.fetch_drug_grounding_text`; it now delegates to the canonical helper, removing ~15 lines of duplicate logic.
+- **Drug-registry timeouts and retry:** `HttpDrugData` uses a structured `httpx.Timeout(connect=3, read=4, write=3, pool=3)` and retries once with random jitter on `TimeoutException` / `ConnectError`. Dropped the unused `timeout: float` constructor parameter.
+- **`outbound_http` single-owner:** `build_app_services` now raises `ConfigError` in real mode when `outbound_http` is `None`, eliminating the silent fallback that could construct a second untracked `AsyncClient`. The lifespan in `main.py` is the sole owner.
+- **`make_mock_settings` deduplicated:** `tests/conftest.py` previously duplicated the helper from `tests/helpers.py`; it now imports from the canonical location.
+
+### Tests
+
+- **Locale-aware LINE follow tests (O3):** Added `test_follow_seeds_zhtw_locale_from_line_profile_language`, `test_follow_unknown_language_falls_back_to_default_locale`, and `test_follow_no_profile_language_uses_stored_locale` to cover the locale-seeding logic shipped on this branch.
 
 ### Added
 
