@@ -10,7 +10,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from medbuddy.agents.base import ToolResult
 from medbuddy.agents.tools.confirm_dose import ConfirmDoseTool
@@ -41,9 +41,12 @@ from medbuddy.core.errors import (
 from medbuddy.core.i18n import t
 from medbuddy.llm.agent_system_prompt import build_agent_system_prompt
 from medbuddy.llm.agent_tool_definitions import AGENT_TOOLS_OPENAI
+from medbuddy.llm.prompts.persona import format_health_conditions_block_for_llm
+from medbuddy.llm.schemas import HealthConditionItem
 from medbuddy.models.domain import (
     AgentTurnResult,
     ConversationTurn,
+    HealthConditionInput,
     MedicationRecord,
     TurnInterpretation,
 )
@@ -57,6 +60,64 @@ from medbuddy.application.profile.emergency_contacts import (
 log = logging.getLogger(__name__)
 
 _MAX_AGENT_STEPS = 8
+
+
+def _tool_args_to_health_condition_inputs(raw: object) -> list[HealthConditionInput]:
+    out: list[HealthConditionInput] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        cat_s = str(item.get("category") or "condition").strip().lower()
+        cat: Literal["allergy", "condition", "history"] = cast(
+            Literal["allergy", "condition", "history"],
+            cat_s if cat_s in ("allergy", "condition", "history") else "condition",
+        )
+        act_s = str(item.get("action") or "add").strip().lower()
+        act: Literal["add", "remove"] = cast(
+            Literal["add", "remove"],
+            act_s if act_s in ("add", "remove") else "add",
+        )
+        sev_r = item.get("severity")
+        severity = sev_r.strip() if isinstance(sev_r, str) and sev_r.strip() else None
+        notes_r = item.get("notes")
+        notes = notes_r.strip() if isinstance(notes_r, str) and notes_r.strip() else None
+        out.append(
+            HealthConditionInput(
+                name=name,
+                category=cat,
+                severity=severity,
+                notes=notes,
+                action=act,
+            )
+        )
+    return out
+
+
+def _schema_health_items_to_inputs(items: list[HealthConditionItem]) -> list[HealthConditionInput]:
+    out: list[HealthConditionInput] = []
+    for c in items:
+        nm = (c.name or "").strip()
+        if not nm:
+            continue
+        cat_s = str(c.category or "condition").strip().lower()
+        cat: Literal["allergy", "condition", "history"] = cast(
+            Literal["allergy", "condition", "history"],
+            cat_s if cat_s in ("allergy", "condition", "history") else "condition",
+        )
+        act_s = str(c.action or "add").strip().lower()
+        act: Literal["add", "remove"] = cast(
+            Literal["add", "remove"],
+            act_s if act_s in ("add", "remove") else "add",
+        )
+        sev = c.severity.strip() if isinstance(c.severity, str) and c.severity.strip() else None
+        nts = c.notes.strip() if isinstance(c.notes, str) and c.notes.strip() else None
+        out.append(HealthConditionInput(name=nm, category=cat, severity=sev, notes=nts, action=act))
+    return out
 
 
 def orchestrator_prior_messages(
@@ -417,6 +478,11 @@ async def execute_agent_tool(
     if name == "export_health_journal":
         vitals = await svc.users.list_recent_vital_logs(user_key, limit=15)
         lines: list[str] = []
+        hc_rows = await svc.users.list_health_conditions(user_key, active_only=True)
+        hc_block = format_health_conditions_block_for_llm(hc_rows, locale=locale)
+        if hc_block.strip():
+            lines.append(t("journal.health_conditions_header", locale=locale))
+            lines.append(hc_block)
         if vitals:
             lines.append(t("journal.vitals_header", locale=locale))
             for v in vitals:
@@ -452,6 +518,50 @@ async def execute_agent_tool(
             reason=reason,
             contact_hint=hint or t("agent.simulated_emergency_no_contact", locale=locale),
         )
+
+    if name == "manage_health_conditions":
+        action = (args.get("action") or "add").strip().lower()
+        if action not in ("add", "remove", "list"):
+            action = "add"
+
+        if action == "list":
+            rows = await svc.users.list_health_conditions(user_key, active_only=True)
+            body = format_health_conditions_block_for_llm(rows, locale=locale)
+            if not body.strip():
+                return t("agent.health_conditions_list_empty", locale=locale)
+            return f"{t('agent.health_conditions_list_intro', locale=locale)}\n\n{body}"
+
+        if action == "remove":
+            cid = (args.get("condition_id") or "").strip()
+            if cid:
+                ok = await svc.users.deactivate_health_condition(user_key, cid)
+                await ctx.reload_user_row()
+                if ok:
+                    return t("agent.health_conditions_removed_id", locale=locale)
+                return t("agent.health_conditions_unclear", locale=locale)
+
+        inputs = _tool_args_to_health_condition_inputs(args.get("conditions"))
+        if not inputs:
+            items = await svc.llm.extract_health_conditions(ctx.user_text, locale=locale)
+            inputs = _schema_health_items_to_inputs(items)
+        if action == "remove":
+            inputs = [
+                HealthConditionInput(
+                    name=i.name,
+                    category=i.category,
+                    severity=i.severity,
+                    notes=i.notes,
+                    action="remove",
+                )
+                for i in inputs
+            ]
+        if not inputs:
+            return t("agent.health_conditions_unclear", locale=locale)
+        saved = await svc.users.upsert_health_conditions(user_key, inputs)
+        await ctx.reload_user_row()
+        if not saved:
+            return t("agent.health_conditions_unclear", locale=locale)
+        return t("agent.health_conditions_saved", locale=locale, count=len(saved))
 
     if name == "update_profile":
         patch = await svc.llm.extract_profile_patch(ctx.user_text, locale=locale)
@@ -589,7 +699,7 @@ async def run_tool_agent_loop(
                         "content": out,
                     }
                 )
-            if "update_profile" in names_in_batch:
+            if "update_profile" in names_in_batch or "manage_health_conditions" in names_in_batch:
                 messages[0]["content"] = await _orchestrator_system_prompt_content(
                     svc,
                     user_key=user_key,

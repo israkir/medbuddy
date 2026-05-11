@@ -260,11 +260,60 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
     {
         "type": "function",
         "function": {
+            "name": "manage_health_conditions",
+            "description": (
+                "Add, update, remove, or list the patient's health conditions (allergies, chronic diagnoses, "
+                "medical history). Use whenever they mention, change, or ask about conditions or allergies — "
+                "not update_profile."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["add", "remove", "list"],
+                        "description": "list = show saved conditions; add/remove = persist changes (may use extraction).",
+                    },
+                    "conditions": {
+                        "type": "array",
+                        "description": (
+                            "Optional explicit rows: category, name, optional severity/notes, per-item action. "
+                            "For add/remove, omit to extract from the latest user message."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "category": {
+                                    "type": "string",
+                                    "enum": ["allergy", "condition", "history"],
+                                },
+                                "name": {"type": "string"},
+                                "severity": {"type": "string"},
+                                "notes": {"type": "string"},
+                                "action": {"type": "string", "enum": ["add", "remove"]},
+                            },
+                            "required": ["name"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "condition_id": {
+                        "type": "string",
+                        "description": "When action is remove: optional UUID of a saved row to deactivate.",
+                    },
+                },
+                "required": ["action"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_profile",
             "description": (
-                "Update durable profile fields from natural language: preferred name, age, gender, allergies or "
-                "long-term health notes, emergency/family contacts (phone, email, LINE, WhatsApp), locale, timezone. "
-                "Use for self-introduction/onboarding facts and who to call in an emergency — not add_medication."
+                "Update durable profile fields from natural language: preferred name, age, gender, "
+                "emergency/family contacts (phone, email, LINE, WhatsApp), locale, timezone. "
+                "Do not use for allergies or diagnoses — use manage_health_conditions. Not add_medication."
             ),
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },

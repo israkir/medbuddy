@@ -9,6 +9,8 @@ from medbuddy.models.domain import (
     DoseClarificationPending,
     DoseEventPendingCandidate,
     DoseEventReminderPayload,
+    HealthConditionInput,
+    HealthConditionRecord,
     HealthIssueEventRecord,
     MedicationAddConfirmationPending,
     MedicationDraft,
@@ -30,7 +32,7 @@ class UserDataPort(Protocol):
         age_years: int | None,
         gender: str | None,
         emergency_contacts: list[dict[str, Any]] | None,
-        health_notes: str | None,
+        health_conditions: Sequence[HealthConditionInput] | None = None,
         timezone: str | None = None,
         locale: str = "zh-TW",
     ) -> dict[str, Any]: ...
@@ -38,6 +40,16 @@ class UserDataPort(Protocol):
     async def patch_user_profile(
         self, line_user_id: str, fields: ProfilePatch
     ) -> dict[str, Any]: ...
+
+    async def upsert_health_conditions(
+        self, line_user_id: str, items: Sequence[HealthConditionInput]
+    ) -> list[HealthConditionRecord]: ...
+
+    async def deactivate_health_condition(self, line_user_id: str, condition_id: str) -> bool: ...
+
+    async def list_health_conditions(
+        self, line_user_id: str, *, active_only: bool = True
+    ) -> list[HealthConditionRecord]: ...
 
     async def list_medications(self, line_user_id: str) -> list[MedicationRecord]: ...
 

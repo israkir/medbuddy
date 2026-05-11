@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -35,6 +37,26 @@ class EmergencyContactInput(BaseModel):
     notes: str | None = Field(None, max_length=200)
 
 
+class HealthConditionOnboardingItem(BaseModel):
+    """Structured allergy / condition / history row submitted at onboarding."""
+
+    category: Literal["allergy", "condition", "history"] = Field(default="condition")
+    name: str = Field(..., min_length=1, max_length=200)
+    severity: str | None = Field(None, max_length=120)
+    notes: str | None = Field(None, max_length=500)
+
+
+class HealthConditionResponse(BaseModel):
+    """One saved row returned on ``GET /me`` (active list by default)."""
+
+    id: str
+    category: str
+    name: str
+    severity: str | None = None
+    notes: str | None = None
+    is_active: bool = True
+
+
 class OnboardingSubmit(BaseModel):
     """First-run profile for the standalone app (large-type friendly fields)."""
 
@@ -42,7 +64,7 @@ class OnboardingSubmit(BaseModel):
     age_years: int | None = Field(None, ge=0, le=120)
     gender: ProfileGender | None = None
     emergency_contacts: list[EmergencyContactInput] = Field(default_factory=list)
-    health_notes: str | None = Field(None, max_length=1000)
+    health_conditions: list[HealthConditionOnboardingItem] = Field(default_factory=list)
     locale: AppLocale = Field(
         default=AppLocale.ZH_TW,
         description="App UI language (en or zh-TW)",
@@ -94,7 +116,7 @@ class MeResponse(BaseModel):
     age_years: int | None = None
     gender: str | None = None
     emergency_contacts: list[EmergencyContactInput] = Field(default_factory=list)
-    health_notes: str | None = None
+    health_conditions: list[HealthConditionResponse] = Field(default_factory=list)
     timezone: str = Field(
         default="Asia/Taipei",
         description="IANA timezone used for medication reminders (default Asia/Taipei)",

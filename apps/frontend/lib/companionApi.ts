@@ -24,13 +24,22 @@ export type ProfileGender =
   | 'prefer_not_say'
   | 'other';
 
+export type HealthConditionProfile = {
+  id: string;
+  category: string;
+  name: string;
+  severity?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
+};
+
 export type MeProfile = {
   app_user_id: string;
   preferred_name?: string | null;
   age_years?: number | null;
   gender?: ProfileGender | string | null;
   emergency_contact?: string | null;
-  health_notes?: string | null;
+  health_conditions?: HealthConditionProfile[];
   /** IANA timezone for reminders (server defaults to Asia/Taipei). */
   timezone?: string | null;
   /** App UI language (`en` or `zh-TW`; server default zh-TW). */
@@ -63,7 +72,7 @@ function emptyProfile(): MeProfile {
     age_years: null,
     gender: null,
     emergency_contact: null,
-    health_notes: null,
+    health_conditions: [],
     timezone: null,
     locale: null,
     onboarding_completed_at: null,
@@ -108,12 +117,26 @@ export type OnboardingPayload = {
   age_years: number | null;
   gender: ProfileGender | null;
   emergency_contact: string;
-  health_notes: string;
+  /** Free-text allergies or conditions; sent as structured rows to the API. */
+  notes: string;
   /** App UI language; persisted on the user profile. */
   locale: AppLanguage;
   /** IANA timezone; defaults to device zone when omitted. */
   timezone?: string | null;
 };
+
+function healthConditionsFromNotes(notes: string): {
+  category: 'allergy' | 'condition' | 'history';
+  name: string;
+}[] {
+  const name = notes.trim();
+  if (!name) {
+    return [];
+  }
+  const category: 'allergy' | 'condition' =
+    /allerg|過敏/i.test(name) ? 'allergy' : 'condition';
+  return [{ category, name }];
+}
 
 export async function submitOnboarding(payload: OnboardingPayload): Promise<MeProfile> {
   const tz =
@@ -121,24 +144,33 @@ export async function submitOnboarding(payload: OnboardingPayload): Promise<MePr
     (typeof Intl !== 'undefined'
       ? Intl.DateTimeFormat().resolvedOptions().timeZone
       : null);
+  const ec = payload.emergency_contact.trim();
   const body = {
     preferred_name: payload.preferred_name.trim(),
     age_years: payload.age_years,
     gender: payload.gender,
-    emergency_contact: payload.emergency_contact.trim() || null,
-    health_notes: payload.health_notes.trim() || null,
+    emergency_contacts: ec
+      ? [{ channel_type: 'phone' as const, channel_value: ec, is_primary: true }]
+      : [],
+    health_conditions: healthConditionsFromNotes(payload.notes),
     locale: payload.locale,
     ...(tz ? { timezone: tz } : {}),
   };
 
   if (useMockData) {
     await Promise.resolve();
+    const hcRows = healthConditionsFromNotes(payload.notes);
     const completed: MeProfile = {
       ...emptyProfile(),
       ...body,
       timezone: tz ?? 'Asia/Taipei',
       locale: payload.locale,
       onboarding_completed_at: new Date().toISOString(),
+      health_conditions: hcRows.map((row, i) => ({
+        id: `mock:${i}`,
+        category: row.category,
+        name: row.name,
+      })),
     };
     await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(completed));
     return completed;

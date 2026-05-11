@@ -10,6 +10,8 @@ from typing import Any, Sequence
 from medbuddy.models.domain import (
     HEALTH_ROUTING_INTENT_VITAL,
     DoseClarificationPending,
+    HealthConditionInput,
+    HealthConditionRecord,
     HealthIssueEventRecord,
     MedicationAddConfirmationPending,
     ReminderHorizonPending,
@@ -28,7 +30,6 @@ def _default_profile_fields() -> dict[str, Any]:
         "age_years": None,
         "gender": None,
         "emergency_contacts": [],
-        "health_notes": None,
         "onboarding_completed_at": None,
         "locale": "zh-TW",
     }
@@ -42,6 +43,7 @@ class MockProfileMixin:
     _meds: dict[str, list[Any]]
     _vitals: dict[str, list[HealthIssueEventRecord]]
     _dose_clarification: dict[str, dict[str, Any] | None]
+    _health_conditions: dict[str, list[dict[str, Any]]]
 
     async def get_or_create_user(self, line_user_id: str) -> dict[str, Any]:
         await asyncio.sleep(0)
@@ -68,7 +70,7 @@ class MockProfileMixin:
         age_years: int | None,
         gender: str | None,
         emergency_contacts: list[dict[str, Any]] | None,
-        health_notes: str | None,
+        health_conditions: Sequence[HealthConditionInput] | None = None,
         timezone: str | None = None,
         locale: str = "zh-TW",
     ) -> dict[str, Any]:
@@ -80,10 +82,11 @@ class MockProfileMixin:
         row["emergency_contacts"] = merge_emergency_contacts(
             row.get("emergency_contacts"), emergency_contacts or []
         )
-        row["health_notes"] = (health_notes or "").strip() or None
         row["onboarding_completed_at"] = datetime.now(UTC)
         row["timezone"] = effective_user_timezone(timezone)
         row["locale"] = effective_user_locale(locale)
+        if health_conditions:
+            await self.upsert_health_conditions(line_user_id, list(health_conditions))
         return row
 
     async def patch_user_profile(self, line_user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
@@ -112,13 +115,6 @@ class MockProfileMixin:
                 allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
                 if g in allowed:
                     row["gender"] = g
-        for key in ("health_notes",):
-            if key in fields:
-                raw = fields[key]
-                if raw is None:
-                    row[key] = None
-                elif isinstance(raw, str):
-                    row[key] = raw.strip() or None
         if "emergency_contacts" in fields:
             row["emergency_contacts"] = merge_emergency_contacts(
                 row.get("emergency_contacts"), fields["emergency_contacts"]
@@ -134,6 +130,103 @@ class MockProfileMixin:
             if norm_loc is not None:
                 row["locale"] = norm_loc
         return row
+
+    def _mock_hc_row_to_record(self, d: dict[str, Any]) -> HealthConditionRecord:
+        created = d.get("created_at")
+        if isinstance(created, datetime):
+            ts = created if created.tzinfo else created.replace(tzinfo=UTC)
+        else:
+            ts = datetime.now(UTC)
+        sev_raw = d.get("severity")
+        severity = sev_raw.strip() if isinstance(sev_raw, str) and sev_raw.strip() else None
+        notes_raw = d.get("notes")
+        notes = notes_raw.strip() if isinstance(notes_raw, str) and notes_raw.strip() else None
+        return HealthConditionRecord(
+            id=str(d["id"]),
+            category=str(d.get("category") or "condition"),
+            name=str(d.get("name") or "").strip(),
+            severity=severity,
+            notes=notes,
+            is_active=bool(d.get("is_active", True)),
+            created_at=ts,
+        )
+
+    async def upsert_health_conditions(
+        self, line_user_id: str, items: Sequence[HealthConditionInput]
+    ) -> list[HealthConditionRecord]:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        bucket = self._health_conditions.setdefault(line_user_id, [])
+        out: list[HealthConditionRecord] = []
+        allowed = frozenset({"allergy", "condition", "history"})
+        for item in items:
+            name = (item.name or "").strip()
+            if not name:
+                continue
+            cat = item.category if item.category in allowed else "condition"
+            if item.action == "remove":
+                for d in bucket:
+                    if (
+                        str(d.get("category")) == cat
+                        and str(d.get("name") or "").strip().lower() == name.lower()
+                    ):
+                        d["is_active"] = False
+                continue
+            match = next(
+                (
+                    d
+                    for d in bucket
+                    if str(d.get("category")) == cat
+                    and str(d.get("name") or "").strip().lower() == name.lower()
+                ),
+                None,
+            )
+            sev = (item.severity or "").strip() or None
+            nts = (item.notes or "").strip() or None
+            if match:
+                match["severity"] = sev
+                match["notes"] = nts
+                match["is_active"] = True
+                match["updated_at"] = datetime.now(UTC)
+                out.append(self._mock_hc_row_to_record(match))
+            else:
+                rec = {
+                    "id": str(uuid.uuid4()),
+                    "category": cat,
+                    "name": name,
+                    "severity": sev,
+                    "notes": nts,
+                    "is_active": True,
+                    "created_at": datetime.now(UTC),
+                    "updated_at": datetime.now(UTC),
+                }
+                bucket.append(rec)
+                out.append(self._mock_hc_row_to_record(rec))
+        return out
+
+    async def deactivate_health_condition(self, line_user_id: str, condition_id: str) -> bool:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        bucket = self._health_conditions.setdefault(line_user_id, [])
+        for d in bucket:
+            if str(d.get("id")) == condition_id:
+                d["is_active"] = False
+                d["updated_at"] = datetime.now(UTC)
+                return True
+        return False
+
+    async def list_health_conditions(
+        self, line_user_id: str, *, active_only: bool = True
+    ) -> list[HealthConditionRecord]:
+        await asyncio.sleep(0)
+        await self.get_or_create_user(line_user_id)
+        bucket = list(self._health_conditions.get(line_user_id, []))
+        if active_only:
+            bucket = [d for d in bucket if d.get("is_active", True)]
+        bucket.sort(
+            key=lambda d: d.get("created_at") or datetime.min.replace(tzinfo=UTC), reverse=True
+        )
+        return [self._mock_hc_row_to_record(d) for d in bucket]
 
     async def record_health_issue_event(
         self,

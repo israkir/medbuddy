@@ -25,6 +25,7 @@ async def test_profile_nudge_appends_when_due_and_gaps_exist() -> None:
         reply="Added your reminder.",
         locale="en",
         history_before_latest_user_message=[],
+        active_health_condition_count=0,
     )
     assert "💡" in out
     assert "Added your reminder." in out
@@ -38,7 +39,6 @@ def test_profile_nudge_skips_when_interval_zero() -> None:
         "preferred_name": None,
         "age_years": None,
         "gender": None,
-        "health_notes": None,
         "emergency_contact": None,
     }
     out = append_profile_completion_nudge_if_due(
@@ -48,6 +48,7 @@ def test_profile_nudge_skips_when_interval_zero() -> None:
         reply="OK",
         locale="en",
         history_before_latest_user_message=[],
+        active_health_condition_count=0,
     )
     assert out == "OK"
 
@@ -59,8 +60,15 @@ def test_profile_nudge_skips_when_profile_complete() -> None:
         "preferred_name": "Mei",
         "age_years": 70,
         "gender": "female",
-        "health_notes": "NKDA",
-        "emergency_contact": "son 0912000333",
+        "emergency_contacts": [
+            {
+                "contact_name": "Son",
+                "relationship": "son",
+                "channel_type": "phone",
+                "channel_value": "0912000333",
+                "is_primary": True,
+            }
+        ],
     }
     out = append_profile_completion_nudge_if_due(
         settings=svc.settings,
@@ -69,5 +77,6 @@ def test_profile_nudge_skips_when_profile_complete() -> None:
         reply="OK",
         locale="en",
         history_before_latest_user_message=[],
+        active_health_condition_count=1,
     )
     assert out == "OK"

@@ -7,13 +7,18 @@ from typing import Any, Protocol
 from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.models.domain import (
     ConversationTurn,
+    HealthConditionRecord,
     HealthSummary,
     InteractionResult,
     MedicationDraft,
     MedicationRecord,
     TurnInterpretation,
 )
-from medbuddy.llm.schemas import MedicationUpdateResolution, VitalLogExtraction
+from medbuddy.llm.schemas import (
+    HealthConditionItem,
+    MedicationUpdateResolution,
+    VitalLogExtraction,
+)
 
 ProfilePatch = dict[str, Any]
 
@@ -47,6 +52,20 @@ class LLMPort(Protocol):
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
         """Structured profile fields from chat (LLM). Empty dict if nothing to update."""
+
+    async def extract_health_conditions(
+        self, user_text: str, *, locale: str
+    ) -> list[HealthConditionItem]:
+        """Structured allergies / conditions / history from one message."""
+
+    async def check_drug_condition_interactions(
+        self,
+        drug_name: str,
+        conditions: list[HealthConditionRecord],
+        *,
+        locale: str,
+    ) -> list[str]:
+        """Return patient-safe warning lines for moderate/high drug–condition concerns, else empty."""
 
     async def extract_locale_intent(self, user_text: str) -> str | None:
         """If the user wants English or zh-TW replies, return ``en`` or ``zh-TW``; else ``None``."""

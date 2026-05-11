@@ -1,6 +1,9 @@
 """Patient context for LLM must not echo raw profile strings."""
 
+from datetime import UTC, datetime
+
 from medbuddy.llm.prompts.persona import build_patient_context_for_llm
+from medbuddy.models.domain import HealthConditionRecord
 
 
 def test_llm_context_includes_preferred_name_for_addressing_omits_other_raw_profile() -> None:
@@ -8,13 +11,27 @@ def test_llm_context_includes_preferred_name_for_addressing_omits_other_raw_prof
         "preferred_name": "Secret User",
         "age_years": 71,
         "emergency_contact": None,
-        "health_notes": "diabetes",
     }
-    ctx = build_patient_context_for_llm(user_row, [], locale="en")
+    hc = [
+        HealthConditionRecord(
+            id="c1",
+            category="condition",
+            name="diabetes",
+            severity=None,
+            notes=None,
+            is_active=True,
+            created_at=datetime.now(UTC),
+        )
+    ]
+    ctx = build_patient_context_for_llm(user_row, [], locale="en", health_conditions=hc)
     assert "Secret User" in ctx
     assert "diabetes" not in ctx
     assert "71" not in ctx
     assert "70" in ctx
+    detail = build_patient_context_for_llm(
+        user_row, [], locale="en", health_conditions=hc, include_health_notes=True
+    )
+    assert "diabetes" in detail
 
 
 def test_llm_context_includes_gender_category_label() -> None:
@@ -23,7 +40,6 @@ def test_llm_context_includes_gender_category_label() -> None:
         "age_years": 60,
         "gender": "female",
         "emergency_contact": None,
-        "health_notes": None,
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="en")
     assert "Female" in ctx
@@ -36,7 +52,6 @@ def test_llm_context_stored_preferred_name_in_signals_not_in_gaps() -> None:
         "age_years": None,
         "gender": None,
         "emergency_contact": None,
-        "health_notes": None,
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="en")
     assert "Mei" in ctx
@@ -51,7 +66,6 @@ def test_llm_context_whitespace_preferred_name_is_absent_and_gap_lists_name() ->
         "age_years": None,
         "gender": None,
         "emergency_contact": None,
-        "health_notes": None,
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="en")
     assert "How to address them: not saved yet" in ctx
@@ -64,7 +78,6 @@ def test_llm_context_zh_tw_includes_preferred_name_literal() -> None:
         "age_years": None,
         "gender": None,
         "emergency_contact": None,
-        "health_notes": None,
     }
     ctx = build_patient_context_for_llm(user_row, [], locale="zh-TW")
     assert "阿春" in ctx

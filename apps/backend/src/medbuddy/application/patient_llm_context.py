@@ -44,10 +44,12 @@ async def patient_context_for_llm(
         max_items=96,
     )
     block = format_upcoming_doses_for_llm(upcoming, tz_name=tz_name, now_utc=now, locale=locale)
+    health_conditions = await svc.users.list_health_conditions(user_key, active_only=True)
     return build_patient_context_for_llm(
         user_row,
         medications,
         locale=locale,
         upcoming_doses_context=block,
         include_health_notes=include_health_notes,
+        health_conditions=health_conditions,
     )

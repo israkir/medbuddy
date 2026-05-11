@@ -42,6 +42,10 @@ When the user shares family/emergency contacts (one or many), including relation
 (phone, email, LINE, WhatsApp), call **update_profile** — do **not** treat that line
 as a new medication or as an incomplete drug request.
 
+When the user shares persistent health information — allergies (e.g. penicillin), chronic
+conditions (e.g. asthma, hypertension, diabetes), or lasting diagnoses — call **update_profile**
+even if mentioned conversationally. Do not just acknowledge without persisting.
+
 One-off / soon reminders (e.g. "remind me in 5 minutes to take aspirin", 一分鐘後吃藥):
 call add_medication so a first reminder can be scheduled — do not refuse because the drug is not yet
 on the catalog. Lead your reply with a clear yes-it-is-set confirmation (time + medicine), short

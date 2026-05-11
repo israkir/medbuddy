@@ -23,6 +23,9 @@ from medbuddy.llm.turn_interpretation import (
 )
 from medbuddy.llm.agent_types import ChatToolCall
 from medbuddy.llm.schemas import (
+    DrugConditionConcernsExtraction,
+    HealthConditionItem,
+    HealthConditionsExtraction,
     HealthSummaryResult,
     IntentClassification,
     InteractionCheckResult,
@@ -36,6 +39,7 @@ from medbuddy.llm.schemas import (
 )
 from medbuddy.models.domain import (
     ConversationTurn,
+    HealthConditionRecord,
     HealthSummary,
     InteractionResult,
     MedicationDraft,
@@ -224,14 +228,12 @@ class OpenAILLM(LLMPort):
         prompt = (
             "Extract profile fields the user wants to save. Only fill a field if it is clearly "
             "stated. Use null for anything not explicitly given. "
-            "Profile fields may include preferred name, age, gender, emergency contact, health notes, "
+            "Profile fields may include preferred name, age, gender, emergency contact, "
             "timezone, and reply language (en/zh-TW). "
+            "Do NOT extract allergies or chronic medical conditions here — those use a separate tool. "
             "For emergency contacts: extract all contacts/channels they mention (phone/email/LINE/WhatsApp). "
             "Populate emergency_contacts as a list and mark the first one as primary when implied. "
-            "Do NOT set preferred_name to a contact's first name unless they are clearly renaming themselves. "
-            "Do not treat one-off medication side effects or dose comments as health_notes — "
-            "those belong in conversation, not the long-term profile unless they say they want "
-            "it saved on their profile or as allergies.\n\n"
+            "Do NOT set preferred_name to a contact's first name unless they are clearly renaming themselves.\n\n"
             f"User message:\n{user_text}"
         )
         try:
@@ -247,7 +249,6 @@ class OpenAILLM(LLMPort):
             "preferred_name",
             "age_years",
             "gender",
-            "health_notes",
             "timezone",
             "locale",
         ):
@@ -285,6 +286,83 @@ class OpenAILLM(LLMPort):
 
     async def extract_profile_patch(self, user_text: str, *, locale: str) -> ProfilePatch:
         return await asyncio.to_thread(self._extract_profile_patch_sync, user_text, locale=locale)
+
+    def _extract_health_conditions_sync(
+        self, user_text: str, *, locale: str
+    ) -> list[HealthConditionItem]:
+        _ = locale
+        prompt = (
+            "Extract persistent health conditions from the user's message as structured rows. "
+            "Categories: allergy (drug/food/material reactions), condition (chronic or long-term "
+            "diagnosis), history (past significant events they want kept on file). "
+            "Use action remove only when they clearly revoke a named condition.\n\n"
+            f"User message:\n{user_text}"
+        )
+        try:
+            parsed = self._generate_structured_sync(self._model, prompt, HealthConditionsExtraction)
+        except LLMParseError:
+            log.warning("extract_health_conditions: structured parse failed")
+            return []
+        return list(parsed.conditions)
+
+    async def extract_health_conditions(
+        self, user_text: str, *, locale: str
+    ) -> list[HealthConditionItem]:
+        return await asyncio.to_thread(
+            self._extract_health_conditions_sync, user_text, locale=locale
+        )
+
+    def _check_drug_condition_interactions_sync(
+        self,
+        drug_name: str,
+        conditions: list[HealthConditionRecord],
+        *,
+        locale: str,
+    ) -> list[str]:
+        if not conditions or not (drug_name or "").strip():
+            return []
+        lines = []
+        for c in conditions:
+            if not c.is_active:
+                continue
+            extra = f" ({c.severity})" if c.severity else ""
+            lines.append(f"- [{c.category}] {c.name}{extra}")
+        block = "\n".join(lines)
+        prompt = (
+            f"Drug (generic or brand name): {drug_name.strip()}\n"
+            f"Patient conditions (active):\n{block}\n\n"
+            "Return JSON matching the schema. For each concern, set severity none/low/moderate/high "
+            "based on plausible clinical interaction or allergy risk. Only moderate or high should have "
+            "a non-empty message — one short patient-safe sentence each, no diagnosis, urge confirming "
+            "with their clinician or pharmacist. Use locale-appropriate language hints: "
+            f"{locale}."
+        )
+        try:
+            parsed = self._generate_structured_sync(
+                self._model, prompt, DrugConditionConcernsExtraction
+            )
+        except LLMParseError:
+            log.warning("check_drug_condition_interactions: structured parse failed")
+            return []
+        out: list[str] = []
+        for item in parsed.concerns:
+            if item.severity in ("moderate", "high") and (item.message or "").strip():
+                out.append((item.message or "").strip())
+        return out
+
+    async def check_drug_condition_interactions(
+        self,
+        drug_name: str,
+        conditions: list[HealthConditionRecord],
+        *,
+        locale: str,
+    ) -> list[str]:
+        return await asyncio.to_thread(
+            self._check_drug_condition_interactions_sync,
+            drug_name,
+            conditions,
+            locale=locale,
+        )
 
     def _compose_sync(
         self,

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Sequence
 from medbuddy.models.domain import (
     HEALTH_ROUTING_INTENT_VITAL,
     DoseClarificationPending,
+    HealthConditionInput,
+    HealthConditionRecord,
     HealthIssueEventRecord,
     MedicationAddConfirmationPending,
     ReminderHorizonPending,
@@ -38,6 +40,27 @@ def _parse_ts(value: object) -> datetime:
     raise TypeError(msg)
 
 
+_ALLOWED_HEALTH_CONDITION_CATEGORIES = frozenset({"allergy", "condition", "history"})
+
+
+def _health_condition_db_row_to_record(row: dict[str, Any]) -> HealthConditionRecord:
+    ts_raw = row.get("created_at")
+    created = _parse_ts(ts_raw) if ts_raw is not None else datetime.now(UTC)
+    sev_raw = row.get("severity")
+    severity = sev_raw.strip() if isinstance(sev_raw, str) and sev_raw.strip() else None
+    notes_raw = row.get("notes")
+    notes = notes_raw.strip() if isinstance(notes_raw, str) and notes_raw.strip() else None
+    return HealthConditionRecord(
+        id=str(row["id"]),
+        category=str(row.get("category") or "condition"),
+        name=str(row.get("name") or "").strip(),
+        severity=severity,
+        notes=notes,
+        is_active=bool(row.get("is_active", True)),
+        created_at=created,
+    )
+
+
 def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
     contacts = normalize_emergency_contacts(row.get("emergency_contacts"))
     return {
@@ -47,7 +70,6 @@ def _user_row_to_dict(row: dict[str, Any]) -> dict[str, Any]:
         "age_years": row.get("age_years"),
         "gender": row.get("gender"),
         "emergency_contacts": contacts,
-        "health_notes": row.get("health_notes"),
         "onboarding_completed_at": row.get("onboarding_completed_at"),
         "timezone": row.get("timezone") or "Asia/Taipei",
         "locale": effective_user_locale(row.get("locale")),
@@ -106,7 +128,7 @@ class SupabaseProfileMixin:
                 self._client.table("patients")
                 .select(
                     "id, external_user_id, preferred_name, age_years, gender, "
-                    "health_notes, onboarding_completed_at, timezone, locale"
+                    "onboarding_completed_at, timezone, locale"
                 )
                 .eq("external_user_id", external_user_id)
                 .limit(1)
@@ -268,7 +290,7 @@ class SupabaseProfileMixin:
         age_years: int | None,
         gender: str | None,
         emergency_contacts: list[dict[str, Any]] | None,
-        health_notes: str | None,
+        health_conditions: Sequence[HealthConditionInput] | None = None,
         timezone: str | None = None,
         locale: str = "zh-TW",
     ) -> dict[str, Any]:
@@ -279,7 +301,6 @@ class SupabaseProfileMixin:
             "preferred_name": preferred_name.strip(),
             "age_years": age_years,
             "gender": gender,
-            "health_notes": (health_notes or "").strip() or None,
             "onboarding_completed_at": now.isoformat(),
             "timezone": effective_user_timezone(timezone),
             "locale": effective_user_locale(locale),
@@ -292,6 +313,8 @@ class SupabaseProfileMixin:
         await _run_q(upd)
         if contacts:
             await self._merge_emergency_contacts(uid, contacts)
+        if health_conditions:
+            await self.upsert_health_conditions(line_user_id, list(health_conditions))
         log.info("DB users.save_onboarding_profile: patient_id=%s updated", uid)
         row = await self._select_user_row(line_user_id)
         if not row:
@@ -326,13 +349,6 @@ class SupabaseProfileMixin:
                 allowed = {"female", "male", "non_binary", "prefer_not_say", "other"}
                 if g in allowed:
                     payload["gender"] = g
-        for key in ("health_notes",):
-            if key in fields:
-                raw = fields[key]
-                if raw is None:
-                    payload[key] = None
-                elif isinstance(raw, str):
-                    payload[key] = raw.strip() or None
         if "timezone" in fields:
             norm = normalize_timezone_patch(fields["timezone"])
             if norm is not None:
@@ -364,6 +380,190 @@ class SupabaseProfileMixin:
             msg = "Supabase user row missing after profile patch"
             raise RuntimeError(msg)
         return _user_row_to_dict(row)
+
+    async def upsert_health_conditions(
+        self, line_user_id: str, items: Sequence[HealthConditionInput]
+    ) -> list[HealthConditionRecord]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        out: list[HealthConditionRecord] = []
+        now_iso = datetime.now(UTC).isoformat()
+        for item in items:
+            name = (item.name or "").strip()
+            if not name:
+                continue
+            cat = (
+                item.category
+                if item.category in _ALLOWED_HEALTH_CONDITION_CATEGORIES
+                else "condition"
+            )
+
+            def select_match() -> Any:
+                return (
+                    self._client.table("patient_health_conditions")
+                    .select("id, category, name, severity, notes, is_active, created_at")
+                    .eq("patient_id", uid)
+                    .eq("category", cat)
+                    .execute()
+                )
+
+            if item.action == "remove":
+                resp_rm = await _run_q(select_match)
+                rows_rm = resp_rm.data or []
+                match_rm = next(
+                    (
+                        r
+                        for r in rows_rm
+                        if str(r.get("name") or "").strip().lower() == name.lower()
+                    ),
+                    None,
+                )
+                if match_rm:
+
+                    def deactivate() -> Any:
+                        return (
+                            self._client.table("patient_health_conditions")
+                            .update({"is_active": False, "updated_at": now_iso})
+                            .eq("id", str(match_rm["id"]))
+                            .execute()
+                        )
+
+                    await _run_q(deactivate)
+                continue
+
+            resp = await _run_q(select_match)
+            rows = resp.data or []
+            match = next(
+                (r for r in rows if str(r.get("name") or "").strip().lower() == name.lower()),
+                None,
+            )
+            sev = (item.severity or "").strip() or None
+            nts = (item.notes or "").strip() or None
+            if match:
+                pid = str(match["id"])
+
+                def upd_existing() -> Any:
+                    return (
+                        self._client.table("patient_health_conditions")
+                        .update(
+                            {
+                                "severity": sev,
+                                "notes": nts,
+                                "is_active": True,
+                                "updated_at": now_iso,
+                            }
+                        )
+                        .eq("id", pid)
+                        .execute()
+                    )
+
+                ur = await _run_q(upd_existing)
+                urows = ur.data or []
+                if urows:
+                    out.append(_health_condition_db_row_to_record(dict(urows[0])))
+            else:
+                insert_payload: dict[str, Any] = {
+                    "patient_id": uid,
+                    "category": cat,
+                    "name": name,
+                    "severity": sev,
+                    "notes": nts,
+                    "is_active": True,
+                    "source": "user",
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                }
+
+                def ins() -> Any:
+                    return (
+                        self._client.table("patient_health_conditions")
+                        .insert(insert_payload)
+                        .execute()
+                    )
+
+                try:
+                    ir = await _run_q(ins)
+                except Exception as e:  # noqa: BLE001
+                    err = str(e).lower()
+                    if "unique" not in err and "23505" not in err:
+                        raise
+                    resp_race = await _run_q(select_match)
+                    rows_race = resp_race.data or []
+                    match_race = next(
+                        (
+                            r
+                            for r in rows_race
+                            if str(r.get("name") or "").strip().lower() == name.lower()
+                        ),
+                        None,
+                    )
+                    if not match_race:
+                        raise
+                    pid_race = str(match_race["id"])
+
+                    def upd_race() -> Any:
+                        return (
+                            self._client.table("patient_health_conditions")
+                            .update(
+                                {
+                                    "severity": sev,
+                                    "notes": nts,
+                                    "is_active": True,
+                                    "updated_at": now_iso,
+                                }
+                            )
+                            .eq("id", pid_race)
+                            .execute()
+                        )
+
+                    ur = await _run_q(upd_race)
+                    urows = ur.data or []
+                    if urows:
+                        out.append(_health_condition_db_row_to_record(dict(urows[0])))
+                    continue
+                irows = ir.data or []
+                if irows:
+                    out.append(_health_condition_db_row_to_record(dict(irows[0])))
+        return out
+
+    async def deactivate_health_condition(self, line_user_id: str, condition_id: str) -> bool:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+        now_iso = datetime.now(UTC).isoformat()
+
+        def q() -> Any:
+            return (
+                self._client.table("patient_health_conditions")
+                .update({"is_active": False, "updated_at": now_iso})
+                .eq("id", condition_id)
+                .eq("patient_id", uid)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return bool(rows)
+
+    async def list_health_conditions(
+        self, line_user_id: str, *, active_only: bool = True
+    ) -> list[HealthConditionRecord]:
+        user = await self.get_or_create_user(line_user_id)
+        uid = str(user["id"])
+
+        def q() -> Any:
+            query = (
+                self._client.table("patient_health_conditions")
+                .select("id, category, name, severity, notes, is_active, created_at")
+                .eq("patient_id", uid)
+                .order("created_at", desc=True)
+            )
+            if active_only:
+                query = query.eq("is_active", True)
+            return query.execute()
+
+        resp = await _run_q(q)
+        rows = resp.data or []
+        return [_health_condition_db_row_to_record(dict(r)) for r in rows]
 
     async def record_health_issue_event(
         self,

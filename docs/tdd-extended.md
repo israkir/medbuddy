@@ -541,7 +541,7 @@ Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`,
 
 ## 6. Data model
 
-Schema lives in `apps/backend/supabase/schema.sql` (full reset: `apps/backend/supabase/recreate_database.sql`). All tables use UUIDs and UTC timestamps. The backend accesses Supabase via **`SUPABASE_SERVICE_KEY`** (Supabase Secret API key, `sb_secret_...`), which bypasses RLS; `anon`/`authenticated` table grants are revoked in those files. Older databases should diff against `schema.sql` and apply `ALTER` or missing sections manually.
+Schema lives in `apps/backend/supabase/schema.sql` (greenfield / idempotent apply). Full destructive reset in one file: `apps/backend/supabase/recreate_database.sql`. All tables use UUIDs and UTC timestamps. The backend accesses Supabase via **`SUPABASE_SERVICE_KEY`** (Supabase Secret API key, `sb_secret_...`), which bypasses RLS; `anon`/`authenticated` table grants are revoked in `schema.sql` (and mirrored in `recreate_database.sql`). Older databases should diff against `schema.sql` and apply `ALTER` or missing sections manually.
 
 ### 6.1 Entity-relationship overview
 

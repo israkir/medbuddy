@@ -39,6 +39,7 @@ class MockUserData(MockProfileMixin, MockMedicationMixin, MockDoseEventMixin, Us
         self._vitals: dict[str, list[HealthIssueEventRecord]] = {}
         self._doses: dict[str, dict[str, Any]] = {}
         self._dose_clarification: dict[str, dict[str, Any] | None] = {}
+        self._health_conditions: dict[str, list[dict[str, Any]]] = {}
 
     def _reminder_settings(self) -> Settings:
         return self._settings if self._settings is not None else get_settings()

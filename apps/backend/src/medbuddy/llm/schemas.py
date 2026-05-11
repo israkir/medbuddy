@@ -239,14 +239,6 @@ class ProfilePatchExtraction(BaseModel):
             "Supports multiple contacts in one message."
         ),
     )
-    health_notes: str | None = Field(
-        default=None,
-        max_length=1000,
-        description=(
-            "Allergies or important persistent health notes if the user is updating their "
-            "profile; null for one-off symptoms or dose-related comments"
-        ),
-    )
     timezone: str | None = Field(
         default=None,
         max_length=64,
@@ -261,6 +253,60 @@ class ProfilePatchExtraction(BaseModel):
             "Reply language preference: en for English, zh-TW for Traditional Chinese; "
             "null if not changing language"
         ),
+    )
+
+
+class HealthConditionItem(BaseModel):
+    """One allergy, chronic condition, or history item from user text."""
+
+    category: Literal["allergy", "condition", "history"] = Field(
+        default="condition",
+        description="allergy (drug/food/material), condition (chronic diagnosis), or history",
+    )
+    name: str = Field(description="Canonical short name, e.g. penicillin, asthma, type 2 diabetes")
+    severity: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Optional severity or stage if stated (e.g. moderate, stage 2)",
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional extra context from the user",
+    )
+    action: Literal["add", "remove"] = Field(
+        default="add",
+        description="add to save or update; remove when user clearly revokes this condition",
+    )
+
+
+class HealthConditionsExtraction(BaseModel):
+    """Structured health conditions extracted from one user message."""
+
+    conditions: list[HealthConditionItem] = Field(
+        default_factory=list,
+        description="Zero or more items to add or remove; empty if none stated",
+    )
+
+
+class DrugConditionConcernItem(BaseModel):
+    """One potential drug–condition interaction line from the model."""
+
+    severity: Literal["none", "low", "moderate", "high"] = Field(
+        default="none",
+        description="Clinical concern level for this drug given the patient's conditions",
+    )
+    message: str = Field(
+        default="",
+        max_length=500,
+        description="Short patient-safe warning or empty when severity is none/low",
+    )
+
+
+class DrugConditionConcernsExtraction(BaseModel):
+    concerns: list[DrugConditionConcernItem] = Field(
+        default_factory=list,
+        description="Ordered list of concerns; omit or use none when no meaningful interaction",
     )
 
 

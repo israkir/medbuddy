@@ -53,7 +53,12 @@ class GenerateHealthSummaryTool:
     ) -> ToolResult:
         history = await svc.conversations.get_recent_turns(user_key, _SUMMARY_HISTORY_TURNS)
         patient_ctx = await patient_context_for_llm(
-            svc, user_key, user_row, medications, locale=locale
+            svc,
+            user_key,
+            user_row,
+            medications,
+            locale=locale,
+            include_health_notes=True,
         )
         health_events = await svc.users.list_recent_health_issue_events(
             user_key,

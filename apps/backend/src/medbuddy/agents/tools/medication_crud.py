@@ -85,6 +85,12 @@ async def persist_medication_add_from_draft(
         user_message=safe_text,
         locale=locale,
     )
+    conditions = await svc.users.list_health_conditions(user_key, active_only=True)
+    concern_lines = await svc.llm.check_drug_condition_interactions(
+        saved.name, conditions, locale=locale
+    )
+    if concern_lines:
+        reply = reply + "\n\n" + "\n".join(concern_lines)
     log.info(
         "add_medication: user_key=%s med_id=%s name_len=%d (from_draft)",
         user_key,
