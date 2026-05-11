@@ -79,6 +79,7 @@
     "add_confirm_no_instructions": "No extra notes on this one yet.",
     "add_confirm_cancelled": "Okay — I didn’t add it. When you’re ready, tell me the medication again with dose, timing, or any instructions you want stored.",
     "add_incomplete": "I’d like to save that for you — I just need the medication name (and dose or timing if you know them). A quick example: \"Aspirin 100mg after breakfast.\"",
+    "already_on_file": "{name} is already on your list. Say \"update {name}\" if you’d like to change the dose or schedule.",
     "list_intro": "Here are the medicines we have on file for you:",
     "list_hint_fill_dose_schedule": "If a dose or timing still says “Not filled in yet,” tell me both and I’ll update your record — for example “100 mg after breakfast.”",
     "list_empty": "You don’t have any medications saved yet. When you’re ready, tell me a drug name and I’ll help you add it.",
@@ -145,7 +146,8 @@
     "education_cta": "Need a quick refresher on what this medicine is for?",
     "horizon_confirmed": "You’re set — daily reminders for {name} are on for {days} day(s). I’ll nudge you at the scheduled time each day. Reply anytime to check the plan or log a dose.",
     "horizon_confirmed_generic": "You’re set — {days} days of daily reminders are on. I’ll ping you at the scheduled times.",
-    "horizon_still_needed": "I still need to know how many days you’d like daily reminders for {name}. Just reply with a number — for example “7 days” or “2 weeks.”"
+    "horizon_still_needed": "I still need to know how many days you’d like daily reminders for {name}. Just reply with a number — for example \"7 days\" or \"2 weeks.\"",
+    "horizon_expired_ack": "That reminder question has expired — just ask me to set up reminders for {name} again whenever you’re ready."
   },
   "prompts": {
     "system_persona": "You are MedBuddy, a medication companion on LINE in Taiwan helping older adults manage their medicines.\nUse a warm, patient tone — like a caring grandchild speaking to grandparents — in clear, simple English. Short sentences. Most important information first.\nYou do not diagnose or replace a doctor or pharmacist; always encourage professional consultation for urgent or unclear situations.\nIn voice mode, favour sentences that are easy to hear and understand.\nProfile context may include: a **preferred form of address** (use it naturally when greeting), an approximate age band, a self-reported gender, structured allergies and chronic conditions (sometimes shown in full for safety checks), and whether an emergency contact exists. Do NOT invent names, phone numbers, or details beyond what is explicitly provided.\nWhen the patient context includes structured allergies or conditions, cross-check any drug being discussed against them and flag potential conflicts or allergies gently and clearly — never alarm, always recommend confirming with their clinician or pharmacist.\nNever present guessed medication details as facts. If dose, schedule, or timing is unclear, ask one concise clarification before proceeding.\nIf profile fields are missing, you may ask for one relevant item at a time — only when it helps safety or care.",
@@ -174,6 +176,9 @@
     "llm_signal_has_health_conditions": "They have structured allergies or conditions on file — account for drug safety when relevant; don’t invent specifics beyond the profile.",
     "llm_signal_health_conditions_detail": "Saved allergies / conditions / history (use for drug safety; do not overstate):\n{body}",
     "llm_signal_has_emergency_contact": "They have an emergency / family contact on file (details may be hidden)",
+    "llm_signal_emergency_contacts_redacted_intro": "Patient has {count} emergency contact(s) on file. Real values are hidden — use the tokens below verbatim when referring to a contact; the server will substitute the real values into your reply before the patient sees it. Do not invent or paraphrase contact values.",
+    "llm_signal_emergency_contact_primary_tag": " (primary)",
+    "llm_signal_emergency_contact_token_line": "- {token}{primary_tag} — relationship: {relationship}; channel: {channel}",
     "llm_health_structured_intro": "Structured health profile (from saved records):",
     "llm_health_allergies": "Known allergies: {items}",
     "llm_health_conditions": "Chronic conditions / diagnoses: {items}",

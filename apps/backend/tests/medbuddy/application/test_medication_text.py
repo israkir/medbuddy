@@ -554,3 +554,70 @@ async def test_messages_emergency_without_saved_contact_no_notify_metadata(mock_
     body = r.json()
     assert body["metadata"].get("simulated_emergency_notification") is not True
     assert "Simulation" not in body["reply"]
+
+
+# ---------------------------------------------------------------------------
+# Duplicate-add dedup: adding the same medication name twice yields one row
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_add_medication_dedup_same_name_returns_already_on_file(mock_settings) -> None:
+    """Calling add_medication twice with the same name must return the dedup reply
+    and must NOT create a second row in the medications table."""
+    from medbuddy.application.assistant_turn import run_assistant_text_turn
+
+    uid = "user-dedup-aspirin-1"
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(uid, {"locale": "en"})
+    # Pre-seed aspirin so the tool hits the dedup guard on the first call.
+    await svc.users.add_medication(
+        uid,
+        MedicationDraft(
+            name="Aspirin",
+            dosage="100mg",
+            schedule="once daily after breakfast",
+        ),
+    )
+    svc.llm = MockLLM(
+        intent=Intent.ADD_MEDICATION,
+        locale="en",
+        medication_draft=MedicationDraft(
+            name="Aspirin",
+            dosage="100mg",
+            schedule="once daily after breakfast",
+        ),
+    )
+    result = await run_assistant_text_turn(svc, user_key=uid, user_text="aspirin 100 mg once daily")
+    meds = await svc.users.list_medications(uid)
+    assert len(meds) == 1, "Dedup should prevent a second aspirin row"
+    reply_lower = result.reply.lower()
+    assert "already" in reply_lower or "update" in reply_lower
+
+
+@pytest.mark.asyncio
+async def test_add_medication_dedup_case_insensitive(mock_settings) -> None:
+    """Dedup must be case-insensitive: 'ASPIRIN' matches 'aspirin'."""
+    from medbuddy.application.assistant_turn import run_assistant_text_turn
+
+    uid = "user-dedup-case-insensitive"
+    svc = build_app_services(mock_settings)
+    await svc.users.get_or_create_user(uid)
+    await svc.users.patch_user_profile(uid, {"locale": "en"})
+    await svc.users.add_medication(
+        uid,
+        MedicationDraft(name="ASPIRIN", dosage="100mg", schedule="once daily"),
+    )
+    svc.llm = MockLLM(
+        intent=Intent.ADD_MEDICATION,
+        locale="en",
+        medication_draft=MedicationDraft(
+            name="aspirin",
+            dosage="100mg",
+            schedule="once daily",
+        ),
+    )
+    await run_assistant_text_turn(svc, user_key=uid, user_text="aspirin 100mg once daily")
+    meds = await svc.users.list_medications(uid)
+    assert len(meds) == 1

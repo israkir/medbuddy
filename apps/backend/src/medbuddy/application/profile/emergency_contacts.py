@@ -118,6 +118,56 @@ def emergency_contact_hint(contacts: object) -> str:
     return _format_one_contact_hint(normalized[0])
 
 
+def emergency_contacts_redacted_hint(
+    contacts: object, *, locale: str = "en"
+) -> tuple[str, dict[str, str]]:
+    """Return a tokenised hint block for the LLM system prompt and a substitution map.
+
+    The hint block names each contact by a bracketed token (e.g. ``[EMERGENCY_CONTACT_1]``)
+    and exposes only low-sensitivity metadata (relationship, channel type, primary flag).
+    The real channel values are kept in the returned substitution map so the server can
+    replace tokens in the LLM reply before showing it to the patient — PII never leaves.
+
+    Returns:
+        (hint_block, token_map)
+        hint_block  — multi-line string for the system prompt; empty string when no contacts.
+        token_map   — ``{"[EMERGENCY_CONTACT_1]": "son 0912-345-678", …}``
+    """
+    normalized = normalize_emergency_contacts(contacts)
+    if not normalized:
+        return "", {}
+    token_map: dict[str, str] = {}
+    lines: list[str] = []
+    count = len(normalized)
+    intro = t(
+        "prompts.llm_signal_emergency_contacts_redacted_intro",
+        locale=locale,
+        count=count,
+    )
+    lines.append(intro)
+    for i, row in enumerate(normalized, start=1):
+        token = f"[EMERGENCY_CONTACT_{i}]"
+        token_map[token] = _format_one_contact_hint(row)
+        is_primary = bool(row.get("is_primary"))
+        primary_tag = (
+            t("prompts.llm_signal_emergency_contact_primary_tag", locale=locale)
+            if is_primary
+            else ""
+        )
+        relationship = str(row.get("relationship") or "").strip()
+        channel = str(row.get("channel_type") or "other").strip().lower()
+        line = t(
+            "prompts.llm_signal_emergency_contact_token_line",
+            locale=locale,
+            token=token,
+            primary_tag=primary_tag,
+            relationship=relationship,
+            channel=channel,
+        )
+        lines.append(line)
+    return "\n".join(lines), token_map
+
+
 def emergency_contacts_hint_all(contacts: object, *, locale: str = "en") -> str:
     """Human-readable hint listing **all** stored emergency contacts.
 

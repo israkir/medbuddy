@@ -8,6 +8,7 @@ from medbuddy.models.domain import HealthConditionRecord
 from medbuddy.llm.medication_draft_build import dose_or_schedule_display
 from medbuddy.application.profile.emergency_contacts import (
     emergency_contact_hint,
+    emergency_contacts_redacted_hint,
     normalize_emergency_contacts,
 )
 
@@ -157,17 +158,22 @@ def format_patient_profile_signals_for_llm(
     locale: str,
     include_health_notes: bool = False,
     health_conditions: list[HealthConditionRecord] | None = None,
-) -> str:
+) -> tuple[str, dict[str, str]]:
     """Coarse cues for the model: preferred form of address when set; age band (not exact age);
     gender label; structured health conditions and emergency-contact signals.
 
     When ``include_health_notes=True`` (legacy name: **structured health detail**), include the
     full grouped allergies/conditions/history block for drug-safety checks.
+
+    Returns:
+        (signals_block, pii_token_substitutions)
+        signals_block           — multi-line string for the system prompt.
+        pii_token_substitutions — map of ``[EMERGENCY_CONTACT_N]`` → real contact string;
+                                  empty dict when no contacts are on file.
     """
     name = user_row.get("preferred_name")
     age = user_row.get("age_years")
     gender_key = normalized_profile_gender(user_row.get("gender"))
-    contact = _profile_contact_hint(user_row)
     parts: list[str] = []
     if isinstance(name, str) and name.strip():
         parts.append(t("prompts.llm_preferred_address_form", locale=locale, name=name.strip()))
@@ -187,7 +193,14 @@ def format_patient_profile_signals_for_llm(
                 label=gender_option_label(gender_key, locale=locale),
             )
         )
-    if isinstance(contact, str) and contact.strip():
+    contacts_raw = user_row.get("emergency_contacts")
+    redacted_hint, pii_token_substitutions = emergency_contacts_redacted_hint(
+        contacts_raw, locale=locale
+    )
+    if redacted_hint.strip():
+        parts.append(redacted_hint)
+    elif _profile_contact_hint(user_row):
+        # Legacy single-string contact: fall back to boolean hint (no token rehydration needed).
         parts.append(t("prompts.llm_signal_has_emergency_contact", locale=locale))
     hc_list = health_conditions or []
     hc_block = format_health_conditions_block_for_llm(hc_list, locale=locale)
@@ -199,9 +212,9 @@ def format_patient_profile_signals_for_llm(
         else:
             parts.append(t("prompts.llm_signal_has_health_conditions", locale=locale))
     if not parts:
-        return ""
+        return "", pii_token_substitutions
     header = t("prompts.llm_profile_signals_header", locale=locale)
-    return f"{header}\n" + "\n".join(f"- {p}" for p in parts)
+    return f"{header}\n" + "\n".join(f"- {p}" for p in parts), pii_token_substitutions
 
 
 def format_profile_gaps(
@@ -267,7 +280,7 @@ def build_patient_context_for_llm(
     allergies/conditions/history block when available.
     """
     hc_list = health_conditions or []
-    signals = format_patient_profile_signals_for_llm(
+    signals, _token_map = format_patient_profile_signals_for_llm(
         user_row,
         locale=locale,
         include_health_notes=include_health_notes,

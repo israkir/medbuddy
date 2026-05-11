@@ -30,7 +30,14 @@ from medbuddy.application.profile.profile_completion_nudge import (
 from medbuddy.services import AppServices
 from medbuddy.extensibility.intent_hooks import try_intent_hooks
 from medbuddy.core.i18n import t
-from medbuddy.models.domain import AgentTurnResult, ConversationTurn, Intent, MedicationRecord
+from medbuddy.models.domain import (
+    AgentTurnResult,
+    ConversationTurn,
+    Intent,
+    MedicationAddConfirmationPending,
+    MedicationRecord,
+    ReminderHorizonPending,
+)
 from medbuddy.privacy.redact import (
     redact_conversation_turns_for_llm,
     redact_pii_text,
@@ -227,6 +234,12 @@ class MedicationAgent:
                     fields=", ".join(saved_fields),
                 )
 
+        # Snapshot pending states before the orchestrator so we can tell whether
+        # they were created *during* this turn (and therefore already asked in the
+        # LLM reply — don't ask again with the templated reminder).
+        horizon_before = await svc.users.get_reminder_horizon_pending(user_key)
+        med_confirm_before = await svc.users.get_medication_add_confirmation_pending(user_key)
+
         orch = await run_tool_agent_loop(
             svc,
             user_key=user_key,
@@ -243,8 +256,16 @@ class MedicationAgent:
             system_prompt_suffix=system_suffix,
         )
         reply = await _maybe_append_pending_reminder(
-            svc, user_key=user_key, reply=orch.reply, locale=locale
+            svc,
+            user_key=user_key,
+            reply=orch.reply,
+            locale=locale,
+            horizon_before=horizon_before,
+            med_confirm_before=med_confirm_before,
         )
+        # Re-read user_row after the orchestrator so profile-completion nudge
+        # doesn't fire for fields that were just saved inside the tool loop (B7).
+        user_row = await svc.users.get_or_create_user(user_key)
         hc_for_nudge = await svc.users.list_health_conditions(user_key, active_only=True)
         reply = append_profile_completion_nudge_if_due(
             settings=svc.settings,
@@ -291,10 +312,16 @@ async def _maybe_append_pending_reminder(
     user_key: str,
     reply: str,
     locale: str,
+    horizon_before: ReminderHorizonPending | None = None,
+    med_confirm_before: MedicationAddConfirmationPending | None = None,
 ) -> str:
-    """Append a one-line reminder when the user has an unanswered pending agent question."""
+    """Append a one-line reminder when the user has an unanswered pending agent question.
+
+    Only fires when the pending state existed *before* the current orchestrator turn —
+    if it was created *during* this turn the LLM reply already asked the question.
+    """
     med_confirm = await svc.users.get_medication_add_confirmation_pending(user_key)
-    if med_confirm is not None:
+    if med_confirm is not None and med_confirm_before is not None:
         reminder = t(
             "medication.add_confirm_pending_reminder",
             locale=locale,
@@ -303,7 +330,7 @@ async def _maybe_append_pending_reminder(
         return f"{reply}\n\n{reminder}"
 
     horizon = await svc.users.get_reminder_horizon_pending(user_key)
-    if horizon is not None:
+    if horizon is not None and horizon_before is not None:
         reminder = t(
             "reminder.horizon_still_needed",
             locale=locale,
