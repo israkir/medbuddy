@@ -31,7 +31,7 @@ Typical blocks in the string sent to the model:
 | Medications | Lines from the user’s saved list: drug **name**, **dosage**, **schedule** (`format_patient_medication_context`). |
 | Upcoming doses | When the sync/window yields rows: **local time** (and date if not today), **medication name**, **dosage**, **schedule** text; lines are **pending** `dose_events` only (`taken_at` / `missed_at` null), soonest first. Intro comes from `prompts.upcoming_doses_*` keys. |
 
-**Not** included: raw `health_notes`, `emergency_contact` strings, exact `age_years`.
+**Not** included: raw `health_notes`, raw emergency contact values, exact `age_years`.
 
 **Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync), and **post-add** `check_interactions_structured` when `persist_medication_add_from_draft` runs with **two or more** medications on the updated list (same `patient_context_for_llm` assembly, `include_health_notes=True`). **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
 

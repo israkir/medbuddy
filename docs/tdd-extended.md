@@ -461,7 +461,7 @@ LINE platform
 3. **`try_resolve_pending_dose_clarification`** — user answering a pending adherence/dose clarification.
 4. **`try_resolve_pending_reminder_horizon`** — user supplying how many days ahead to materialize reminders (after `add_medication` requested it).
 5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** orchestrator. When the patient has at least one row in **`emergency_contacts`**, the reply also appends the same simulated outreach line as the **`simulate_notify_emergency_contact`** tool — listing **every contact on file** via **`emergency_contacts_hint_all`** — and sets **`metadata.simulated_emergency_notification`** for the app banner (i18n key `agent.emergency_with_saved_contact`). Multiple contacts are kept per patient; only the most recently saved row is **`is_primary = true`** (older entries are demoted on every save).
-6. **`try_resolve_emergency_contact_from_message`** — when the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for a contact), call **`extract_profile_patch`** and persist as **`emergency_contact`** before the medication tool loop. Prevents misclassified lines like “my son David, 0900111111” from hitting `add_medication` as a drug.
+6. **`try_resolve_emergency_contact_from_message`** — when the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for a contact), call **`extract_profile_patch`** and persist to the **`emergency_contacts`** table before the medication tool loop. Prevents misclassified lines like “my son David, 0900111111” from hitting `add_medication` as a drug.
 7. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
 8. **`Intent.OFF_TOPIC`** — fixed i18n refusal (`agent.off_topic`); no orchestrator for the reply body.
 9. **`run_tool_agent_loop`** — **`LLMPort.complete_chat_with_tools`**: prepends **redacted prior** user/assistant turns (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) where configured; model chooses among registered names (`llm/agent_tool_definitions.py`), e.g. `list_medications`, `add_medication`, `update_medication`, `remove_medication`, `remove_all_medications`, `disable_reminders`, `list_upcoming_doses`, `confirm_dose`, `report_missed_dose`, `explain_medication`, `report_side_effects`, `interaction_check`, `log_vital`, `generate_health_summary`, `export_health_journal`, `update_profile`, `simulate_notify_emergency_contact`, ... Handlers invoke **`AgentTool`** classes or inline orchestration (profile extract uses **`extract_profile_patch`**).
@@ -531,7 +531,7 @@ Tools receive `AppServices`, `user_key`, `user_text`, `user_row`, `medications`,
 
 ## 6. Data model
 
-Schema lives in `apps/backend/supabase/schema.sql`. All tables use UUIDs, UTC timestamps, and Supabase RLS for the `anon` role. Existing deployments need explicit migrations to match schema changes — the SQL file is greenfield DDL only.
+Schema lives in `apps/backend/supabase/schema.sql`. All tables use UUIDs and UTC timestamps. The backend accesses Supabase via the **`service_role` key** (`SUPABASE_SERVICE_KEY`), which bypasses RLS; `anon`/`authenticated` table grants have been revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`). Existing deployments need explicit migrations to match schema changes — the SQL file is greenfield DDL only.
 
 ### 6.1 Entity-relationship overview
 
@@ -540,7 +540,8 @@ patients (1) ──────────────────────�
     │                                          │
     │ (many)                                   │ (many)
     ├── conversation_turns                     └── dose_events
-    └── health_issue_events (many)
+    ├── health_issue_events (many)
+    └── emergency_contacts (many)
 
 drug_personalization_cache (per-patient)
     │
@@ -560,12 +561,31 @@ End-user profile rows. `users` is reserved in Supabase; `patients` allows other 
 | `preferred_name` | `text` | Display name (not sent raw to LLM) |
 | `age_years` | `int` | Optional |
 | `gender` | `text` | `female` / `male` / `non_binary` / `prefer_not_say` / `other` |
-| `emergency_contact` | `text` | Free text — not sent to LLM |
 | `health_notes` | `text` | Patient-entered notes — not sent to LLM |
 | `timezone` | `text` | IANA timezone; default `Asia/Taipei`; drives scheduling and push copy |
 | `locale` | `text` | `en` or `zh-TW`; DB default `zh-TW`. **Seeded** before first scripted welcome: LINE **`follow`** uses LINE profile **`language`**; standalone **`GET /v1/app/me`** (pre-onboarding) uses **`X-MedBuddy-Locale`** / **`Accept-Language`** when present. |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
 | `pending_agent_clarification` | `jsonb` | Optional persisted agent/UI state (`MedicationAddConfirmationPending`, `DoseClarificationPending`, `ReminderHorizonPending`); nullable |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | |
+
+> Emergency contacts are stored in a **separate `emergency_contacts` table** (not a text column on `patients`). See `emergency_contacts` below.
+
+#### `emergency_contacts`
+
+Per-patient emergency contact rows. Replaces the legacy `emergency_contact text` column. Only the most recently saved row has `is_primary = true`; older rows are demoted automatically.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `patient_id` | `uuid` FK → `patients` | |
+| `contact_name` | `text` | Optional display name |
+| `relationship` | `text` | Optional relationship label (e.g. `son`, `wife`) |
+| `channel_type` | `text` | Default `phone` |
+| `channel_value` | `text` | Phone number or other identifier |
+| `is_primary` | `boolean` | Most-recently saved row; older rows are demoted to `false` |
+| `notes` | `text` | Optional |
+| `source` | `text` | Default `user` |
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
 
@@ -775,7 +795,9 @@ Auth required. Returns the current user's profile.
   "preferred_name": "...",
   "age_years": 68,
   "gender": "female",
-  "emergency_contact": "...",
+  "emergency_contacts": [
+    {"contact_name": "David", "relationship": "son", "channel_type": "phone", "channel_value": "0900111111", "is_primary": true}
+  ],
   "health_notes": "...",
   "timezone": "Asia/Taipei",
   "locale": "zh-TW",
@@ -795,7 +817,9 @@ Auth required. Saves first-run profile. Idempotent — safe to call again to upd
   "preferred_name": "...",       // required
   "age_years": 68,               // optional
   "gender": "female",            // optional: female|male|non_binary|prefer_not_say|other
-  "emergency_contact": "...",    // optional
+  "emergency_contacts": [        // optional; list of contact objects
+    {"channel_value": "0900111111", "contact_name": "David", "relationship": "son"}
+  ],
   "health_notes": "...",         // optional
   "locale": "zh-TW",             // optional: en | zh-TW (default zh-TW)
   "timezone": "Asia/Taipei"      // optional IANA; omit → Asia/Taipei
@@ -907,7 +931,7 @@ All LLM calls follow the same layered structure:
 | **User message** | Current turn | Redacted via `redact_pii_text()` |
 | **Extra system** | Intent-specific instructions (e.g. interaction-check companion, summary format) | No PII |
 
-**Not included in any LLM call:** raw `preferred_name`, exact `age_years`, `health_notes`, `emergency_contact`.
+**Not included in any LLM call:** raw `preferred_name`, exact `age_years`, `health_notes`, raw emergency contact values (only a flag that contacts exist is included).
 
 ### 8.4 Structured outputs
 
@@ -1002,7 +1026,7 @@ When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, th
 
 ### 10.4 Supabase access
 
-The backend uses `SUPABASE_PUBLISHABLE_KEY` (anon key) — never the `service_role` key. All tables have RLS policies restricting anon role access. Row-level isolation relies on `external_user_id` matching in application code; Supabase RLS is an additional defense layer.
+The backend uses `SUPABASE_SERVICE_KEY` (service-role key), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`) — the publishable key cannot reach any table directly. `SUPABASE_PUBLISHABLE_KEY` is kept in config for optional local-dev reads only. In real mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
 
 ### 10.5 Internal endpoints
 
@@ -1097,11 +1121,10 @@ Application exceptions are caught at the channel layer and produce user-visible 
 
 | Gap | Recommendation |
 |-----|---------------|
-| No request ID propagation | Add a `X-Request-ID` middleware; include in all log records for correlated tracing |
 | No error rate metrics | Instrument `interpret_user_turn` and `compose_reply` call latency and error counts (Prometheus or OTLP) |
 | No LLM cost tracking | Log token usage from LLM responses; aggregate per user per day for cost control |
 | No reminder delivery metrics | Track `enqueued`, `delivered`, `failed`, `retried` counts in reminder worker |
-| No distributed tracing | Add OpenTelemetry instrumentation for cross-service traces (LLM calls, Supabase, LINE) |
+| No distributed tracing | Add OpenTelemetry instrumentation for cross-service traces (LLM calls, Supabase, LINE); propagate `request_id` contextvar (`core/request_id.py`) as the trace ID |
 | No alerting | Set up alerts on: webhook 4xx/5xx rate, turn error rate, reminder delivery lag |
 
 ---
@@ -1110,15 +1133,16 @@ Application exceptions are caught at the channel layer and produce user-visible 
 
 ### 13.1 Test layers
 
-Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). The suite includes an `e2e/` area (for example, `tests/e2e/test_user_journeys.py`) in addition to channel, application, and tool coverage with `AsyncClient`/`ASGITransport` and mocks.
+Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). Uses `AsyncClient`/`ASGITransport` and mock adapters.
 
 | Layer | What is tested | Typical location |
 |-------|---------------|------------------|
-| **Tools / application** | `MedicationAgent` dispatch, resolver flows, individual `AgentTool.run` paths | `tests/application/`, `tests/agents/tools/` |
-| **Channels** | LINE webhook pipeline, API routes, signature verification | `tests/channels/` |
+| **Application / tools** | `MedicationAgent` dispatch, resolver flows, individual `AgentTool.run` paths | `tests/application/` |
 | **Integrations** | Supabase stores, drugs HTTP, optional OpenAI smoke tests | `tests/integrations/` |
 | **Reminders** | Materialization, enqueue, deliver, nudges | `tests/reminders/` |
 | **LLM / privacy** | Draft build, redaction, persona shaping | `tests/llm/`, `tests/privacy/`, `tests/prompts/` |
+| **Extensibility** | Intent hooks | `tests/extensibility/` |
+| **Settings / config** | Config validation, locale, timezone | `tests/` (root level, e.g. `test_settings_*.py`, `test_user_locale.py`) |
 
 ### 13.2 Mock adapter contract
 
@@ -1204,7 +1228,7 @@ REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build
 **Setup steps:**
 1. Dashboard → New → Blueprint → connect repo → apply `render.yaml`.
 2. Create Render Key Value → set `REDIS_URL` on `medbuddy-api`.
-3. Set environment secrets: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, LLM keys (`LLM_PROVIDER`, `GEMINI_API_KEY` or `OPENAI_API_KEY`), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `PUBLIC_BASE_URL`, `MEDBUDDY_CRON_SECRET`.
+3. Set environment secrets: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, LLM keys (`LLM_PROVIDER`, `GEMINI_API_KEY` or `OPENAI_API_KEY`), `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `MEDBUDDY_MOBILE_BEARER_TOKEN`, `PUBLIC_BASE_URL`, `MEDBUDDY_CRON_SECRET`.
 4. Set LINE webhook URL: `{PUBLIC_BASE_URL}/v1/line/webhook`.
 
 ---
@@ -1237,6 +1261,8 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | `OPENAI_API_KEY` | — | Required when `LLM_PROVIDER=openai` |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | |
 | `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | `12` | Prior **redacted** user/assistant turns prepended to `complete_chat_with_tools`; `0` disables |
+| `CONVERSATION_HISTORY_TURNS` | `5` | Turns loaded for `interpret_user_turn` recent context |
+| `MEDBUDDY_DOSE_CLARIFICATION_TTL_SECONDS` | `900` | TTL for pending dose-clarification / add-confirm state (60–86400) |
 | `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | `12` | When onboarding-style profile fields (name, age, gender, emergency contact, health notes) are still missing, append a short footer every **N** user messages on the orchestrator reply path; `0` disables. Cadence is staggered per user via a stable hash. |
 | `MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS` | (built-in defaults) | Optional comma-separated **`Intent`** values to persist into **`health_issue_events`**; the sentinel **`all_non_off_topic`** logs every classifier outcome except **`off_topic`**. Structured vital rows are written separately by `LogVitalTool`. |
 | `MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT` | `60` | Cap (max **200**) on rows pulled from **`health_issue_events`** into the doctor-summary prompt. |
@@ -1255,7 +1281,8 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | Variable | Notes |
 |----------|-------|
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY` | Anon key only — never `service_role` |
+| `SUPABASE_SERVICE_KEY` | **Required in real mode.** Service-role key — bypasses RLS. Never use the publishable/anon key for the backend client. |
+| `SUPABASE_PUBLISHABLE_KEY` | Optional; kept for local-dev reads. Not used by the Supabase client in real mode. |
 
 ### 15.6 Reminders
 
@@ -1265,6 +1292,7 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` | `09:00` | `HH:MM` local time for daily reminders — interpreted in `patients.timezone` (per-user), not a global timezone |
 | `MEDBUDDY_REMINDER_HORIZON_DAYS` | `14` | Days ahead to materialize dose events (max 90) |
 | `MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES` | (empty) | Comma-separated minutes after the prior push/nudge for optional LINE follow-up nudges (e.g. `15,30,60`); empty disables nudges |
+| `MEDBUDDY_REMINDER_EDUCATION_CTA_EVERY_N_DAYS` | `5` | Cooldown days before appending an education CTA to a reminder push for the same user+medication (0 disables; max 30) |
 | `MEDBUDDY_CRON_SECRET` | — | Header secret for reconcile endpoint |
 
 ### 15.7 Caching
@@ -1280,6 +1308,8 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 |----------|---------|-------|
 | `MEDBUDDY_LOCALE` | `zh-TW` | Server-default locale for i18n |
 | `MEDBUDDY_MOBILE_BEARER_TOKEN` | — | Bearer token for `/v1/app` protected routes |
+| `MEDBUDDY_CONVERSATION_RETENTION_DAYS` | `90` | Age threshold for conversation-turn purge (1–3650 days) |
+| `CORS_ALLOWED_ORIGINS` | (empty) | Comma-separated allowed origins for CORS; empty = no CORS middleware |
 | `LOG_LEVEL` | `INFO` | `medbuddy.*` and `uvicorn.error` log level |
 | `DEBUG` | `false` | FastAPI debug mode |
 | `PORT` | `8000` | Injected by Render at runtime |

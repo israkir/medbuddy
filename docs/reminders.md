@@ -142,8 +142,8 @@ Push messages can count against LINE plan quotas; reminder copy is kept short. T
 
 ## Tests
 
-- `apps/backend/tests/test_dose_schedule.py` — daily instant generation.
-- `apps/backend/tests/test_dose_reminder_deliver.py` — mock LINE push and idempotency.
+- `apps/backend/tests/reminders/test_dose_schedule.py` — daily instant generation.
+- `apps/backend/tests/reminders/test_dose_reminder_deliver.py` — mock LINE push and idempotency.
 - `apps/backend/tests/test_user_timezone.py` — IANA validation / defaults.
 
 Run **`make be-test`** from the repository root.
