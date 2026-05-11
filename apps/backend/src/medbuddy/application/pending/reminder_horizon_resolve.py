@@ -24,8 +24,17 @@ _DAYS_PATTERNS = [
     re.compile(r"\b(2|two|兩|两)\s*(?:weeks?|週|周)\b", re.IGNORECASE),
     re.compile(r"\b(3|three|三)\s*(?:weeks?|週|周)\b", re.IGNORECASE),
     re.compile(r"\b(4|four|四)\s*(?:weeks?|週|周)\b", re.IGNORECASE),
-    # bare integer (last resort — only used when it's the entire message)
-    re.compile(r"^\s*(\d+)\s*$"),
+    # word-numeral days: "seven days", "十四天", etc.
+    re.compile(
+        r"\b(one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"eleven|twelve|thirteen|fourteen|fifteen|"
+        r"twenty|thirty|sixty|ninety|"
+        r"一|二|三|四|五|六|七|八|九|十|十四|三十)\s*(?:days?|天|日)\b",
+        re.IGNORECASE,
+    ),
+    # bare integer — the whole message is just a number, OR a number at the end
+    # after optional filler words ("yes 7", "about 7")
+    re.compile(r"(?:^|[\s,，、])(\d+)\s*$"),
 ]
 
 _WEEK_MULTIPLIERS: dict[str, int] = {
@@ -44,6 +53,41 @@ _WEEK_MULTIPLIERS: dict[str, int] = {
     "四": 28,
 }
 
+_DAY_WORD_VALUES: dict[str, int] = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "twenty": 20,
+    "thirty": 30,
+    "sixty": 60,
+    "ninety": 90,
+    # zh-TW digit words
+    "一": 1,
+    "二": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+    "十四": 14,
+    "三十": 30,
+}
+
 
 def _parse_horizon_days(text: str) -> int | None:
     """Return 1–90 day count from user text, or None if not clearly stated."""
@@ -54,14 +98,21 @@ def _parse_horizon_days(text: str) -> int | None:
         if m:
             key = m.group(1).lower()
             return _WEEK_MULTIPLIERS.get(key)
-    # explicit days
+    # explicit digit-days: "3 days", "3 天"
     m = _DAYS_PATTERNS[0].search(s)
     if m:
         n = int(m.group(1))
         if 1 <= n <= 90:
             return n
-    # bare number (whole message is just digits)
-    m = _DAYS_PATTERNS[-1].match(s)
+    # word-numeral days: "seven days", "七天"
+    m = _DAYS_PATTERNS[5].search(s)
+    if m:
+        key = m.group(1).lower()
+        n = _DAY_WORD_VALUES.get(key)
+        if n is not None and 1 <= n <= 90:
+            return n
+    # bare number at end of message: "7", "yes 7", "about 7"
+    m = _DAYS_PATTERNS[6].search(s)
     if m:
         n = int(m.group(1))
         if 1 <= n <= 90:
@@ -91,7 +142,7 @@ async def try_resolve_pending_reminder_horizon(
     )
     if now > exp:
         await svc.users.set_reminder_horizon_pending(user_key, None)
-        return None
+        return t("reminder.horizon_expired_ack", locale=locale, name=pending.medication_name)
 
     days = _parse_horizon_days(user_text)
     if days is None:

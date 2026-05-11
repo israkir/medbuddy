@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
@@ -55,6 +56,7 @@ from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 from medbuddy.services import AppServices
 from medbuddy.application.profile.emergency_contacts import (
     emergency_contacts_hint_all,
+    emergency_contacts_redacted_hint,
 )
 
 log = logging.getLogger(__name__)
@@ -193,6 +195,7 @@ class _OrchestrationContext:
     history: list[ConversationTurn]
     interpretation: TurnInterpretation | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    pii_token_substitutions: dict[str, str] = field(default_factory=dict)
 
     async def reload_medications(self) -> None:
         self.medications = await self.svc.users.list_medications(self.user_key)
@@ -627,6 +630,9 @@ async def run_tool_agent_loop(
         prior_turn_count=prior_turn_count,
         system_prompt_suffix=system_prompt_suffix,
     )
+    _ec_hint, _token_map = emergency_contacts_redacted_hint(
+        user_row.get("emergency_contacts"), locale=locale
+    )
     ctx = _OrchestrationContext(
         svc=svc,
         user_key=user_key,
@@ -637,6 +643,7 @@ async def run_tool_agent_loop(
         medications=list(medications),
         history=history,
         interpretation=interpretation,
+        pii_token_substitutions=_token_map,
     )
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
@@ -699,7 +706,15 @@ async def run_tool_agent_loop(
                         "content": out,
                     }
                 )
-            if "update_profile" in names_in_batch or "manage_health_conditions" in names_in_batch:
+            _PROMPT_REFRESH_TOOLS = {
+                "update_profile",
+                "manage_health_conditions",
+                "add_medication",
+                "remove_medication",
+                "update_medication",
+                "remove_all_medications",
+            }
+            if names_in_batch & _PROMPT_REFRESH_TOOLS:
                 messages[0]["content"] = await _orchestrator_system_prompt_content(
                     svc,
                     user_key=user_key,
@@ -712,6 +727,17 @@ async def run_tool_agent_loop(
             continue
         final = (content or "").strip()
         if final:
+            if ctx.pii_token_substitutions:
+                for _token, _real in ctx.pii_token_substitutions.items():
+                    final = final.replace(_token, _real)
+                # Strip any hallucinated tokens the map didn't cover.
+                leftover = re.sub(r"\[EMERGENCY_CONTACT_\d+\]", "", final).strip()
+                if leftover != final.strip():
+                    log.warning(
+                        "orchestrator: LLM emitted unmapped emergency-contact token user_key=%s",
+                        user_key,
+                    )
+                    final = leftover
             return AgentTurnResult(reply=final, metadata=dict(ctx.metadata))
         break
 

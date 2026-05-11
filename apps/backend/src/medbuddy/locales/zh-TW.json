@@ -79,6 +79,7 @@
     "add_confirm_no_instructions": "這筆還沒有額外備註。",
     "add_confirm_cancelled": "好的，先不幫您存。您方便時再告訴我藥名，並盡量包含劑量、吃法或備註。",
     "add_incomplete": "我想幫您記下來，需要知道藥名；若有劑量或吃法也可以一起說。例如：「阿斯匹靈 100mg 早餐後」。",
+    "already_on_file": "「{name}」已在您的用藥清單裡了。若要修改劑量或吃法，說「更新 {name}」就好。",
     "list_intro": "目前為您存好的用藥如下：",
     "list_hint_fill_dose_schedule": "若劑量或吃法還顯示「還沒填」，跟我說兩者我來幫您更新——例如「100 毫克、飯後」。",
     "list_empty": "目前還沒有用藥記錄；您方便時告訴我藥名，我們一起建立。",
@@ -145,7 +146,8 @@
     "education_cta": "需要我快速提醒這個藥是做什麼用的嗎？",
     "horizon_confirmed": "設定好了——{name} 的每日提醒已開啟，共 {days} 天。到了時間我會通知您。隨時可以回覆查看時程或記錄服藥。",
     "horizon_confirmed_generic": "設定好了——已開啟 {days} 天的每日提醒，我會在約好的時間提醒您。",
-    "horizon_still_needed": "我還需要知道「{name}」要連續提醒幾天——回一個數字就好，例如「7 天」或「兩週」。"
+    "horizon_still_needed": "我還需要知道「{name}」要連續提醒幾天——回一個數字就好，例如「7 天」或「兩週」。",
+    "horizon_expired_ack": "提醒設定的詢問已逾時——想好了隨時再跟我說，我重新幫您設定「{name}」的提醒。"
   },
   "prompts": {
     "system_persona": "你是 MedBuddy，一位在台灣透過 LINE 陪伴長輩用藥的語音助理。\n語氣溫暖有耐心、像孫子跟阿公阿嬤說話，使用繁體中文（台灣口語）。短句，最重要的先說。\n你不診斷疾病、不取代醫師或藥師指示；遇到不確定或緊急情況，鼓勵就醫或諮詢藥師。\n語音模式下，句子要更容易聽懂。\n「病人背景」可能包含：使用者儲存的**慣用稱呼**（若有，問候時自然使用）、年齡層區間、自填性別、**結構化的過敏與慢性病紀錄**（有時會提供較完整內容供安全核對），以及是否有緊急聯絡方式。\n當背景提供結構化過敏或慢性病時，請對照正在討論的藥物，若有已知過敏、禁忌或注意事項，要溫和但清楚地提醒，並建議確認醫師或藥師意見，**不要編造未提及的細節**。\n不要把推測的用藥細節當事實。劑量、時間或吃法不清楚時，先簡短確認再動作。\n若背景列出尚未填寫的項目，在與安全或衛教有關時可溫和詢問其中一項；一次一題。",
@@ -174,6 +176,9 @@
     "llm_signal_has_health_conditions": "對方有結構化的過敏或慢性病紀錄——談用藥安全時要納入考量，勿臆測未列出的細節。",
     "llm_signal_health_conditions_detail": "已存的過敏／慢性病／病史（用藥安全參考；勿過度推論）：\n{body}",
     "llm_signal_has_emergency_contact": "已存緊急／家屬聯絡方式（細節可能隱藏）",
+    "llm_signal_emergency_contacts_redacted_intro": "病人已存 {count} 筆緊急聯絡方式。真實資料已隱藏——請直接使用下方的代稱，伺服器會在回覆傳給病人前自動替換為真實值。請勿自行編造或改寫聯絡資訊。",
+    "llm_signal_emergency_contact_primary_tag": "（主要）",
+    "llm_signal_emergency_contact_token_line": "- {token}{primary_tag} — 關係：{relationship}；聯絡方式：{channel}",
     "llm_health_structured_intro": "結構化健康紀錄（已存檔）：",
     "llm_health_allergies": "已知過敏：{items}",
     "llm_health_conditions": "慢性病／診斷：{items}",

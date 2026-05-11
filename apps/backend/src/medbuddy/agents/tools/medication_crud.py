@@ -170,6 +170,14 @@ class AddMedicationTool:
         if draft is None or not draft.name.strip():
             raise MedicationExtractionError()
 
+        # Dedup: short-circuit if a medication with the same name is already on file.
+        existing = await svc.users.list_medications(user_key)
+        draft_name_lower = draft.name.strip().lower()
+        if any(m.name.strip().lower() == draft_name_lower for m in existing):
+            return ToolResult(
+                reply=t("medication.already_on_file", locale=locale, name=draft.name.strip())
+            )
+
         un = t("medication.unspecified", locale=locale)
         draft = apply_one_off_reminder_dose_default(draft, unspecified_label=un, locale=locale)
         confirm_src = (user_text or "").strip()
