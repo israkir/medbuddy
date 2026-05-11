@@ -161,7 +161,7 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service-account JSON for Google client libraries (or use workload identity/metadata credentials) |
 | `PUBLIC_BASE_URL` | Public **HTTPS** origin (LINE webhooks, LINE **audio** URLs for TTS; see `config.py`) |
 | `MEDBUDDY_LINE_VOICE_REPLIES` | `audio_inbound` (default), `always`, or `off` — text+m4a LINE replies when TTS is available |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Postgres via PostgREST: Supabase **Secret** API key (`sb_secret_...` only). Not `sb_publishable_...` (no direct table access after `restrict_rls_to_service_role.sql`) |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Postgres via PostgREST: Supabase **Secret** API key (`sb_secret_...` only). Not `sb_publishable_...` (anon/authenticated table access revoked in `supabase/schema.sql`) |
 | `REDIS_URL` | arq job queue for dose reminders |
 | `MEDBUDDY_MOBILE_BEARER_TOKEN` | Auth token for `/v1/app` protected routes |
 | `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` |
