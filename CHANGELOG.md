@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **LINE webhook and voice UX:** `POST /v1/line/webhook` returns immediately after parse and idempotency, scheduling each event on FastAPI `BackgroundTasks` (failures logged in `_run_event`). Inbound **audio** starts LINE's chat loading indicator before download/STT/LLM. New `LineMessagingPort.send_chat_loading_indicator` on `LineHttpClient` and `MockLineClient.loading_indicators`; tests cover the audio vs text paths.
+- **LINE webhook and voice UX:** `POST /v1/line/webhook` returns immediately after parse and idempotency, scheduling each event on FastAPI `BackgroundTasks` (failures logged in `_run_event`). Inbound **text and audio** start LINE's chat loading indicator before the assistant path (text: before LLM; audio: before download/STT). New `LineMessagingPort.send_chat_loading_indicator` on `LineHttpClient` and `MockLineClient.loading_indicators`; tests cover both paths.
 
 ### Security
 

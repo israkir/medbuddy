@@ -179,6 +179,10 @@ async def handle_line_event(event: dict[str, Any], svc: AppServices) -> None:
         )
         row = await svc.users.get_or_create_user(line_user_id)
         loc = effective_user_locale(row.get("locale"))
+
+        # Show typing dots immediately — user sees feedback while the assistant runs
+        await svc.line.send_chat_loading_indicator(line_user_id, seconds=30)
+
         await _handle_user_message(
             svc,
             line_user_id=line_user_id,
