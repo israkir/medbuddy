@@ -70,9 +70,6 @@ class Settings:
 
     supabase_url: str
     supabase_service_key: str
-    supabase_publishable_key: (
-        str  # kept for local dev / anon reads; backend uses service_key in production mode
-    )
 
     google_speech_project_id: str
     google_speech_location: str
@@ -188,17 +185,9 @@ def _nudge_intervals(env: Mapping[str, str], key: str) -> tuple[int, ...]:
 
 def _integration_mode(env: Mapping[str, str]) -> IntegrationMode:
     raw = env.get("MEDBUDDY_INTEGRATION", "").strip().lower()
-    if raw in ("mock", "local", "dev", "default", ""):
-        if raw:
-            return IntegrationMode.MOCK
-        legacy_raw = env.get("MOCK_EXTERNAL_SERVICES", "").strip().lower()
-        if legacy_raw in ("", "1", "true", "yes"):
-            return IntegrationMode.MOCK
-        if legacy_raw in ("0", "false", "no"):
-            return IntegrationMode.PRODUCTION
-        msg = f"MOCK_EXTERNAL_SERVICES must be a boolean (true/false); got {legacy_raw!r}"
-        raise ConfigError(msg)
-    if raw in ("production",):
+    if raw in ("", "mock"):
+        return IntegrationMode.MOCK
+    if raw == "production":
         return IntegrationMode.PRODUCTION
     msg = f"MEDBUDDY_INTEGRATION must be 'mock' or 'production'; got {raw!r}"
     raise ConfigError(msg)
@@ -255,7 +244,7 @@ def _assert_production_mode_secrets(env: Mapping[str, str], llm_provider: LlmPro
         ("LINE_CHANNEL_SECRET", "LINE webhook signature verification"),
         ("LINE_CHANNEL_ACCESS_TOKEN", "LINE messaging API"),
         ("SUPABASE_URL", "Supabase project URL"),
-        ("SUPABASE_SERVICE_KEY", "Supabase service-role key (bypasses RLS)"),
+        ("SUPABASE_SERVICE_KEY", "Supabase Secret API key (sb_secret_...)"),
         ("MEDBUDDY_CRON_SECRET", "cron reconcile endpoint auth"),
     ]
     llm_key = "GEMINI_API_KEY" if llm_provider == LlmProvider.GEMINI else "OPENAI_API_KEY"
@@ -300,7 +289,6 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         openai_model=_str(env, "OPENAI_MODEL", "gpt-4.1-mini"),
         supabase_url=_str(env, "SUPABASE_URL"),
         supabase_service_key=_str(env, "SUPABASE_SERVICE_KEY"),
-        supabase_publishable_key=_str(env, "SUPABASE_PUBLISHABLE_KEY"),
         google_speech_project_id=_str(env, "GOOGLE_SPEECH_PROJECT_ID"),
         google_speech_location=_str(env, "GOOGLE_SPEECH_LOCATION", "global"),
         conversation_history_turns=_int(env, "CONVERSATION_HISTORY_TURNS", default=5),

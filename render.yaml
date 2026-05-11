@@ -44,7 +44,7 @@ services:
         value: gpt-4.1-mini
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_PUBLISHABLE_KEY
+      - key: SUPABASE_SERVICE_KEY
         sync: false
       # Google Cloud Speech-to-Text: set in Render dashboard (Secret where needed).
       - key: GOOGLE_APPLICATION_CREDENTIALS

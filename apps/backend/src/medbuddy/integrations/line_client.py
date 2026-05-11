@@ -1,4 +1,4 @@
-"""LINE Messaging API client — ``line-bot-sdk`` v3 when MOCK_EXTERNAL_SERVICES=false."""
+"""LINE Messaging API client — ``line-bot-sdk`` v3 (production integrations)."""
 
 from __future__ import annotations
 

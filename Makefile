@@ -120,7 +120,6 @@ be-dev: be-dev-mock ## Uvicorn + reload (mock integrations; same as be-dev-mock)
 be-dev-mock: be-install ## Uvicorn + reload, MEDBUDDY_INTEGRATION=mock
 	@$(call banner,Uvicorn http://127.0.0.1:$(PORT) $(DIM)[mock · Ctrl+C]$(NO))
 	@export MEDBUDDY_INTEGRATION=mock; \
-	 export MOCK_EXTERNAL_SERVICES=true; \
 	 export LINE_CHANNEL_SECRET=$${LINE_CHANNEL_SECRET:-}; \
 	 $(UVICORN) medbuddy.main:app --reload --host 127.0.0.1 --port $(PORT)
 
@@ -135,7 +134,6 @@ be-run: be-dev ## Alias for be-dev
 be-run-prod: be-install ## Uvicorn without reload (mock)
 	@$(call banner,Uvicorn no-reload http://127.0.0.1:$(PORT) $(DIM)[mock]$(NO))
 	@export MEDBUDDY_INTEGRATION=mock; \
-	 export MOCK_EXTERNAL_SERVICES=true; \
 	 $(UVICORN) medbuddy.main:app --host 127.0.0.1 --port $(PORT)
 
 be-run-prod-production: be-install ## Uvicorn without reload (production integrations)
