@@ -90,7 +90,7 @@ async def test_orchestrator_text_message_runs_assistant(mock_settings):
     )
     line = svc.line
     assert hasattr(line, "replies")
-    assert not line.loading_indicators  # type: ignore[attr-defined]
+    assert line.loading_indicators == [{"user_id": "Uabc", "seconds": 30}]  # type: ignore[attr-defined]
     assert len(line.replies) == 1
     assert line.replies[0]["type"] == "batch"  # type: ignore[index]
     msgs = line.replies[0]["messages"]  # type: ignore[index]
@@ -180,6 +180,7 @@ async def test_orchestrator_text_always_voice_sends_text_and_audio(mock_settings
         },
         svc,
     )
+    assert svc.line.loading_indicators == [{"user_id": "Uabc", "seconds": 30}]  # type: ignore[attr-defined]
     msgs = svc.line.replies[0]["messages"]  # type: ignore[index]
     assert len(msgs) == 2
     assert msgs[0]["type"] == "text"
