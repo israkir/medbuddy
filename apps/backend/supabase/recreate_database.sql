@@ -259,78 +259,13 @@ alter table public.drug_reference_cache enable row level security;
 alter table public.drug_personalization_cache enable row level security;
 alter table public.emergency_contacts enable row level security;
 
+-- The backend exclusively uses service_role (bypasses RLS). No anon policies.
+-- Anon/authenticated roles have no table access via PostgREST.
 drop policy if exists "medbuddy_patients_anon_rw" on public.patients;
-create policy "medbuddy_patients_anon_rw"
-    on public.patients
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_medications_anon_rw" on public.medications;
-create policy "medbuddy_medications_anon_rw"
-    on public.medications
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_conversation_turns_anon_rw" on public.conversation_turns;
-create policy "medbuddy_conversation_turns_anon_rw"
-    on public.conversation_turns
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_dose_events_anon_rw" on public.dose_events;
-create policy "medbuddy_dose_events_anon_rw"
-    on public.dose_events
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_health_issue_events_anon_rw" on public.health_issue_events;
-create policy "medbuddy_health_issue_events_anon_rw"
-    on public.health_issue_events
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_drug_reference_cache_anon_rw" on public.drug_reference_cache;
-create policy "medbuddy_drug_reference_cache_anon_rw"
-    on public.drug_reference_cache
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_drug_personalization_cache_anon_rw" on public.drug_personalization_cache;
-create policy "medbuddy_drug_personalization_cache_anon_rw"
-    on public.drug_personalization_cache
-    for all
-    to anon
-    using (true)
-    with check (true);
-
 drop policy if exists "medbuddy_emergency_contacts_anon_rw" on public.emergency_contacts;
-create policy "medbuddy_emergency_contacts_anon_rw"
-    on public.emergency_contacts
-    for all
-    to anon
-    using (true)
-    with check (true);
-
-grant usage on schema public to anon, authenticated;
-
-grant select, insert, update, delete on table public.patients to anon, authenticated;
-grant select, insert, update, delete on table public.emergency_contacts to anon, authenticated;
-grant select, insert, update, delete on table public.medications to anon, authenticated;
-grant select, insert, update, delete on table public.conversation_turns to anon, authenticated;
-grant usage, select on sequence public.conversation_turns_id_seq to anon, authenticated;
-grant select, insert, update, delete on table public.dose_events to anon, authenticated;
-grant select, insert, update, delete on table public.health_issue_events to anon, authenticated;
-grant select, insert, update, delete on table public.drug_reference_cache to anon, authenticated;
-grant select, insert, update, delete on table public.drug_personalization_cache to anon, authenticated;

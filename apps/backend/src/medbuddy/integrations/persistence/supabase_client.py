@@ -24,4 +24,5 @@ def create_supabase_client(settings: Settings) -> Any:
         http2=False,
     )
     options = ClientOptions(httpx_client=http_client)
-    return create_client(settings.supabase_url, settings.supabase_publishable_key, options)
+    key = settings.supabase_service_key or settings.supabase_publishable_key
+    return create_client(settings.supabase_url, key, options)

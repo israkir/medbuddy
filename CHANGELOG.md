@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Supabase RLS tightened:** All eight tables now deny access to the `anon` and `authenticated` roles. The backend exclusively uses `SUPABASE_SERVICE_KEY` (service_role), which bypasses RLS without requiring explicit policies. Legacy open `using (true)` policies are dropped by `supabase/migrations/restrict_rls_to_service_role.sql`. `SUPABASE_PUBLISHABLE_KEY` is retained in config for local tooling but is no longer used by the server.
+- **Constant-time cron secret comparison:** `POST /internal/reminders/reconcile` now uses `secrets.compare_digest` for the `X-Cron-Secret` header check, matching the pattern already used for `MEDBUDDY_MOBILE_BEARER_TOKEN`.
+
+### Added
+
+- **Fail-closed startup validation:** When `MEDBUDDY_INTEGRATION=real`, the app raises `ConfigError` at startup if any required secret is absent (`MEDBUDDY_MOBILE_BEARER_TOKEN`, `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `MEDBUDDY_CRON_SECRET`, and the active LLM API key). The container exits immediately instead of booting to a degraded 503-per-request state.
+- **Global exception handler + request ID:** All unhandled exceptions return `{"code": "internal_error", "request_id": "<uuid>"}` with HTTP 500 — no raw tracebacks leak to clients. A `RequestIdMiddleware` stamps each request with a UUID available in logs and the `X-Request-Id` response header.
+- **CORS middleware:** `CORSMiddleware` is active when `CORS_ALLOWED_ORIGINS` is set (comma-separated list). Applies to `GET`/`POST` with `Authorization`, `Content-Type`, `X-App-User-Id`, and `X-MedBuddy-Locale` headers. Defaults to off (empty list).
+- **Hardened Docker runtime:** `docker-entrypoint-web.sh` now passes `--proxy-headers`, `--forwarded-allow-ips='*'`, `--workers ${WEB_CONCURRENCY:-2}`, and `--timeout-graceful-shutdown 25` to uvicorn. `Dockerfile` adds a non-root `medbuddy` system user and a `HEALTHCHECK` against `GET /health`.
+
 ### Added
 
 - **Supabase row timestamps:** `patients`, `medications`, `dose_events`, and `drug_reference_cache` now have `created_at` / `updated_at` (`fetched_at` on reference cache unchanged). `medbuddy_touch_updated_at()` plus `BEFORE UPDATE` triggers keep `updated_at` current on those tables and on `emergency_contacts` / `drug_personalization_cache`. Append-only `conversation_turns` and `health_issue_events` stay `created_at`-only. `apps/backend/supabase/schema.sql` tail adds columns for existing installs and backfills reference-cache timestamps from `fetched_at`; `recreate_database.sql` mirrors full DDL.
@@ -21,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dose reminders (arq):** Building LLM patient context no longer runs `sync_upcoming_dose_events` by default, so chat turns do not delete/recreate future `dose_events` rows and orphan deferred `send_reminder_for_dose` jobs in Redis. `ListUpcomingDosesTool` uses `sync_and_enqueue_reminders` so explicitly listing upcoming doses refreshes jobs. Stale-id skips are logged at INFO.
 - **Voice/text assistant persistence:** `Intent.UPDATE_PROFILE` now applies `extract_profile_patch` + `patch_user_profile` before the tool loop, and the planner is given a filtered tool list (no `update_profile`) plus a system hint when a patch was saved — so demographics from speech or chat persist even when the chat model returns prose only. Classifier adherence slots (`record_pending_dose_as_taken`, `dose_adherence_note`) are merged into `confirm_dose` execution; when the planner calls `report_side_effects` without `confirm_dose` but the classifier recorded dose + note (e.g. took pill and feels dizzy), the server runs a mechanical `confirm_dose` pass so dose rows stay accurate.
 - **Drug reference cache:** Follow-ups like “sure” / 「好」 are no longer passed verbatim to OpenFDA or stored under junk `drug_reference_cache.query_key` values. `explain_medication` and `interaction_check` accept optional `drug_query` / `medication_id`; the server resolves weak user text using recent assistant turns and catalog names (plus a small vitamin C fallback when the drug is only mentioned in chat). `add_medication` draft extraction receives a short **redacted** recent-thread excerpt for the same reason, so confirmations after an add/reminder offer still ground drug name and timing. `CachingDrugData` also refuses weak keys so stray callers cannot populate the shared cache with stopwords.
-- **Supabase schema:** `apps/backend/supabase/schema.sql` now includes explicit `GRANT` for `anon` / `authenticated` on MedBuddy tables (and `conversation_turns_id_seq`). Without these, PostgREST returns `42501 permission denied for table patients` when the backend uses `SUPABASE_PUBLISHABLE_KEY`.
 
 ### Changed
 

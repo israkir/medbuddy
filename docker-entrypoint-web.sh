@@ -10,7 +10,12 @@ if [ -n "${REDIS_URL:-}" ]; then
   WORKER_PID=$!
 fi
 
-uvicorn medbuddy.main:app --host 0.0.0.0 --port "$PORT" &
+uvicorn medbuddy.main:app \
+  --host 0.0.0.0 --port "$PORT" \
+  --proxy-headers \
+  --forwarded-allow-ips='*' \
+  --workers "${WEB_CONCURRENCY:-2}" \
+  --timeout-graceful-shutdown 25 &
 UVICORN_PID=$!
 
 terminate() {

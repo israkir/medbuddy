@@ -68,7 +68,8 @@ class Settings:
     openai_model: str
 
     supabase_url: str
-    supabase_publishable_key: str
+    supabase_service_key: str
+    supabase_publishable_key: str  # kept for local dev / anon reads; backend uses service_key in real mode
 
     google_speech_project_id: str
     google_speech_location: str
@@ -91,6 +92,7 @@ class Settings:
     health_issue_log_intents: tuple[str, ...] | None
     health_issue_summary_events_limit: int
 
+    cors_allowed_origins: tuple[str, ...] = field(default_factory=tuple)
     reminder_nudge_intervals_minutes: tuple[int, ...] = field(default_factory=tuple)
 
     @property
@@ -153,6 +155,13 @@ def _optional_health_issue_log_intents(env: Mapping[str, str]) -> tuple[str, ...
         return ("all_non_off_topic",)
     parts = tuple(p.strip() for p in raw.split(",") if p.strip())
     return parts if parts else None
+
+
+def _cors_origins(env: Mapping[str, str]) -> tuple[str, ...]:
+    raw = env.get("CORS_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ()
+    return tuple(o.strip() for o in raw.split(",") if o.strip())
 
 
 def _nudge_intervals(env: Mapping[str, str], key: str) -> tuple[int, ...]:
@@ -222,10 +231,34 @@ def _line_voice_replies(env: Mapping[str, str]) -> str:
     raise ConfigError(msg)
 
 
+def _assert_real_mode_secrets(env: Mapping[str, str], llm_provider: LlmProvider) -> None:
+    """Raise ConfigError at startup if any secret required in real mode is absent."""
+    required: list[tuple[str, str]] = [
+        ("MEDBUDDY_MOBILE_BEARER_TOKEN", "mobile bearer token for /v1/app/* auth"),
+        ("LINE_CHANNEL_SECRET", "LINE webhook signature verification"),
+        ("LINE_CHANNEL_ACCESS_TOKEN", "LINE messaging API"),
+        ("SUPABASE_URL", "Supabase project URL"),
+        ("SUPABASE_SERVICE_KEY", "Supabase service-role key (bypasses RLS)"),
+        ("MEDBUDDY_CRON_SECRET", "cron reconcile endpoint auth"),
+    ]
+    llm_key = "GEMINI_API_KEY" if llm_provider == LlmProvider.GEMINI else "OPENAI_API_KEY"
+    required.append((llm_key, f"LLM API key for provider={llm_provider.value}"))
+
+    missing = [desc for var, desc in required if not env.get(var, "").strip()]
+    if missing:
+        joined = "; ".join(missing)
+        msg = f"Missing required secrets for real mode: {joined}"
+        raise ConfigError(msg)
+
+
 def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
     """Build Settings from environment variables. Raises ConfigError on invalid values."""
+    integration_mode = _integration_mode(env)
+    llm_provider = _llm_provider(env)
+    if integration_mode == IntegrationMode.REAL:
+        _assert_real_mode_secrets(env, llm_provider)
     return Settings(
-        integration_mode=_integration_mode(env),
+        integration_mode=integration_mode,
         locale=_locale(env),
         log_level=_str(env, "LOG_LEVEL", "INFO"),
         debug=_bool(env, "DEBUG"),
@@ -233,12 +266,13 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         line_channel_access_token=_str(env, "LINE_CHANNEL_ACCESS_TOKEN"),
         line_voice_replies=_line_voice_replies(env),
         public_base_url=_str(env, "PUBLIC_BASE_URL", "http://localhost:8000"),
-        llm_provider=_llm_provider(env),
+        llm_provider=llm_provider,
         gemini_api_key=_str(env, "GEMINI_API_KEY"),
         gemini_model=_str(env, "GEMINI_MODEL", "gemini-2.5-flash"),
         openai_api_key=_str(env, "OPENAI_API_KEY"),
         openai_model=_str(env, "OPENAI_MODEL", "gpt-4.1-mini"),
         supabase_url=_str(env, "SUPABASE_URL"),
+        supabase_service_key=_str(env, "SUPABASE_SERVICE_KEY"),
         supabase_publishable_key=_str(env, "SUPABASE_PUBLISHABLE_KEY"),
         google_speech_project_id=_str(env, "GOOGLE_SPEECH_PROJECT_ID"),
         google_speech_location=_str(env, "GOOGLE_SPEECH_LOCATION", "global"),
@@ -285,6 +319,7 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         reminder_nudge_intervals_minutes=_nudge_intervals(
             env, "MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES"
         ),
+        cors_allowed_origins=_cors_origins(env),
     )
 
 
