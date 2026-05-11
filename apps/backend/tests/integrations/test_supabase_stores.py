@@ -2,18 +2,30 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
 
 from medbuddy.config import load_settings
+from medbuddy.core.errors import ConfigError
 from medbuddy.integrations.persistence.supabase_client import create_supabase_client
 from medbuddy.integrations.persistence.supabase_conversations import SupabaseConversationStore
 from medbuddy.integrations.persistence.supabase_dose_events import _parse_ts
 from medbuddy.integrations.persistence.supabase_profile import _user_row_to_dict
 from medbuddy.integrations.persistence.supabase_stores import SupabaseUserData
 from medbuddy.models.domain import ConversationTurn, MedicationDraft
+
+
+def _b64url_json(obj: object) -> str:
+    raw = json.dumps(obj, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _fake_jwt(payload: dict[str, object]) -> str:
+    return f"{_b64url_json({'alg': 'none'})}.{_b64url_json(payload)}.sig"
 
 
 def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,13 +45,76 @@ def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) 
         load_settings(
             {
                 "SUPABASE_URL": "https://example.supabase.co",
-                "SUPABASE_SERVICE_KEY": "service-role-key",
+                "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "service_role"}),
                 "SUPABASE_PUBLISHABLE_KEY": "anon-key",
             }
         )
     )
     assert kwargs_captured.get("http2") is False
     assert kwargs_captured.get("follow_redirects") is True
+
+
+def test_create_supabase_client_rejects_anon_jwt_role() -> None:
+    with pytest.raises(ConfigError, match="service_role"):
+        create_supabase_client(
+            load_settings(
+                {
+                    "SUPABASE_URL": "https://example.supabase.co",
+                    "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "anon"}),
+                }
+            )
+        )
+
+
+def test_create_supabase_client_rejects_authenticated_jwt_role() -> None:
+    with pytest.raises(ConfigError, match="service_role"):
+        create_supabase_client(
+            load_settings(
+                {
+                    "SUPABASE_URL": "https://example.supabase.co",
+                    "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "authenticated"}),
+                }
+            )
+        )
+
+
+def test_create_supabase_client_rejects_non_service_jwt_role() -> None:
+    with pytest.raises(ConfigError, match="service_role"):
+        create_supabase_client(
+            load_settings(
+                {
+                    "SUPABASE_URL": "https://example.supabase.co",
+                    "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "supabase_admin"}),
+                }
+            )
+        )
+
+
+def test_create_supabase_client_rejects_jwt_missing_role_claim() -> None:
+    with pytest.raises(ConfigError, match="service_role"):
+        create_supabase_client(
+            load_settings(
+                {
+                    "SUPABASE_URL": "https://example.supabase.co",
+                    "SUPABASE_SERVICE_KEY": _fake_jwt({"sub": "x"}),
+                }
+            )
+        )
+
+
+def test_create_supabase_client_accepts_service_role_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("supabase")
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MagicMock())
+    monkeypatch.setattr("supabase.create_client", lambda *a, **k: MagicMock())
+    create_supabase_client(
+        load_settings(
+            {
+                "SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_SERVICE_KEY": _fake_jwt({"role": "service_role"}),
+                "SUPABASE_PUBLISHABLE_KEY": "anon-key",
+            }
+        )
+    )
 
 
 def test_user_row_to_dict_maps_external_id_to_line_user_id_key() -> None:

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Supabase RLS tightened:** All eight tables now deny access to the `anon` and `authenticated` roles. The backend exclusively uses `SUPABASE_SERVICE_KEY` (service_role), which bypasses RLS without requiring explicit policies. Legacy open `using (true)` policies are dropped by `supabase/migrations/restrict_rls_to_service_role.sql`. `SUPABASE_PUBLISHABLE_KEY` is retained in config for local tooling but is no longer used by the server.
 - **Supabase service-key fail-closed:** `create_supabase_client` now raises `ConfigError` if `SUPABASE_SERVICE_KEY` is absent, regardless of integration mode. Previously it silently fell back to the publishable/anon key, causing confusing 4xx errors under the new closed-RLS policies.
+- **Supabase JWT role guard:** If `SUPABASE_SERVICE_KEY` is JWT-shaped (three segments), client creation decodes the payload and requires `role` exactly `service_role` (Supabase service_role secret). Any other role, a missing `role`, or an undecodable payload raises `ConfigError` at startup instead of PostgREST `42501 permission denied for table patients` on first use.
 - **Constant-time cron secret comparison:** `POST /internal/reminders/reconcile` now uses `secrets.compare_digest` for the `X-Cron-Secret` header check, matching the pattern already used for `MEDBUDDY_MOBILE_BEARER_TOKEN`.
 
 ### Fixed
