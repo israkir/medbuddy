@@ -260,6 +260,99 @@ async def test_follow_sends_welcome_text(mock_settings):
 
 
 @pytest.mark.asyncio
+async def test_follow_seeds_zhtw_locale_from_line_profile_language(mock_settings):
+    """LINE profile language 'zh-TW' stores zh-TW locale and sends Chinese welcome."""
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    uid = "U-follow-locale-zh"
+    svc.line.seed_user_profile(uid, {"userId": uid, "displayName": "測試", "language": "zh-TW"})  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "follow",
+            "replyToken": "rt",
+            "source": {"userId": uid, "type": "user"},
+            "follow": {"isUnblocked": False},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAA",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    row = await svc.users.get_or_create_user(uid)
+    assert row["locale"] == "zh-TW"
+    msgs = svc.line.replies[-1]["messages"]  # type: ignore[index]
+    assert msgs[0]["type"] == "text"
+    # zh-TW welcome should NOT start with the English opener
+    assert not str(msgs[0]["text"]).startswith("Welcome to MedBuddy")
+
+
+@pytest.mark.asyncio
+async def test_follow_unknown_language_falls_back_to_default_locale(mock_settings):
+    """LINE profile language tag not in supported set falls back to zh-TW (the default)."""
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    uid = "U-follow-locale-ja"
+    svc.line.seed_user_profile(uid, {"userId": uid, "displayName": "太郎", "language": "ja"})  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "follow",
+            "replyToken": "rt",
+            "source": {"userId": uid, "type": "user"},
+            "follow": {"isUnblocked": False},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    row = await svc.users.get_or_create_user(uid)
+    # 'ja' is not supported → falls back to zh-TW
+    assert row["locale"] == "zh-TW"
+    msgs = svc.line.replies[-1]["messages"]  # type: ignore[index]
+    assert msgs[0]["type"] == "text"
+    assert not str(msgs[0]["text"]).startswith("Welcome to MedBuddy")
+
+
+@pytest.mark.asyncio
+async def test_follow_no_profile_language_uses_stored_locale(mock_settings):
+    """If LINE profile has no language field, stored locale is unchanged."""
+    svc: AppServices = __import__(
+        "medbuddy.container",
+        fromlist=["build_app_services"],
+    ).build_app_services(mock_settings)
+    uid = "U-follow-no-lang"
+    # Profile without a language key
+    svc.line.seed_user_profile(uid, {"userId": uid, "displayName": "User"})  # type: ignore[attr-defined]
+
+    await handle_line_event(
+        {
+            "type": "follow",
+            "replyToken": "rt",
+            "source": {"userId": uid, "type": "user"},
+            "follow": {"isUnblocked": False},
+            "timestamp": 1_704_000_000_000,
+            "mode": "active",
+            "webhookEventId": "01ARZ3NDEKTSV4RRFFQ69G5FAC",
+            "deliveryContext": {"isRedelivery": False},
+        },
+        svc,
+    )
+    row = await svc.users.get_or_create_user(uid)
+    # No language hint → default locale (zh-TW from mock_settings)
+    assert row["locale"] == "zh-TW"
+    msgs = svc.line.replies[-1]["messages"]  # type: ignore[index]
+    assert msgs[0]["type"] == "text"
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_audio_stt_error_replies_with_generic_error(mock_settings):
     svc: AppServices = __import__(
         "medbuddy.container",

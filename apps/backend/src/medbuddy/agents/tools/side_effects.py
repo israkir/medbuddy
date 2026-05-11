@@ -29,6 +29,7 @@ from medbuddy.core.i18n import t
 from medbuddy.models.domain import ConversationTurn, MedicationRecord
 from medbuddy.privacy.redact import redact_conversation_turns_for_llm, redact_pii_text
 from medbuddy.application.patient_llm_context import patient_context_for_llm
+from medbuddy.application.drug_grounding import fetch_drug_grounding_text
 from medbuddy.llm.prompts.persona import get_system_persona
 
 log = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ class ReportSideEffectsTool:
         )
 
         # Fetch drug grounding (best-effort; proceed without it if unavailable)
-        drug_grounding = await _fetch_grounding(svc, user_text, locale)
+        drug_grounding = await fetch_drug_grounding_text(svc, user_text)
 
         side_effect_persona = (
             f"{get_system_persona(locale=locale)}\n\n"
@@ -80,22 +81,3 @@ class ReportSideEffectsTool:
         )
 
         return ToolResult(reply=reply, metadata={"intent": "report_side_effects"})
-
-
-async def _fetch_grounding(svc: AppServices, user_text: str, locale: str) -> str | None:
-    """Fetch OpenFDA + TFDA snippets; return combined text or None."""
-    _ = locale
-    parts: list[str] = []
-    try:
-        tfda = await svc.drugs.fetch_tfda_snippet(user_text.strip())
-        if tfda:
-            parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
-    except Exception:
-        log.debug("side_effects: TFDA fetch failed")
-    try:
-        ofda = await svc.drugs.fetch_openfda_label_snippet(user_text.strip())
-        if ofda:
-            parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
-    except Exception:
-        log.debug("side_effects: OpenFDA fetch failed")
-    return "\n\n".join(parts) if parts else None

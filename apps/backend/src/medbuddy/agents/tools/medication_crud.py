@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -110,9 +111,12 @@ class ListMedicationsTool:
         if not medications:
             return ToolResult(reply=t("medication.list_empty", locale=locale))
         body = format_patient_medication_context(medications, locale=locale)
+        top_meds = medications[:2]
+        groundings = await asyncio.gather(
+            *(fetch_drug_grounding_text(svc, m.name) for m in top_meds)
+        )
         purpose_tags: list[str] = []
-        for med in medications[:2]:
-            grounding = await fetch_drug_grounding_text(svc, med.name)
+        for med, grounding in zip(top_meds, groundings):
             purpose = purpose_from_grounding(grounding)
             if purpose:
                 purpose_tags.append(

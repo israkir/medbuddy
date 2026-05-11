@@ -33,6 +33,7 @@ def test_create_supabase_client_disables_http2(monkeypatch: pytest.MonkeyPatch) 
         load_settings(
             {
                 "SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_SERVICE_KEY": "service-role-key",
                 "SUPABASE_PUBLISHABLE_KEY": "anon-key",
             }
         )

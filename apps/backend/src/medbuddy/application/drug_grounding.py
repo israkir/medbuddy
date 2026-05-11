@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from medbuddy.core.i18n import t
 from medbuddy.services import AppServices
@@ -10,23 +11,31 @@ log = logging.getLogger(__name__)
 
 
 async def fetch_drug_grounding_text(svc: AppServices, drug_name: str) -> str | None:
-    """Fetch combined TFDA + OpenFDA grounding text for a drug name."""
+    """Fetch combined TFDA + OpenFDA grounding text for a drug name (parallel fetch)."""
     q = drug_name.strip()
     if not q:
         return None
+
+    async def _safe_tfda():
+        try:
+            return await svc.drugs.fetch_tfda_snippet(q)
+        except Exception:
+            log.debug("drug_grounding: TFDA lookup failed query_len=%d", len(q))
+            return None
+
+    async def _safe_ofda():
+        try:
+            return await svc.drugs.fetch_openfda_label_snippet(q)
+        except Exception:
+            log.debug("drug_grounding: OpenFDA lookup failed query_len=%d", len(q))
+            return None
+
+    tfda, ofda = await asyncio.gather(_safe_tfda(), _safe_ofda())
     parts: list[str] = []
-    try:
-        tfda = await svc.drugs.fetch_tfda_snippet(q)
-        if tfda:
-            parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
-    except Exception:
-        log.debug("drug_grounding: TFDA lookup failed query_len=%d", len(q))
-    try:
-        ofda = await svc.drugs.fetch_openfda_label_snippet(q)
-        if ofda:
-            parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
-    except Exception:
-        log.debug("drug_grounding: OpenFDA lookup failed query_len=%d", len(q))
+    if tfda:
+        parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")
+    if ofda:
+        parts.append(f"{ofda.source}: {ofda.title}\n{ofda.body_zh}")
     return "\n\n".join(parts) if parts else None
 
 

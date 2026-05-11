@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -135,16 +136,21 @@ async def _fetch_grounding(
     ref_cache_id: str | None = None
     source: str | None = None
 
-    try:
-        tfda = await svc.drugs.fetch_tfda_snippet(q)
-    except Exception:
-        log.debug("drug_lookup: TFDA fetch failed query_len=%d", len(q))
-        tfda = None
-    try:
-        ofda = await svc.drugs.fetch_openfda_label_snippet(q)
-    except Exception:
-        log.debug("drug_lookup: OpenFDA fetch failed query_len=%d", len(q))
-        ofda = None
+    async def _safe_tfda():
+        try:
+            return await svc.drugs.fetch_tfda_snippet(q)
+        except Exception:
+            log.debug("drug_lookup: TFDA fetch failed query_len=%d", len(q))
+            return None
+
+    async def _safe_ofda():
+        try:
+            return await svc.drugs.fetch_openfda_label_snippet(q)
+        except Exception:
+            log.debug("drug_lookup: OpenFDA fetch failed query_len=%d", len(q))
+            return None
+
+    tfda, ofda = await asyncio.gather(_safe_tfda(), _safe_ofda())
 
     if tfda:
         parts.append(f"{tfda.source}: {tfda.title}\n{tfda.body_zh}")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import random
 import urllib.parse
 from typing import Any
 
@@ -11,6 +13,8 @@ from medbuddy.models.domain import DrugGrounding
 from medbuddy.protocols import DrugDataPort
 
 _LABEL_SECTION_MAX = 2000
+_DRUG_TIMEOUT = httpx.Timeout(connect=3.0, read=4.0, write=3.0, pool=3.0)
+_RETRY_JITTER = (0.1, 0.4)
 
 
 def _stringify_label_section(block: object, *, max_len: int = _LABEL_SECTION_MAX) -> str | None:
@@ -37,15 +41,31 @@ def _openfda_display_title(first: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
+async def _get_with_retry(
+    http: httpx.AsyncClient | None,
+    url: str,
+) -> httpx.Response:
+    """GET the URL with one retry on transient failures, with jitter between attempts."""
+    for attempt in range(2):
+        try:
+            if http is not None:
+                return await http.get(url, timeout=_DRUG_TIMEOUT)
+            async with httpx.AsyncClient() as client:
+                return await client.get(url, timeout=_DRUG_TIMEOUT)
+        except (httpx.TimeoutException, httpx.ConnectError):
+            if attempt == 0:
+                await asyncio.sleep(random.uniform(*_RETRY_JITTER))
+            else:
+                raise
+
+
 class HttpDrugData(DrugDataPort):
     def __init__(
         self,
         *,
-        timeout: float = 20.0,
         locale: str = "zh-TW",
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self._timeout = timeout
         self._locale = locale
         self._http = http_client
 
@@ -55,11 +75,7 @@ class HttpDrugData(DrugDataPort):
             "https://api.fda.gov/drug/label.json?"
             f"search=openfda.brand_name:{q}+OR+openfda.generic_name:{q}&limit=1"
         )
-        if self._http is not None:
-            r = await self._http.get(url, timeout=self._timeout)
-        else:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                r = await client.get(url)
+        r = await _get_with_retry(self._http, url)
         if r.status_code != 200:
             return None
         data = r.json()
