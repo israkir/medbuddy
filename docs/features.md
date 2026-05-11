@@ -367,7 +367,7 @@ When `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set and the `supabase` extra 
 
 **Configuration**
 
-- `MEDBUDDY_INTEGRATION` and per-env tokens drive `build_app_services` in `container.py`. On Render (`RENDER=true`), `load_settings()` forces `real` mode regardless of env.
+- `MEDBUDDY_INTEGRATION` and per-env tokens drive `build_app_services` in `container.py`. On Render (`RENDER=true`), `load_settings()` forces `production` mode regardless of env.
 
 ---
 

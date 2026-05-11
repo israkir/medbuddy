@@ -22,7 +22,7 @@ def test_mock_integration_mode() -> None:
 
 
 def _real_secrets() -> dict[str, str]:
-    """Minimal env dict satisfying fail-closed real-mode validation."""
+    """Minimal env dict satisfying fail-closed production-mode validation."""
     return {
         "MEDBUDDY_MOBILE_BEARER_TOKEN": "tok",
         "LINE_CHANNEL_SECRET": "sec",
@@ -36,24 +36,23 @@ def _real_secrets() -> dict[str, str]:
     }
 
 
-def test_real_integration_mode() -> None:
-    s = load_settings({"MEDBUDDY_INTEGRATION": "real", **_real_secrets()})
-    assert s.integration_mode == IntegrationMode.REAL
+def test_production_integration_mode() -> None:
+    s = load_settings({"MEDBUDDY_INTEGRATION": "production", **_real_secrets()})
+    assert s.integration_mode == IntegrationMode.PRODUCTION
     assert s.is_mock is False
 
 
-def test_real_mode_missing_secrets_raises_at_startup() -> None:
+def test_production_mode_missing_secrets_raises_at_startup() -> None:
     with pytest.raises(ConfigError, match="Missing required secrets"):
-        load_settings({"MEDBUDDY_INTEGRATION": "real"})
+        load_settings({"MEDBUDDY_INTEGRATION": "production"})
 
 
 def test_integration_mode_aliases() -> None:
     for alias in ("local", "dev"):
         s = load_settings({"MEDBUDDY_INTEGRATION": alias})
         assert s.is_mock is True
-    for alias in ("live", "production"):
-        s = load_settings({"MEDBUDDY_INTEGRATION": alias, **_real_secrets()})
-        assert s.is_mock is False
+    s = load_settings({"MEDBUDDY_INTEGRATION": "production", **_real_secrets()})
+    assert s.is_mock is False
 
 
 def test_legacy_mock_external_services_true_maps_to_mock_mode() -> None:
@@ -62,9 +61,9 @@ def test_legacy_mock_external_services_true_maps_to_mock_mode() -> None:
     assert s.is_mock is True
 
 
-def test_legacy_mock_external_services_false_maps_to_real_mode() -> None:
+def test_legacy_mock_external_services_false_maps_to_production_mode() -> None:
     s = load_settings({"MOCK_EXTERNAL_SERVICES": "false", **_real_secrets()})
-    assert s.integration_mode == IntegrationMode.REAL
+    assert s.integration_mode == IntegrationMode.PRODUCTION
     assert s.is_mock is False
 
 

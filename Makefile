@@ -49,7 +49,7 @@ printf '%b\n' "$(ORANGE)$(BOLD)!$(NO) $(1)"
 endef
 
 .PHONY: help \
-	be-venv be-install be-dev be-dev-mock be-dev-real be-run be-run-prod be-run-prod-real \
+	be-venv be-install be-dev be-dev-mock be-dev-production be-run be-run-prod be-run-prod-production \
 	be-test be-test-verbose be-test-cov be-lint be-fmt be-check \
 	be-compose be-build be-clean be-clean-all \
 	fe-install fe-dev fe-dev-mock fe-dev-api fe-build fe-run-ios fe-run-android fe-lint fe-check fe-test \
@@ -80,7 +80,7 @@ help: ## Show this help (default)
 	} \
 	' $(MAKEFILE_LIST)
 	@printf '%b\n' ""
-	@printf '%b\n' "$(DIM)Backend:$(NO) $(BLUE)make be-install$(NO) -> $(BLUE)make be-dev$(NO) $(DIM)(mock)$(NO) or $(BLUE)make be-dev-real$(NO) $(DIM)(loads .env)$(NO) -> $(BLUE)make be-test$(NO)"
+	@printf '%b\n' "$(DIM)Backend:$(NO) $(BLUE)make be-install$(NO) -> $(BLUE)make be-dev$(NO) $(DIM)(mock)$(NO) or $(BLUE)make be-dev-production$(NO) $(DIM)(loads .env)$(NO) -> $(BLUE)make be-test$(NO)"
 	@printf '%b\n' "$(DIM)Frontend:$(NO) $(BLUE)make fe-install$(NO) -> $(BLUE)make fe-dev$(NO) / $(BLUE)make fe-dev-api$(NO) $(DIM)(Expo)$(NO)"
 	@printf '%b\n' "$(DIM)Git hooks:$(NO) $(BLUE)make pre-commit-install$(NO) $(DIM)(after be-install); $(BLUE)make pre-commit-run$(NO) $(DIM)(also runs fe-install for frontend hooks)$(NO)"
 
@@ -114,7 +114,7 @@ be-install: be-venv ## pip install -e apps/backend[dev]
 
 ##@ Backend — run API
 
-# Force mock mode so repo/.env with MEDBUDDY_INTEGRATION=real does not affect local dev by mistake.
+# Force mock mode so repo/.env with MEDBUDDY_INTEGRATION=production does not affect local dev by mistake.
 be-dev: be-dev-mock ## Uvicorn + reload (mock integrations; same as be-dev-mock)
 
 be-dev-mock: be-install ## Uvicorn + reload, MEDBUDDY_INTEGRATION=mock
@@ -124,10 +124,10 @@ be-dev-mock: be-install ## Uvicorn + reload, MEDBUDDY_INTEGRATION=mock
 	 export LINE_CHANNEL_SECRET=$${LINE_CHANNEL_SECRET:-}; \
 	 $(UVICORN) medbuddy.main:app --reload --host 127.0.0.1 --port $(PORT)
 
-be-dev-real: be-install ## Uvicorn + reload, real adapters (read LINE/Gemini/etc. from .env)
-	@$(call warn,Using MEDBUDDY_INTEGRATION=real — ensure apps/backend/.env has tokens and keys)
-	@$(call banner,Uvicorn http://127.0.0.1:$(PORT) $(DIM)[real · Ctrl+C]$(NO))
-	@export MEDBUDDY_INTEGRATION=real; \
+be-dev-production: be-install ## Uvicorn + reload, production adapters (read LINE/Gemini/etc. from .env)
+	@$(call warn,Using MEDBUDDY_INTEGRATION=production — ensure apps/backend/.env has tokens and keys)
+	@$(call banner,Uvicorn http://127.0.0.1:$(PORT) $(DIM)[production · Ctrl+C]$(NO))
+	@export MEDBUDDY_INTEGRATION=production; \
 	 $(UVICORN) medbuddy.main:app --reload --host 127.0.0.1 --port $(PORT)
 
 be-run: be-dev ## Alias for be-dev
@@ -138,9 +138,9 @@ be-run-prod: be-install ## Uvicorn without reload (mock)
 	 export MOCK_EXTERNAL_SERVICES=true; \
 	 $(UVICORN) medbuddy.main:app --host 127.0.0.1 --port $(PORT)
 
-be-run-prod-real: be-install ## Uvicorn without reload (real integrations)
-	@$(call warn,Using MEDBUDDY_INTEGRATION=real — ensure apps/backend/.env is configured)
-	@export MEDBUDDY_INTEGRATION=real; \
+be-run-prod-production: be-install ## Uvicorn without reload (production integrations)
+	@$(call warn,Using MEDBUDDY_INTEGRATION=production — ensure apps/backend/.env is configured)
+	@export MEDBUDDY_INTEGRATION=production; \
 	 $(UVICORN) medbuddy.main:app --host 127.0.0.1 --port $(PORT)
 
 ##@ Backend — tests and quality

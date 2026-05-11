@@ -20,13 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Drug-registry parallel fetches:** TFDA and OpenFDA requests in `fetch_drug_grounding_text`, `ExplainMedicationTool`, and `ListMedicationsTool` now run concurrently via `asyncio.gather` instead of sequentially, cutting ~200–400 ms per tool call. Per-medication groundings in `list_medications` are also gathered in parallel.
 - **Drug-grounding helper deduplicated:** `side_effects._fetch_grounding` was an inline copy of `drug_grounding.fetch_drug_grounding_text`; it now delegates to the canonical helper, removing ~15 lines of duplicate logic.
 - **Drug-registry timeouts and retry:** `HttpDrugData` uses a structured `httpx.Timeout(connect=3, read=4, write=3, pool=3)` and retries once with random jitter on `TimeoutException` / `ConnectError`. Dropped the unused `timeout: float` constructor parameter.
-- **`outbound_http` single-owner:** `build_app_services` now raises `ConfigError` in real mode when `outbound_http` is `None`, eliminating the silent fallback that could construct a second untracked `AsyncClient`. The lifespan in `main.py` is the sole owner.
+- **`outbound_http` single-owner:** `build_app_services` now raises `ConfigError` in production mode when `outbound_http` is `None`, eliminating the silent fallback that could construct a second untracked `AsyncClient`. The lifespan in `main.py` is the sole owner.
 - **`make_mock_settings` deduplicated:** `tests/conftest.py` previously duplicated the helper from `tests/helpers.py`; it now imports from the canonical location.
 - **Reminder job `scheduled_at` version check (R3):** `send_reminder_for_dose` now receives the `scheduled_at` ISO timestamp baked in at enqueue time. If the live row's `scheduled_at` no longer matches (row rescheduled or recreated), the job is dropped with an INFO log instead of double-firing.
 - **Nudge fan-out jitter (R4):** Nudge `defer_until` offsets receive ±30 s random jitter at enqueue time, spreading concurrent pushes across the minute boundary.
 - **Emergency-contact atomic set-primary (R5):** The two-step demote-then-promote UPDATE sequence is replaced by a single Postgres function call (`medbuddy_set_emergency_primary`), eliminating the race window where a concurrent insert could leave multiple `is_primary = true` rows. Migration: `supabase/migrations/set_emergency_primary_fn.sql`.
 - **`MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` format validated (O5):** `load_settings` now rejects values that are not zero-padded `HH:MM` (e.g. `"9:0"`, `"25:00"`) at startup with a `ConfigError`.
-- **`PUBLIC_BASE_URL` HTTPS enforced for voice replies (O6):** In real mode, if `MEDBUDDY_LINE_VOICE_REPLIES` is not `"off"`, startup raises `ConfigError` when `PUBLIC_BASE_URL` is not `https://…`. LINE's CDN requires HTTPS for audio content URLs.
+- **`PUBLIC_BASE_URL` HTTPS enforced for voice replies (O6):** In production mode, if `MEDBUDDY_LINE_VOICE_REPLIES` is not `"off"`, startup raises `ConfigError` when `PUBLIC_BASE_URL` is not `https://…`. LINE's CDN requires HTTPS for audio content URLs.
 - **PHI persona body gated to DEBUG (S3):** `build_patient_context_for_llm` now logs `chars=N` at INFO and the full body only at DEBUG — patient names, meds, and demographics no longer appear in production INFO logs. `PhiRedactFilter` added to all named loggers via `core/logging.py`; it masks emails, phone numbers, and known PHI field names from structured log record extras.
 - **Pending JSONB `schema_version` field (R6):** `DoseClarificationPending`, `ReminderHorizonPending`, and `MedicationAddConfirmationPending` now write `schema_version: 1` in `to_json()`. `from_json()` accepts version-0 rows (pre-migration, backward-compatible) and discards any future version it does not understand with a WARNING log.
 - **`request_id` propagated into arq jobs (F5):** `enqueue_reminder_jobs` captures the current `request_id` contextvar and passes it as a job arg. `send_reminder_for_dose` restores it at task entry so reminder-delivery log lines are linkable to the web-turn that scheduled them. `_request_id` contextvar extracted to `core/request_id.py`.
@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Fail-closed startup validation:** When `MEDBUDDY_INTEGRATION=real`, the app raises `ConfigError` at startup if any required secret is absent (`MEDBUDDY_MOBILE_BEARER_TOKEN`, `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `MEDBUDDY_CRON_SECRET`, and the active LLM API key). The container exits immediately instead of booting to a degraded 503-per-request state.
+- **Fail-closed startup validation:** When `MEDBUDDY_INTEGRATION=production`, the app raises `ConfigError` at startup if any required secret is absent (`MEDBUDDY_MOBILE_BEARER_TOKEN`, `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `MEDBUDDY_CRON_SECRET`, and the active LLM API key). The container exits immediately instead of booting to a degraded 503-per-request state.
 - **Global exception handler + request ID:** All unhandled exceptions return `{"code": "internal_error", "request_id": "<uuid>"}` with HTTP 500 — no raw tracebacks leak to clients. A `RequestIdMiddleware` stamps each request with a UUID available in logs and the `X-Request-Id` response header.
 - **CORS middleware:** `CORSMiddleware` is active when `CORS_ALLOWED_ORIGINS` is set (comma-separated list). Applies to `GET`/`POST` with `Authorization`, `Content-Type`, `X-App-User-Id`, and `X-MedBuddy-Locale` headers. Defaults to off (empty list).
 - **Hardened Docker runtime:** `docker-entrypoint-web.sh` now passes `--proxy-headers`, `--forwarded-allow-ips='*'`, `--workers ${WEB_CONCURRENCY:-2}`, and `--timeout-graceful-shutdown 25` to uvicorn. `Dockerfile` adds a non-root `medbuddy` system user and a `HEALTHCHECK` against `GET /health`.
@@ -62,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Drug reference cache:** Follow-ups like “sure” / 「好」 are no longer passed verbatim to OpenFDA or stored under junk `drug_reference_cache.query_key` values. `explain_medication` and `interaction_check` accept optional `drug_query` / `medication_id`; the server resolves weak user text using recent assistant turns and catalog names (plus a small vitamin C fallback when the drug is only mentioned in chat). `add_medication` draft extraction receives a short **redacted** recent-thread excerpt for the same reason, so confirmations after an add/reminder offer still ground drug name and timing. `CachingDrugData` also refuses weak keys so stray callers cannot populate the shared cache with stopwords.
 
 ### Changed
+
+- **Integration mode naming:** “Real mode” is now **production mode** in user-facing errors and docs. `IntegrationMode.REAL` is `IntegrationMode.PRODUCTION` with value `production`; set `MEDBUDDY_INTEGRATION=production` for live adapters (`real` / `live` are no longer accepted). Makefile targets are `be-dev-production` / `be-run-prod-production`; `render.yaml` and examples use `production`. Ruff/Black cleanups: import order in `models/domain.py`, `reminders/deliver.py` noqa for post-constant imports, unused imports removed in reminder tests, formatting in `channels/line/routes.py`.
 
 - **Documentation (service role + multi-contact):** `docs/features.md`, `tdd-extended.md`, `tdd.md`, `use-cases.md`, `privacy.md`, `llm-context.md`, and `reminders.md` now describe `SUPABASE_SERVICE_KEY`, revoked `anon`/`authenticated` grants, the `emergency_contacts` table (replacing legacy `emergency_contact` text), updated `/v1/app/me` and onboarding JSON examples, ER diagrams, and LLM exclusion wording. `apps/backend/supabase/schema.sql` file header matches. `reminders.md` reminder test paths use `tests/reminders/`.
 
@@ -134,7 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Investor deck (`docs/presentation/index.html`)**: *Income channels — mobile surfaces* — five mocks in one centered grid row (ladder/overlap removed); `safe center` vertical alignment; larger under-mock channel labels; removed the “Same assistant core…” footnote and the API mock’s “MedBuddy · tenant API” embed stripe.
 - **Turn interpretation contract**: Replaced `classify_intent` with `interpret_user_turn` returning `TurnInterpretation` (`intent`, `record_pending_dose_as_taken`, `dose_adherence_note`), and wired `ConfirmDoseTool` to those structured fields.
 - **Per-user locale behavior**: Standardized locale-aware responses across compose, interaction, medication-added responses, health summary labels, LINE welcome, and reminder pushes.
-- **Integration/runtime wiring**: Improved container and app wiring (shared HTTP clients in real mode, safer logging defaults, stricter timezone validation).
+- **Integration/runtime wiring**: Improved container and app wiring (shared HTTP clients in production mode, safer logging defaults, stricter timezone validation).
 - **Google Cloud Speech-to-Text**: Replaced REST + `GOOGLE_SPEECH_API_KEY` usage with the official `google-cloud-speech` v2 client (Application Default Credentials). `SpeechToTextPort.transcribe_m4a` accepts optional per-request `language_code`; LINE passes the user's effective locale for transcription.
 - **Locale change detection**: Language-switch requests use structured `extract_locale_intent` first (fallback to profile patch), run early in `MedicationAgent`, and intent classification steers phrasing to `update_profile` where appropriate.
 - **Supabase naming and schema alignment**: Consolidated profile storage around `patients`/`patient_id` and updated persistence adapters accordingly.
@@ -191,7 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- MedBuddy monorepo: FastAPI backend (`apps/backend`) with LINE webhook pipeline, mock/real
+- MedBuddy monorepo: FastAPI backend (`apps/backend`) with LINE webhook pipeline, mock/production
   integrations, and pytest suite.
 - Expo (React Native) app (`apps/frontend`) with medication-focused UI, i18n (en, zh-TW), and
   ESLint + TypeScript checks.

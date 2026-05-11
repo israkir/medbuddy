@@ -291,7 +291,7 @@ LINE platform
     │ X-Line-Signature: <hmac>
     ▼
 channels/line/routes.py
-    │ verify_signature()  ← 400 if invalid in real mode
+    │ verify_signature()  ← 400 if invalid in production mode
     │ parse_event()
     ▼
 channels/line/orchestrator.py
@@ -738,7 +738,7 @@ Re-enqueues arq jobs for dose events that are due (`scheduled_at <= now()`), `re
 **Response:** `200 OK` (empty body — LINE requires a 200 ACK immediately; reply is sent asynchronously after acknowledgment).
 
 **Errors:**
-- `400 Bad Request` — invalid LINE signature in real mode.
+- `400 Bad Request` — invalid LINE signature in production mode.
 
 ---
 
@@ -754,7 +754,7 @@ When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, th
 
 | Status | Condition |
 |--------|-----------|
-| `401 Unauthorized` | Missing or incorrect Bearer token (in real mode) |
+| `401 Unauthorized` | Missing or incorrect Bearer token (in production mode) |
 | `400 Bad Request` | Missing `X-App-User-Id`, or request body fails validation |
 | `422 Unprocessable Entity` | FastAPI validation failure on request body |
 | `500 Internal Server Error` | Unhandled exception — logged with `user_key` and request ID |
@@ -1026,7 +1026,7 @@ When `MEDBUDDY_MOBILE_BEARER_TOKEN` is unset and `MEDBUDDY_INTEGRATION=mock`, th
 
 ### 10.4 Supabase access
 
-The backend uses `SUPABASE_SERVICE_KEY` (service-role key), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`) — the publishable key cannot reach any table directly. `SUPABASE_PUBLISHABLE_KEY` is kept in config for optional local-dev reads only. In real mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
+The backend uses `SUPABASE_SERVICE_KEY` (service-role key), which bypasses RLS and has full table access. `anon` and `authenticated` roles have had all table grants revoked (see `supabase/migrations/restrict_rls_to_service_role.sql`) — the publishable key cannot reach any table directly. `SUPABASE_PUBLISHABLE_KEY` is kept in config for optional local-dev reads only. In production mode, `SUPABASE_SERVICE_KEY` is required at startup or `ConfigError` is raised.
 
 ### 10.5 Internal endpoints
 
@@ -1035,7 +1035,7 @@ The backend uses `SUPABASE_SERVICE_KEY` (service-role key), which bypasses RLS a
 ### 10.6 Production safeguards
 
 When `RENDER=true` (Render web service), `load_settings()` enforces:
-- `MEDBUDDY_INTEGRATION` forced to `real`
+- `MEDBUDDY_INTEGRATION` forced to `production`
 - `DEBUG = false`
 
 This prevents accidental mock mode in production regardless of dashboard environment variable mistakes.
@@ -1241,7 +1241,7 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 
 | Variable | Values | Default | Notes |
 |----------|--------|---------|-------|
-| `MEDBUDDY_INTEGRATION` | `mock` / `real` | `mock` | Aliases: `local`/`dev` → mock; `live`/`production` → real. Raises `ConfigError` on unrecognised values. |
+| `MEDBUDDY_INTEGRATION` | `mock` / `production` | `mock` | Aliases: `local`/`dev` → mock. Use `production` for production mode. Raises `ConfigError` on unrecognised values. |
 
 ### 15.2 LINE
 
@@ -1281,8 +1281,8 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | Variable | Notes |
 |----------|-------|
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | **Required in real mode.** Service-role key — bypasses RLS. Never use the publishable/anon key for the backend client. |
-| `SUPABASE_PUBLISHABLE_KEY` | Optional; kept for local-dev reads. Not used by the Supabase client in real mode. |
+| `SUPABASE_SERVICE_KEY` | **Required in production mode.** Service-role key — bypasses RLS. Never use the publishable/anon key for the backend client. |
+| `SUPABASE_PUBLISHABLE_KEY` | Optional; kept for local-dev reads. Not used by the Supabase client in production mode. |
 
 ### 15.6 Reminders
 

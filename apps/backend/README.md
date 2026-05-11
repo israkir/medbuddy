@@ -114,7 +114,7 @@ The [Makefile](../../Makefile) lives at the repo root. Backend targets use the *
 | Area | Commands |
 |------|----------|
 | Environment | `make be-venv`, `make be-install` |
-| Run API | **`make be-dev-mock`** / **`make be-dev`** (reload, mocks), **`make be-dev-real`** (reload, real + `.env`), `make be-run-prod`, optional `PORT=8080` |
+| Run API | **`make be-dev-mock`** / **`make be-dev`** (reload, mocks), **`make be-dev-production`** (reload, production + `.env`), `make be-run-prod`, optional `PORT=8080` |
 | Tests & quality | `make be-test`, `make be-test-verbose`, `make be-test-cov`, `make be-lint`, `make be-fmt`, `make be-check` |
 | Containers | `make be-compose`, `make be-build` |
 | Cleanup | `make be-clean`, `make be-clean-all` |
@@ -123,18 +123,18 @@ Typical flow: `make be-install` → `make be-dev-mock` → `make be-test`.
 
 ---
 
-## Mock vs real integrations
+## Mock vs production integrations
 
 Switch without code changes:
 
 | Variable | Values | Notes |
 |----------|--------|-------|
-| **`MEDBUDDY_INTEGRATION`** | `mock` / `real` | Aliases: `local`/`dev` → mock; `live`/`production` → real. **Overrides** `MOCK_EXTERNAL_SERVICES` when set. |
+| **`MEDBUDDY_INTEGRATION`** | `mock` / `production` | Aliases: `local`/`dev` → mock. **Overrides** `MOCK_EXTERNAL_SERVICES` when set. |
 | **`MOCK_EXTERNAL_SERVICES`** | `true` / `false` | `true` = in-memory adapters for LINE/STT/LLM/drugs/storage/users. Default `false`. |
 
-[`config.py`](src/medbuddy/config.py) loads `apps/backend/.env` first, then a `.env` in the working directory (so a repo-root `.env` overrides). `make be-dev-mock` exports `MEDBUDDY_INTEGRATION=mock`; `make be-dev-real` exports `MEDBUDDY_INTEGRATION=real`.
+[`config.py`](src/medbuddy/config.py) loads `apps/backend/.env` first, then a `.env` in the working directory (so a repo-root `.env` overrides). `make be-dev-mock` exports `MEDBUDDY_INTEGRATION=mock`; `make be-dev-production` exports `MEDBUDDY_INTEGRATION=production`.
 
-When **`RENDER=true`** (Render web services), settings force `MOCK_EXTERNAL_SERVICES=false`, `DEBUG=false`, and `MEDBUDDY_INTEGRATION=real` — a mis-set dashboard env cannot re-enable mocks in production.
+When **`RENDER=true`** (Render web services), settings force `MOCK_EXTERNAL_SERVICES=false`, `DEBUG=false`, and `MEDBUDDY_INTEGRATION=production` — a mis-set dashboard env cannot re-enable mocks in production.
 
 ---
 
@@ -207,7 +207,7 @@ Adding a language: add matching `*.json` in both trees and register in backend s
 |-------|-----------|
 | **Automated** | `make be-test` runs `tests/test_webhook_pipeline.py`, `test_line_signature.py`, etc. |
 | **Local mock** | `make be-dev-mock` → `POST http://127.0.0.1:8000/v1/line/webhook` with a LINE-shaped JSON body. Signature check skipped when `LINE_CHANNEL_SECRET` is unset. |
-| **Real LINE (tunnel)** | `make be-dev-real` + set `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `PUBLIC_BASE_URL`. Expose via [ngrok](https://ngrok.com/) or Cloudflare Tunnel; set webhook URL in [LINE Developers Console](https://developers.line.biz/) to `{PUBLIC_BASE_URL}/v1/line/webhook`. |
+| **Real LINE (tunnel)** | `make be-dev-production` + set `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `PUBLIC_BASE_URL`. Expose via [ngrok](https://ngrok.com/) or Cloudflare Tunnel; set webhook URL in [LINE Developers Console](https://developers.line.biz/) to `{PUBLIC_BASE_URL}/v1/line/webhook`. |
 | **Hosted** | After deploy, set same webhook URL in LINE console. |
 
 Protocol definitions: [`src/medbuddy/protocols/`](src/medbuddy/protocols).

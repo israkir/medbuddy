@@ -53,7 +53,9 @@ def _build_stt_tts(
     settings: Settings,
 ) -> tuple[GoogleSpeechToText, TextToSpeechPort | None]:
     if not settings.google_speech_project_id:
-        raise ConfigError("GOOGLE_SPEECH_PROJECT_ID is required in real mode for speech-to-text")
+        raise ConfigError(
+            "GOOGLE_SPEECH_PROJECT_ID is required in production mode for speech-to-text"
+        )
     stt = GoogleSpeechToText(
         project_id=settings.google_speech_project_id,
         location=settings.google_speech_location,
@@ -87,11 +89,11 @@ def build_app_services(
             drug_caches=None,
         )
 
-    # Real mode — every dep must be present; fail fast with ConfigError.
+    # Production mode — every dep must be present; fail fast with ConfigError.
     if not settings.line_channel_access_token:
-        raise ConfigError("LINE_CHANNEL_ACCESS_TOKEN is required in real mode")
+        raise ConfigError("LINE_CHANNEL_ACCESS_TOKEN is required in production mode")
     if not settings.supabase_url or not settings.supabase_service_key:
-        raise ConfigError("SUPABASE_URL and SUPABASE_SERVICE_KEY are required in real mode")
+        raise ConfigError("SUPABASE_URL and SUPABASE_SERVICE_KEY are required in production mode")
 
     line = LineHttpClient(channel_access_token=settings.line_channel_access_token)
     llm = _build_llm(settings)
@@ -99,7 +101,7 @@ def build_app_services(
 
     if outbound_http is None:
         raise ConfigError(
-            "outbound_http must be provided by the lifespan context in real mode — "
+            "outbound_http must be provided by the lifespan context in production mode — "
             "call build_app_services with the shared AsyncClient from main.py"
         )
     drugs_http = HttpDrugData(locale=settings.locale, http_client=outbound_http)

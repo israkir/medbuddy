@@ -94,9 +94,7 @@ async def line_webhook(
         if redis_url and event_id:
             already_seen = await mark_and_check_line_event_seen(redis_url, event_id)
             if already_seen:
-                log.info(
-                    "LINE webhook: duplicate event skipped webhook_event_id=%r", event_id
-                )
+                log.info("LINE webhook: duplicate event skipped webhook_event_id=%r", event_id)
                 continue
         await handle_line_event(payload, svc)
 

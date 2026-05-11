@@ -98,7 +98,7 @@ There is **no** global reminder timezone env var — **`patients.timezone`** in 
 | **API + reminder worker (default)** | Repo-root [`Dockerfile`](../Dockerfile) → [`docker-entrypoint-web.sh`](../docker-entrypoint-web.sh): **`uvicorn`** and, if **`REDIS_URL`** is set, **`arq medbuddy.reminders.worker.WorkerSettings`**. |
 | **Worker only (optional scale-out)** | Same **`Dockerfile`** image; override start command to **`arq medbuddy.reminders.worker.WorkerSettings`** (API service must use **uvicorn-only** start command — do not run arq in both). |
 
-The same container needs **Supabase** for **`UserDataPort`** and **`LINE_CHANNEL_ACCESS_TOKEN`** for push when **`MEDBUDDY_INTEGRATION=real`**.
+The same container needs **Supabase** for **`UserDataPort`** and **`LINE_CHANNEL_ACCESS_TOKEN`** for push when **`MEDBUDDY_INTEGRATION=production`**.
 
 ## Render
 

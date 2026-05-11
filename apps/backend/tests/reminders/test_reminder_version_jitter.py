@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -21,7 +20,9 @@ async def test_deliver_skips_when_scheduled_at_mismatch() -> None:
     svc = build_app_services(settings)
     key = "U-version-check"
     await svc.users.get_or_create_user(key)
-    await svc.users.add_medication(key, MedicationDraft(name="Metformin", dosage="500mg", schedule="QD"))
+    await svc.users.add_medication(
+        key, MedicationDraft(name="Metformin", dosage="500mg", schedule="QD")
+    )
     jobs = await svc.users.sync_upcoming_dose_events(key)
     dose_id, scheduled_at = jobs[0]
 
@@ -39,7 +40,9 @@ async def test_deliver_proceeds_when_scheduled_at_matches() -> None:
     svc = build_app_services(settings)
     key = "U-version-match"
     await svc.users.get_or_create_user(key)
-    await svc.users.add_medication(key, MedicationDraft(name="Aspirin", dosage="100mg", schedule="QD"))
+    await svc.users.add_medication(
+        key, MedicationDraft(name="Aspirin", dosage="100mg", schedule="QD")
+    )
     jobs = await svc.users.sync_upcoming_dose_events(key)
     dose_id, scheduled_at = jobs[0]
 
@@ -52,7 +55,6 @@ async def test_deliver_proceeds_when_scheduled_at_matches() -> None:
 @pytest.mark.asyncio
 async def test_conversation_purge_endpoint_deletes_old_turns() -> None:
     """POST /internal/conversations/purge removes turns older than retention window."""
-    import httpx
     from httpx import ASGITransport, AsyncClient
     from medbuddy.main import app
 
@@ -61,6 +63,7 @@ async def test_conversation_purge_endpoint_deletes_old_turns() -> None:
     svc = app.state.services
 
     from medbuddy.models.domain import ConversationTurn
+
     uid = "U-purge-test"
 
     old_turn = ConversationTurn(

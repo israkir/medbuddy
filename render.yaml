@@ -1,5 +1,5 @@
 # Render Blueprint — https://render.com/docs/infrastructure-as-code
-# Production web service: real integrations only.
+# Production web service: production integrations only.
 # Docker path defaults to ./Dockerfile from repo root; dockerContext is . so COPY apps/backend/... works.
 # After deploy: set PUBLIC_BASE_URL to https://<service-name>.onrender.com and add secrets in Environment.
 # REDIS_URL: same container runs uvicorn + arq reminder worker when set (managed Redis required in production).
@@ -16,7 +16,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: MEDBUDDY_INTEGRATION
-        value: real
+        value: production
       - key: DEBUG
         value: "false"
       - key: PYTHONUNBUFFERED

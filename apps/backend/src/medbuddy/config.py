@@ -31,7 +31,7 @@ load_dotenv(Path(".env"), override=False)
 
 class IntegrationMode(str, Enum):
     MOCK = "mock"
-    REAL = "real"
+    PRODUCTION = "production"
 
 
 class LlmProvider(str, Enum):
@@ -70,7 +70,9 @@ class Settings:
 
     supabase_url: str
     supabase_service_key: str
-    supabase_publishable_key: str  # kept for local dev / anon reads; backend uses service_key in real mode
+    supabase_publishable_key: (
+        str  # kept for local dev / anon reads; backend uses service_key in production mode
+    )
 
     google_speech_project_id: str
     google_speech_location: str
@@ -193,12 +195,12 @@ def _integration_mode(env: Mapping[str, str]) -> IntegrationMode:
         if legacy_raw in ("", "1", "true", "yes"):
             return IntegrationMode.MOCK
         if legacy_raw in ("0", "false", "no"):
-            return IntegrationMode.REAL
+            return IntegrationMode.PRODUCTION
         msg = f"MOCK_EXTERNAL_SERVICES must be a boolean (true/false); got {legacy_raw!r}"
         raise ConfigError(msg)
-    if raw in ("real", "live", "production"):
-        return IntegrationMode.REAL
-    msg = f"MEDBUDDY_INTEGRATION must be 'mock' or 'real'; got {raw!r}"
+    if raw in ("production",):
+        return IntegrationMode.PRODUCTION
+    msg = f"MEDBUDDY_INTEGRATION must be 'mock' or 'production'; got {raw!r}"
     raise ConfigError(msg)
 
 
@@ -246,8 +248,8 @@ def _reminder_local_time(env: Mapping[str, str]) -> str:
     return raw
 
 
-def _assert_real_mode_secrets(env: Mapping[str, str], llm_provider: LlmProvider) -> None:
-    """Raise ConfigError at startup if any secret required in real mode is absent."""
+def _assert_production_mode_secrets(env: Mapping[str, str], llm_provider: LlmProvider) -> None:
+    """Raise ConfigError at startup if any secret required in production mode is absent."""
     required: list[tuple[str, str]] = [
         ("MEDBUDDY_MOBILE_BEARER_TOKEN", "mobile bearer token for /v1/app/* auth"),
         ("LINE_CHANNEL_SECRET", "LINE webhook signature verification"),
@@ -262,7 +264,7 @@ def _assert_real_mode_secrets(env: Mapping[str, str], llm_provider: LlmProvider)
     missing = [desc for var, desc in required if not env.get(var, "").strip()]
     if missing:
         joined = "; ".join(missing)
-        msg = f"Missing required secrets for real mode: {joined}"
+        msg = f"Missing required secrets for production mode: {joined}"
         raise ConfigError(msg)
 
     voice_replies = _line_voice_replies(env)
@@ -280,8 +282,8 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
     """Build Settings from environment variables. Raises ConfigError on invalid values."""
     integration_mode = _integration_mode(env)
     llm_provider = _llm_provider(env)
-    if integration_mode == IntegrationMode.REAL:
-        _assert_real_mode_secrets(env, llm_provider)
+    if integration_mode == IntegrationMode.PRODUCTION:
+        _assert_production_mode_secrets(env, llm_provider)
     return Settings(
         integration_mode=integration_mode,
         locale=_locale(env),
