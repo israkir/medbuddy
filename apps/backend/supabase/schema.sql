@@ -1,7 +1,6 @@
 -- MedBuddy Postgres schema for a new Supabase project (greenfield).
--- PostgREST uses the ``anon`` role with the publishable key; RLS policies below allow
--- what the backend needs. Do not use the service_role key in clients;
--- see https://supabase.com/docs/guides/api/api-keys
+-- The backend connects with SUPABASE_SERVICE_KEY (service_role), which bypasses RLS.
+-- anon/authenticated table grants are revoked; see migrations/restrict_rls_to_service_role.sql.
 --
 -- This file is not an incremental migration path. Existing deployments should use
 -- explicit migrations (or ALTER) to reconcile drift.

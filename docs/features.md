@@ -89,7 +89,7 @@ Sections below use these fields where they add clarity; small or purely operatio
 - All routes require `X-App-User-Id` (4–128 chars). When `MEDBUDDY_MOBILE_BEARER_TOKEN` is set and mocks are not forcing open access, clients send `Authorization: Bearer <token>`.
 - **`GET /v1/app/health`** — JSON health for mobile probes.
 - **`GET /v1/app/info`** — Non-secret service metadata.
-- **`GET /v1/app/me`** — `app_user_id` and profile: `preferred_name`, `age_years`, `gender`, `emergency_contact`, `health_notes`, **`locale`** (`en` \| `zh-TW`, default `zh-TW`), **`timezone`** (IANA, default `Asia/Taipei`), `onboarding_completed_at`. Until onboarding is completed, optional **`X-MedBuddy-Locale`** or **`Accept-Language`** may sync **`locale`** to the client (see [`tdd-extended.md`](tdd-extended.md) §7 **`GET /v1/app/me`**).
+- **`GET /v1/app/me`** — `app_user_id` and profile: `preferred_name`, `age_years`, `gender`, `emergency_contacts` (list), `health_notes`, **`locale`** (`en` \| `zh-TW`, default `zh-TW`), **`timezone`** (IANA, default `Asia/Taipei`), `onboarding_completed_at`. Until onboarding is completed, optional **`X-MedBuddy-Locale`** or **`Accept-Language`** may sync **`locale`** to the client (see [`tdd-extended.md`](tdd-extended.md) §7 **`GET /v1/app/me`**).
 - **`POST /v1/app/onboarding`** — Persists onboarding via `UserDataPort.save_onboarding_profile`; required `preferred_name`; optional demographics, emergency contact, health notes, optional IANA **`timezone`**, optional **`locale`** (standalone app typically sends device language choice).
 - **`POST /v1/app/messages`** — Body `text` (1–8000 chars); resolves auth → `run_assistant_text_turn` → `{"reply":"…","metadata":{}}` (optional keys such as **`simulated_emergency_notification`**).
 - **`POST /v1/app/messages/voice`** — Multipart **`file`** (short recording); **STT** with user **`locale`** → same assistant turn on transcript → `{"reply":"…","transcript":"…","metadata":{}}` (reply audio left to the client, e.g. **expo-speech**).
@@ -176,11 +176,11 @@ If the user starts a **new** turn while add-confirm or horizon is still open, th
 
 ### 3.2 Emergency-contact capture from chat (pre-orchestrator)
 
-Between the **`emergency`** intent gate and **`run_tool_agent_loop`**, **`try_resolve_emergency_contact_from_message`** (`application/profile/emergency_contact_resolve.py`) intercepts turns that carry a Taiwan mobile (`09xxxxxxxx`) plus relationship cues (`兒子`, `wife`, `緊急聯絡`, …) **or** that follow an assistant prompt asking for an emergency contact. The line is run through **`extract_profile_patch`** and persisted as **`emergency_contact`** before the tool loop, so misclassified additions like “my son David, 0900111111” are **not** treated as an `add_medication` draft. The resolver also strips fields like `preferred_name` from the patch when the message is clearly listing a contact (so “David” is not silently saved as the user's preferred name).
+Between the **`emergency`** intent gate and **`run_tool_agent_loop`**, **`try_resolve_emergency_contact_from_message`** (`application/profile/emergency_contact_resolve.py`) intercepts turns that carry a Taiwan mobile (`09xxxxxxxx`) plus relationship cues (`兒子`, `wife`, `緊急聯絡`, …) **or** that follow an assistant prompt asking for an emergency contact. The line is run through **`extract_profile_patch`** and persisted to the **`emergency_contacts`** table before the tool loop, so misclassified additions like “my son David, 0900111111” are **not** treated as an `add_medication` draft. The resolver also strips fields like `preferred_name` from the patch when the message is clearly listing a contact (so “David” is not silently saved as the user's preferred name).
 
 ### 3.3 Profile-completion nudge (post-reply footer)
 
-When onboarding-style profile fields (`preferred_name`, `age_years`, `gender`, `emergency_contact`, `health_notes`) are still missing, **`append_profile_completion_nudge_if_due`** (`application/profile/profile_completion_nudge.py`) may append a short **`profile.completion_nudge_footer`** line to the orchestrator reply every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages (default **12**, **`0`** disables). The cadence is staggered per user via a stable `user_key` hash so two users do not both see the footer on the same turn count. The nudge runs only on the main orchestrator path — it is suppressed for locale switches, pending-state resolvers, the emergency intent fast path, and the emergency-contact capture branch.
+When onboarding-style profile fields (`preferred_name`, `age_years`, `gender`, `emergency_contacts`, `health_notes`) are still missing, **`append_profile_completion_nudge_if_due`** (`application/profile/profile_completion_nudge.py`) may append a short **`profile.completion_nudge_footer`** line to the orchestrator reply every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages (default **12**, **`0`** disables). The cadence is staggered per user via a stable `user_key` hash so two users do not both see the footer on the same turn count. The nudge runs only on the main orchestrator path — it is suppressed for locale switches, pending-state resolvers, the emergency intent fast path, and the emergency-contact capture branch.
 
 ---
 
@@ -310,7 +310,7 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 | Concern | Behavior |
 |---------|----------|
 | Redaction | Before `interpret_user_turn`, **`complete_chat_with_tools`** user lines, `compose_reply`, medication extract/remove, and profile/locale structured extractions: `redact_pii_text` / `redact_conversation_turns_for_llm` (emails, typical phone shapes, long digit runs). **Recent-turn context** for classification is redacted the same way. Pattern-based, not full PHI scrubbing. |
-| Patient context for LLM | `patient_context_for_llm` (calls `sync_upcoming_dose_events` + `list_upcoming_dose_events`, then `build_patient_context_for_llm` with appended block) — same de-identified profile signals and medication lines as before, plus **clock-ordered pending `dose_events`** for ~7 days from local midnight; not raw `health_notes`, `emergency_contact`, exact `age_years`. |
+| Patient context for LLM | `patient_context_for_llm` (calls `sync_upcoming_dose_events` + `list_upcoming_dose_events`, then `build_patient_context_for_llm` with appended block) — same de-identified profile signals and medication lines as before, plus **clock-ordered pending `dose_events`** for ~7 days from local midnight; not raw `health_notes`, raw emergency contact values, exact `age_years`. |
 | Patient context for display | `build_patient_context_for_chat_display` — full snippet for user-facing list replies only. |
 | Storage | Conversation rows may store original user text; copies sent to the LLM adapter are redacted. |
 | Cache fingerprinting | De-identified context (and redacted query where applicable); stored personalized text may still be sensitive. |
@@ -327,11 +327,12 @@ Scenario IDs align with **`Intent`** / tool names in `medbuddy.models.domain` wh
 
 **Capabilities**
 
-When `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`) are set and the `supabase` extra is installed, `UserDataPort` and `ConversationStorePort` use Postgres (schema `apps/backend/supabase/schema.sql`, RLS for `anon`).
+When `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set and the `supabase` extra is installed, `UserDataPort` and `ConversationStorePort` use Postgres (schema `apps/backend/supabase/schema.sql`). The backend connects with the **service-role key** (`SUPABASE_SERVICE_KEY`); `anon`/`authenticated` grants have been revoked.
 
 | Layer | Tables / behavior | Role |
 |-------|-------------------|------|
-| Patients & profile | `patients` | `external_user_id`, onboarding fields, `gender`, **`locale`**, `timezone`, `onboarding_completed_at`, etc. |
+| Patients & profile | `patients` | `external_user_id`, onboarding fields, `gender`, **`locale`**, `timezone`, `onboarding_completed_at`, `pending_agent_clarification`, etc. |
+| Emergency contacts | `emergency_contacts` | Per-patient list of contacts with `channel_type`, `channel_value`, `is_primary`; replaces legacy single-text field. |
 | Medications | `medications` | Per-patient list for assistant and reminders. |
 | Conversation | `conversation_turns` | Recent dialogue; `created_at` for turn time. |
 | Drug reference | `drug_reference_cache` | Shared snippets: `source`, `query_key`, label fields, TTL `expires_at`. |

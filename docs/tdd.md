@@ -130,7 +130,7 @@ sequenceDiagram
     AG-->>PL: Resolution result
   else No pending state
     alt Emergency or boundary intent
-      PL->>PL: Use fixed safe response pattern (saved emergency_contact → simulate notify + metadata)
+      PL->>PL: Use fixed safe response pattern (saved emergency_contacts → simulate notify + metadata)
     else Standard request
       PL->>AG: complete_chat_with_tools loop (prior thread + tool calls + replies)
       AG-->>PL: Final reply (+ optional metadata)

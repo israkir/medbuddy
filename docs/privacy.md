@@ -6,7 +6,7 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 
 ## Goals
 
-- Keep **stored** profile fields that are highly sensitive (`health_notes`, `emergency_contact` text, exact `age_years`) out of the standard **patient context** block, except where a feature intentionally needs user wording (see **[llm-context.md](./llm-context.md)**). The user’s **preferred form of address** (when saved) is included in that block so the assistant can greet them naturally.
+- Keep **stored** profile fields that are highly sensitive (`health_notes`, emergency contact values, exact `age_years`) out of the standard **patient context** block, except where a feature intentionally needs user wording (see **[llm-context.md](./llm-context.md)**). The user’s **preferred form of address** (when saved) is included in that block so the assistant can greet them naturally.
 - **Mask** common direct identifiers in **user messages and chat history** before those strings are passed to an LLM (emails, typical Taiwan mobile patterns, long digit runs).
 - Profile updates from chat use **structured LLM extraction** (`extract_profile_patch`) when intent is **`update_profile`**; operators should review provider terms for storing PII.
 - Keep **user-facing** replies (e.g. medication list) able to show the user **their own** stored text where the product intentionally echoes it back.
@@ -23,7 +23,7 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 | **Tool orchestration rounds** | Yes | The **first** `complete_chat_with_tools` request per user line sends **system prompt**, **patient catalog/context**, **redacted prior** `user` / `assistant` messages from storage (tail capped by **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, `0` = none), then the **current redacted** user line. **Later rounds** in the same turn append **assistant** tool-call lines and **`tool`** result messages. Tool **results** are JSON/text echoed back to the model in those follow-on rounds. |
 | **Medication add / remove extraction** | Yes, on **redacted** text | `agents/tools/medication_crud.py` → `LLMPort.extract_medication_draft` / `resolve_medication_removal_id`. |
 | **Profile fields from chat** | Yes, for extraction (**often raw user message**) | **`update_profile`** tool in **`run_tool_agent_loop`** → `LLMPort.extract_profile_patch` → **`patch_user_profile`** (`application/profile/profile_intents.py`). |
-| **Emergency-contact capture before tools** | Yes, for extraction (**raw user message**) | When the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for the contact), **`application/profile/emergency_contact_resolve.py`** calls **`extract_profile_patch`** and persists the line as **`emergency_contact`** **before** the medication tool loop — so misrouted lines like “my son David, 0900111111” are not treated as a drug. |
+| **Emergency-contact capture before tools** | Yes, for extraction (**raw user message**) | When the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for the contact), **`application/profile/emergency_contact_resolve.py`** calls **`extract_profile_patch`** and persists the result to the **`emergency_contacts`** table **before** the medication tool loop — so misrouted lines like “my son David, 0900111111” are not treated as a drug. |
 | **Health summary** | Yes | Structured prompt includes **unredacted** recent conversation turns **and** a formatted block from persisted **`health_issue_events`** (classifier routing intents and structured vital rows), capped by **`MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT`**—see **[llm-context.md](./llm-context.md)** and **Persistence: `health_issue_events`** below. |
 
 ## Persistence: `health_issue_events`
@@ -32,7 +32,7 @@ The backend stores selected user turns in **`public.health_issue_events`** (Post
 
 ## What is not sent to an LLM (by design)
 
-- **Raw** `health_notes`, `emergency_contact`, or **exact** `age_years` inside the standard **`build_patient_context_for_llm`** block (those appear only as coarse signals or omitted).
+- **Raw** `health_notes`, emergency contact values, or **exact** `age_years` inside the standard **`build_patient_context_for_llm`** block (those appear only as coarse signals or omitted).
 
 **Exceptions:** Profile extractors and health-summary prompts may include **raw or unredacted** user or conversation text where the feature requires it—see **[llm-context.md](./llm-context.md)**. Adherence and dose notes are set only via the **`confirm_dose`** tool (**`interpret_user_turn`** does not apply adherence).
 

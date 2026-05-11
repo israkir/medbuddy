@@ -63,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Documentation (service role + multi-contact):** `docs/features.md`, `tdd-extended.md`, `tdd.md`, `use-cases.md`, `privacy.md`, `llm-context.md`, and `reminders.md` now describe `SUPABASE_SERVICE_KEY`, revoked `anon`/`authenticated` grants, the `emergency_contacts` table (replacing legacy `emergency_contact` text), updated `/v1/app/me` and onboarding JSON examples, ER diagrams, and LLM exclusion wording. `apps/backend/supabase/schema.sql` file header matches. `reminders.md` reminder test paths use `tests/reminders/`.
+
 - **Post-add medication reply:** Assembly moved to `application/post_add_medication_reply.build_post_add_patient_reply`. Saves that only need one paragraph still use `compose_medication_added_reply`; when the patient already has other meds, the primary segment uses `compose_medication_added_primary` and list cross-check uses `post_add_interaction_crosscheck` (separate prompts from chat `interaction_check`). Extra purpose/CTA/boundary lines append only when compose falls back to `medication.added`.
 - **Documentation:** `docs/features.md`, `use-cases.md`, `llm-context.md`, `privacy.md`, `tdd.md`, `tdd-extended.md`, `index.md`, `prd.md`, and `apps/backend/README.md` describe the post-add list cross-check (2+ medications), synthetic prompt keys, and privacy/context call sites.
 - **LLM locale namespace:** Backend JSON and code now use **`llm.*`** instead of **`gemini.*`** for extraction, companion, and reminder-appendix strings (OpenAI, Gemini, mocks, tools, `reminders/prefs`) so prompts are not tied to one provider name.
