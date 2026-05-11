@@ -10,7 +10,7 @@ Future hardening checklists for **backend** (`apps/backend`) and **mobile** (`ap
 
 ### Architecture
 
-- [x] **`channels/api/`** REST for the standalone app; **`channels/line/`** for LINE; shared **`application/assistant_turn`**.
+- [x] **`src/medbuddy/channels/api/`** REST for the standalone app; **`src/medbuddy/channels/line/`** for LINE; shared **`src/medbuddy/application/assistant_turn.py`**.
 
 - [x] **Documentation:** Expand [`docs/tdd-extended.md`](docs/tdd-extended.md) (agent layer) with why **tool execution is server-driven** — the backend classifies intent and dispatches `AgentTool`s; clients only send user text (and channel envelopes). Cover trust boundaries, a single place for side effects and auditability, and parity across LINE and **`/v1/app`**.
 

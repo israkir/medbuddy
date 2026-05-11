@@ -20,7 +20,7 @@ Maps each turn’s `content` through `redact_pii_text`. Used wherever tools pass
 
 ### Patient context for external LLMs (`patient_context_for_llm` → `build_patient_context_for_llm`)
 
-**Assembler:** `apps/backend/src/medbuddy/application/patient_llm_context.py` runs `UserDataPort.sync_upcoming_dose_events`, queries **`list_upcoming_dose_events`** for a ~**7-day** window from **local calendar midnight** in **`patients.timezone`**, formats that slice with `reminders/upcoming_display.py`, then calls **`build_patient_context_for_llm`** (`apps/backend/src/medbuddy/llm/prompts/persona.py`) with the result as **`upcoming_doses_context`**.
+**Assembler:** `apps/backend/src/medbuddy/application/patient_llm_context.py` runs `UserDataPort.sync_upcoming_dose_events`, queries **`list_upcoming_dose_events`** for a ~**7-day** window from **local calendar midnight** in **`patients.timezone`**, formats that slice with `apps/backend/src/medbuddy/reminders/upcoming_display.py`, then calls **`build_patient_context_for_llm`** (`apps/backend/src/medbuddy/llm/prompts/persona.py`) with the result as **`upcoming_doses_context`**.
 
 Typical blocks in the string sent to the model:
 
@@ -71,7 +71,7 @@ Current architecture is intentionally **hybrid**:
 
 ## Per `LLMPort` method (what goes to the model)
 
-Implementation reference: `apps/backend/src/medbuddy/protocols/llm.py` (`LLMPort`). Concrete adapters: `integrations/llm/gemini_llm.py`, `integrations/llm/openai_llm.py` (same contract).
+Implementation reference: `apps/backend/src/medbuddy/protocols/llm.py` (`LLMPort`). Concrete adapters: `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` (same contract).
 
 ### `interpret_user_turn`
 

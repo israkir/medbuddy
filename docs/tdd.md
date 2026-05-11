@@ -66,6 +66,8 @@ flowchart TB
 - **Vendors** (LLM, DB, messaging) change behind one seam.
 - **New inbound channel** = new adapter calling the same use-case entry point.
 
+**Code layout:** The Python package lives under [`apps/backend/src/medbuddy/`](../apps/backend/src/medbuddy/) (import `medbuddy`). Automated tests mirror that tree under [`apps/backend/tests/medbuddy/`](../apps/backend/tests/medbuddy/) with shared fixtures at `apps/backend/tests/conftest.py` and `apps/backend/tests/helpers.py` — see [`apps/backend/README.md`](../apps/backend/README.md).
+
 ```mermaid
 flowchart LR
   subgraph driving["Inbound adapters"]

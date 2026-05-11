@@ -17,7 +17,7 @@ For a **call-by-call** list of inputs (including exceptions), see **[llm-context
 |------|----------------|-------|
 | **User message** (current turn) | Yes, **after redaction** | See `redact_pii_text` in `apps/backend/src/medbuddy/privacy/redact.py`. Redaction is pattern-based, not full PHI scrubbing. |
 | **Recent conversation turns** | Yes, **after redaction** | `redact_conversation_turns_for_llm` in the same module. |
-| **Patient “context” block** | Yes, **redacted/narrowed** | Built via `patient_context_for_llm` → `build_patient_context_for_llm` in `apps/backend/src/medbuddy/application/patient_llm_context.py` + `llm/prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule), and when present a **time-ordered upcoming dose** section from materialized **`dose_events`** (local times, drug names, dose/schedule text — same facts as LINE reminder targets). |
+| **Patient “context” block** | Yes, **redacted/narrowed** | Built via `patient_context_for_llm` → `build_patient_context_for_llm` in `apps/backend/src/medbuddy/application/patient_llm_context.py` + `apps/backend/src/medbuddy/llm/prompts/persona.py`: **preferred form of address** when set, **age band** (not exact age), gender label, signals that notes/contact exist (without raw text), optional “gaps” lines, medication list (names, dose, schedule), and when present a **time-ordered upcoming dose** section from materialized **`dose_events`** (local times, drug names, dose/schedule text — same facts as LINE reminder targets). |
 | **Drug reference / label snippets** | Yes | From registries (e.g. OpenFDA), not end-user PII. |
 | **Turn interpretation** | Yes, on **redacted** user text | `LLMPort.interpret_user_turn` → **`Intent`** (+ optional fields for logs). Used for **`emergency`** / **`off_topic`** gates only. |
 | **Tool orchestration rounds** | Yes | The **first** `complete_chat_with_tools` request per user line sends **system prompt**, **patient catalog/context**, **redacted prior** `user` / `assistant` messages from storage (tail capped by **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**, `0` = none), then the **current redacted** user line. **Later rounds** in the same turn append **assistant** tool-call lines and **`tool`** result messages. Tool **results** are JSON/text echoed back to the model in those follow-on rounds. |
@@ -78,9 +78,9 @@ Locale strings under `apps/backend/src/medbuddy/locales/` (e.g. `prompts.system_
 |------|-----------|
 | Per-call LLM inputs and privacy exceptions | [docs/llm-context.md](./llm-context.md) |
 | Redaction | `apps/backend/src/medbuddy/privacy/redact.py` |
-| Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `agents/medication_agent.py` → `agents/orchestrator.py`; profile patches via `application/profile/profile_intents.py` |
+| Orchestration (when redaction applies) | `apps/backend/src/medbuddy/application/assistant_turn.py` → `apps/backend/src/medbuddy/agents/medication_agent.py` → `apps/backend/src/medbuddy/agents/orchestrator.py`; profile patches via `apps/backend/src/medbuddy/application/profile/profile_intents.py` |
 | De-identified vs display context | `apps/backend/src/medbuddy/llm/prompts/persona.py` |
-| Tests | `apps/backend/tests/test_privacy_redact.py`, `test_persona_llm_safe.py` |
+| Tests | `apps/backend/tests/medbuddy/privacy/test_privacy_redact.py`, `apps/backend/tests/medbuddy/llm/prompts/test_persona_llm_safe.py` |
 
 ## Operations and compliance
 

@@ -164,24 +164,29 @@ apps/backend/src/medbuddy/
 │   ├── i18n.py                  # t() — key lookup with zh-TW fallback
 │   ├── locale.py                # effective_user_locale(), normalize_locale_patch(), locale_from_language_hints(), locale_from_client_language_headers()
 │   ├── timezone.py              # IANA timezone helpers for scheduling
+│   ├── request_id.py            # request_id contextvar + middleware propagation
 │   └── logging.py               # configure_logging() — structured logging setup
 │
 ├── channels/                    # ← Inbound adapters (Layer: Driving/Primary)
 │   ├── line/
 │   │   ├── routes.py            # POST /v1/line/webhook, GET /v1/line/media/audio/:id
 │   │   ├── orchestrator.py      # handle_line_event() — event dispatch and reply
-│   │   └── signature.py         # X-Line-Signature HMAC-SHA256 verification
+│   │   ├── signature.py         # X-Line-Signature HMAC-SHA256 verification
+│   │   └── idempotency.py       # webhookEventId dedupe (Redis) before dispatch
 │   ├── api/
 │   │   ├── routes.py            # GET/POST /v1/app/*
 │   │   ├── auth.py              # MobileAuthContext, require_mobile_auth()
 │   │   └── schemas.py           # Pydantic I/O models
 │   └── internal/
-│       └── routes.py            # /health, /internal/reminders/reconcile
+│       └── routes.py            # /health, /internal/reminders/reconcile, /internal/conversations/purge
 │
 ├── application/                 # ← Application core (Layer: Use Cases)
 │   ├── assistant_turn.py        # run_assistant_text_turn() — delegates to MedicationAgent
 │   ├── patient_llm_context.py   # patient_context_for_llm() — dose sync + upcoming schedule blob
 │   ├── vital_log_build.py       # parses BP/glucose/etc. into payloads for HealthIssueEventRecord
+│   ├── post_add_medication_reply.py  # build_post_add_patient_reply — post-add LLM segments + interaction cross-check
+│   ├── drug_grounding.py        # registry-backed grounding text for explanations
+│   ├── drug_grounding_query.py  # query-time drug grounding helper
 │   │
 │   ├── pending/                 # Early-turn resolvers (run before the orchestrator)
 │   │   ├── locale_intents.py    # try_locale_change_reply — quick locale switch from user text
@@ -195,6 +200,7 @@ apps/backend/src/medbuddy/
 │   │
 │   └── profile/                 # Profile patches and onboarding nudges
 │       ├── profile_intents.py             # apply_profile_update_from_extracted_patch (orchestrator update_profile)
+│       ├── emergency_contacts.py          # multi-contact persistence helpers
 │       ├── emergency_contact_resolve.py   # capture TW-mobile + relationship lines pre-orchestrator
 │       └── profile_completion_nudge.py    # optional post-reply footer when profile fields are missing
 │
@@ -249,12 +255,16 @@ apps/backend/src/medbuddy/
 │   └── mocks/                   # llm.py, stt.py, tts.py, line.py, drugs.py, users.py, conversation.py (MockLLM, MockLineClient, MockUserData, etc.)
 │
 ├── privacy/
-│   └── redact.py                # redact_pii_text(), redact_conversation_turns_for_llm()
+│   ├── redact.py                # redact_pii_text(), redact_conversation_turns_for_llm()
+│   └── log_filter.py            # PhiRedactFilter — masks structured log extras
 │
 ├── llm/
 │   ├── prompts/
-│   │   └── persona.py           # get_system_persona()
+│   │   └── persona.py           # get_system_persona(), build_patient_context_for_llm
 │   ├── schemas.py               # Pydantic models for structured LLM outputs
+│   ├── agent_types.py           # structured orchestrator step types (e.g. Gemini)
+│   ├── agent_tool_definitions.py# OpenAI function / tool schema registry
+│   ├── agent_system_prompt.py   # system prompt assembly for tool loop
 │   ├── intent_classification_prompt.py  # Shared intent classification prompt
 │   ├── intent_map.py            # classifier string labels → domain Intent
 │   ├── medication_draft_build.py # MedicationExtraction → MedicationDraft
@@ -1129,16 +1139,17 @@ Application exceptions are caught at the channel layer and produce user-visible 
 
 ### 13.1 Test layers
 
-Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). Uses `AsyncClient`/`ASGITransport` and mock adapters.
+Layouts under `apps/backend/tests/` (pytest, `asyncio_mode=auto`). Package tests mirror `src/medbuddy/` under `tests/medbuddy/`; `conftest.py` and `helpers.py` stay at `apps/backend/tests/` root. Uses `AsyncClient`/`ASGITransport` and mock adapters.
 
 | Layer | What is tested | Typical location |
 |-------|---------------|------------------|
-| **Application / tools** | `MedicationAgent` dispatch, resolver flows, individual `AgentTool.run` paths | `tests/application/` |
-| **Integrations** | Supabase stores, drugs HTTP, optional OpenAI smoke tests | `tests/integrations/` |
-| **Reminders** | Materialization, enqueue, deliver, nudges | `tests/reminders/` |
-| **LLM / privacy** | Draft build, redaction, persona shaping | `tests/llm/`, `tests/privacy/`, `tests/prompts/` |
-| **Extensibility** | Intent hooks | `tests/extensibility/` |
-| **Settings / config** | Config validation, locale, timezone | `tests/` (root level, e.g. `test_settings_*.py`, `test_user_locale.py`) |
+| **Application / tools** | `MedicationAgent` dispatch, resolver flows, individual `AgentTool.run` paths | `tests/medbuddy/application/` (`profile/`, `pending/`, `health_events/`, plus cross-cutting tests at the `application/` root); tool `run()` tests in `tests/medbuddy/agents/tools/` |
+| **Channels** | LINE webhook, mobile API | `tests/medbuddy/channels/` |
+| **Integrations** | Supabase stores, drugs HTTP, optional OpenAI smoke tests | `tests/medbuddy/integrations/` |
+| **Reminders** | Materialization, enqueue, deliver, nudges | `tests/medbuddy/reminders/` |
+| **LLM / privacy** | Draft build, redaction, persona shaping | `tests/medbuddy/llm/` (including `llm/prompts/`), `tests/medbuddy/privacy/` |
+| **Extensibility** | Intent hooks | `tests/medbuddy/extensibility/` |
+| **Settings / config** | Config validation, locale, timezone | `tests/medbuddy/config/`, `tests/medbuddy/core/` |
 
 ### 13.2 Mock adapter contract
 
@@ -1340,7 +1351,7 @@ Use cases:
 1. Add an OpenAI-compatible tool definition (name, description, parameters) in `llm/agent_tool_definitions.py` and the Gemini parallel if required.
 2. Handle the tool **name** in `agents/orchestrator.py` — delegate to an `AgentTool` in `agents/tools/<name>.py` (`async def run(...) -> ToolResult`) or inline orchestration.
 3. If the tool needs new persistence, add methods to `UserDataPort` and implement in `MockUserData` + `SupabaseUserData`.
-4. Add i18n keys and tests (`tests/application/`). Optionally extend **`interpret_user_turn`** / **`Intent`** prompts **only** if you need the new label in logs or routing gates.
+4. Add i18n keys and tests (under `tests/medbuddy/…`, matching the feature area — e.g. `application/pending/` for resolver flows). Optionally extend **`interpret_user_turn`** / **`Intent`** prompts **only** if you need the new label in logs or routing gates.
 
 ### 16.5 Adding a new locale
 

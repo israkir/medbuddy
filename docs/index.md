@@ -81,4 +81,5 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | How do I add a new LLM adapter? | [`tdd-extended.md`](tdd-extended.md) §16 Extension points |
 | How do I add a new orchestrator tool? | [`tdd-extended.md`](tdd-extended.md) §16.4, [`llm/agent_tool_definitions.py`](../apps/backend/src/medbuddy/llm/agent_tool_definitions.py) |
 | How does Python map to Go/Fiber modules? | [`go-port-mapping.md`](go-port-mapping.md) |
+| Where do backend pytest modules live? | Under **`apps/backend/tests/medbuddy/`**, mirroring **`apps/backend/src/medbuddy/`**; shared fixtures in **`apps/backend/tests/conftest.py`** and **`apps/backend/tests/helpers.py`** |
 | Where are architecture principles tied to speed/availability/KPIs? | [`tdd.md` §9](tdd.md#9-engineering-principles-for-performance-and-reliability), [`tdd-extended.md` §17](tdd-extended.md#17-quality-attributes-and-prototype-slos), [`prd-extended.md` §8.1](prd-extended.md#81-non-functional-posture-shared-kpi-language) |
