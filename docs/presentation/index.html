@@ -2246,7 +2246,7 @@ A live, runnable prototype — every layer of the architecture working end-to-en
 <ul class="checklist">
 <li><b>Registered tool-backed flows</b> covered end-to-end — list, add, update, remove, bulk clear, reminders off, explain, interactions, side-effects, confirm, miss, log vital, summary, profile, journal, and more · cohort-validated quality is an MVP gate</li>
 <li><b>Voice in &amp; out</b> — <a href="https://cloud.google.com/speech-to-text" target="_blank" rel="noopener noreferrer">Google STT v2</a> + <a href="https://cloud.google.com/text-to-speech" target="_blank" rel="noopener noreferrer">Cloud TTS</a>, sharing the same understanding pipeline as typed chat. Formal accuracy and cost targets are deferred to the OD-3 milestone at Growth.</li>
-<li><b>Reminders</b> — scheduled delivery, follow-up nudges, and a catch-up path if queue or worker hiccups</li>
+<li><b>Reminders</b> — scheduled delivery, follow-up nudges, a catch-up path if queue or worker hiccups, and a daily refill + delivery-time safety net so <b>chronic / lifelong meds keep firing indefinitely</b> without ever asking "for how many days?"</li>
 <li><b>Data layer</b> — <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer">Supabase</a> (Postgres) for Prototype: patients, medications, dose events, drug reference cache, conversation turns; fast in-memory mock for development and CI. Migrates to RDS + DynamoDB + ElastiCache at MVP.</li>
 </ul>
 ]
@@ -2484,6 +2484,7 @@ class: deep
 - **Optional gentle nudges** if a dose is still unanswered, until the day ends — never overnight.
 - **Self-healing** — if anything goes wrong on my side, the reminder still fires (or arrives a little late) instead of disappearing.
 - **One ping per dose** — never two reminders for the same scheduled time.
+- **Lifelong meds keep going on their own** — when the patient says "long-term" / "終身" / "慢性病用藥" the bot detects it, skips the "for how many days?" question, and a daily background refill (plus a safety check at delivery time) keeps the reminder rail topped up for as long as the medication is on file.
 - **Voice replies** available when the user sends a voice note — the assistant can reply in audio as well as text; the patient never has to configure it.
 ]
 ]
@@ -3512,6 +3513,7 @@ class: deep eng-proto reminders-flow-slide
 <ul>
   <li>Medication writes call <code>sync_and_enqueue_reminders</code>: rebuild future <code>dose_events</code>, then enqueue with <code>_defer_until</code>.</li>
   <li>Reconcile is a guarded safety net: cron + secret header re-enqueues <strong>due + unsent</strong> rows when worker/Redis delivery is interrupted.</li>
+  <li>Chronic / indefinite-duration meds (<code>medications.is_indefinite</code>) reuse the same rolling-window architecture — kept full forever by a daily arq cron <code>resync_chronic_meds_cron</code> <strong>and</strong> a delivery-time top-up inside <code>deliver_dose_reminder</code> when fewer than <code>MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD</code> future doses remain.</li>
   <li>Nudge chain is explicit and bounded: first nudge starts only after successful send mark, then <code>expected_nudge_count</code> gates subsequent nudges.</li>
   <li>Idempotency is row-level (<code>reminder_sent_at</code>, <code>taken_at</code>) so replay/reconcile avoids duplicate state transitions.</li>
 </ul>

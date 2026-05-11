@@ -171,7 +171,8 @@ The Python package mixes top-level modules with subpackages (`pending/`, `health
 | `upcoming_display.py` | `reminder/display.go`                   |
 | `prefs.py`            | `reminder/prefs.go`                     |
 | `lifecycle.py`        | `reminder/lifecycle.go`                 |
-| `worker.py` (arq)     | `reminder/worker.go` (asynq or similar) |
+| `chronic_resync.py`   | `reminder/chronic_resync.go`            |
+| `worker.py` (arq)     | `reminder/worker.go` (asynq or similar; daily cron for chronic resync) |
 
 
 ### LLM schemas and prompts

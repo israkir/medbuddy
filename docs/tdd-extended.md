@@ -271,13 +271,14 @@ apps/backend/src/medbuddy/
 │   └── turn_interpretation.py   # IntentClassification → TurnInterpretation mapping
 │
 ├── reminders/
-│   ├── worker.py                # arq WorkerSettings
-│   ├── deliver.py               # deliver_dose_reminder() → LINE push
+│   ├── worker.py                # arq WorkerSettings + resync_chronic_meds_cron registration
+│   ├── deliver.py               # deliver_dose_reminder() → LINE push + chronic delivery-time top-up
 │   ├── enqueue.py               # enqueue_reminder_jobs()
 │   ├── dose_schedule.py         # iter_scheduled_dose_times_utc — local HH:MM → UTC instants
 │   ├── upcoming_display.py      # upcoming window + user/LLM formatting for dose_events
-│   ├── prefs.py                 # ReminderPrefs + nudge_window_allows()
-│   └── lifecycle.py             # sync_and_enqueue_reminders() — called after add/update/remove
+│   ├── prefs.py                 # ReminderPrefs + nudge_window_allows() + reminder_compose_appendix (chronic branch)
+│   ├── chronic_resync.py        # resync_all_indefinite_patients() — daily cron refill for is_indefinite meds
+│   └── lifecycle.py             # sync_and_enqueue_reminders() — called after add/update/remove and by both chronic refill paths
 │
 ├── extensibility/
 │   └── intent_hooks.py          # try_intent_hooks() — pilot feature hook registry
@@ -438,6 +439,11 @@ sequenceDiagram
 
 **Reconcile safety net:** `POST /internal/reminders/reconcile` (cron-triggered) re-enqueues any `dose_events` where `scheduled_at <= now()`, `reminder_sent_at IS NULL`, and `taken_at IS NULL`. Covers cases where the arq worker was down when the job was due.
 
+**Chronic / indefinite-duration refill paths:** For rows with `medications.is_indefinite = true`, the rolling window is kept full forever by two additional mechanisms — neither replaces the reconcile path above, which still fixes missed pushes for already-materialized rows:
+
+1. **Daily cron:** `WorkerSettings.cron_jobs` registers `resync_chronic_meds_cron` (default **03:15 UTC**, configurable via `MEDBUDDY_CHRONIC_RESYNC_CRON_HOUR_UTC` / `MEDBUDDY_CHRONIC_RESYNC_CRON_MINUTE_UTC`). It calls `medbuddy.reminders.chronic_resync.resync_all_indefinite_patients(svc)`, which iterates `UserDataPort.list_patients_with_indefinite_medications()` and calls `sync_and_enqueue_reminders` for each user. Per-user failures are logged and do not abort the batch.
+2. **Delivery-time top-up:** After `try_mark_reminder_sent` succeeds inside `deliver_dose_reminder`, `_maybe_topup_chronic_med` runs for indefinite meds — it queries `count_future_dose_events(medication_id)` and, if fewer than `MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD` (default **3**) future events remain, calls `sync_and_enqueue_reminders` immediately. The `DoseEventReminderPayload` carries `medication_id` and `medication_is_indefinite` so this decision needs no extra DB round trip.
+
 ### 4.4 LINE audio message (STT → assistant)
 
 ```
@@ -469,7 +475,7 @@ LINE platform
 1. **`try_locale_change_reply`** — conversational locale switch without the orchestrator when the user text indicates a language change.
 2. **`try_resolve_pending_medication_add_confirmation`** — user answering yes/no to a pending add-medication preview (state in `UserDataPort`, not a separate intent).
 3. **`try_resolve_pending_dose_clarification`** — user answering a pending adherence/dose clarification.
-4. **`try_resolve_pending_reminder_horizon`** — user supplying how many days ahead to materialize reminders (after `add_medication` requested it).
+4. **`try_resolve_pending_reminder_horizon`** — user supplying how many days ahead to materialize reminders (after `add_medication` requested it). Only finite meds reach this state — when `MedicationExtraction.is_indefinite=true` the draft builder forces `needs_horizon_confirmation=false`, so chronic / lifelong meds never set the pending row in the first place.
 5. **`Intent.EMERGENCY`** — fixed i18n safety message (`agent.emergency`); **no** orchestrator. When the patient has at least one row in **`emergency_contacts`**, the reply also appends the same simulated outreach line as the **`simulate_notify_emergency_contact`** tool — listing **every contact on file** via **`emergency_contacts_hint_all`** — and sets **`metadata.simulated_emergency_notification`** for the app banner (i18n key `agent.emergency_with_saved_contact`). Multiple contacts are kept per patient; only the most recently saved row is **`is_primary = true`** (older entries are demoted on every save).
 6. **`try_resolve_emergency_contact_from_message`** — when the turn carries a Taiwan mobile (`09xxxxxxxx`) plus clear family/emergency wording (or follows an assistant prompt asking for a contact), call **`extract_profile_patch`** and persist to the **`emergency_contacts`** table before the medication tool loop. Prevents misclassified lines like “my son David, 0900111111” from hitting `add_medication` as a drug.
 7. **`try_intent_hooks`** — registered pilot hooks may short-circuit any remaining path.
@@ -610,6 +616,7 @@ Per-patient emergency contact rows. Replaces the legacy `emergency_contact text`
 | `schedule` | `text` | Free-text schedule (e.g. "after meals daily") |
 | `instructions` | `text` | Optional instructions from LLM extraction |
 | `raw_metadata` | `jsonb` | Full structured LLM extraction output (includes reminder prefs) |
+| `is_indefinite` | `boolean not null default false` | Chronic / lifelong med marker. Suppresses the "how many days?" follow-up at save time and opts the row into the daily `resync_chronic_meds_cron` + delivery-time top-up in `deliver_dose_reminder`. Partial index `medications_is_indefinite_idx` (`where is_indefinite`) backs the cron's distinct-patient scan via `UserDataPort.list_patients_with_indefinite_medications`. |
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
 
@@ -950,7 +957,7 @@ Pydantic models in `llm/schemas.py` back provider JSON extraction. Domain wrappe
 | Schema | Used for |
 |--------|---------|
 | `IntentClassification` | `interpret_user_turn` → `TurnInterpretation` (intent + adherence slots) |
-| `MedicationExtraction` | `extract_medication_draft` — name, dosage, schedule, reminder prefs |
+| `MedicationExtraction` | `extract_medication_draft` — name, dosage, schedule, reminder prefs, **`is_indefinite`** (chronic / lifelong marker; suppresses the horizon follow-up and routes the row through the chronic refill paths in `reminders/`) |
 | `RemovalResolution` | `resolve_medication_removal_id` — which medication ID to delete |
 | `MedicationUpdateResolution` | `resolve_medication_update` |
 | `VitalLogExtraction` | `extract_vital_log` |
@@ -1296,9 +1303,12 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 |----------|---------|-------|
 | `REDIS_URL` | — | DSN for arq; enables worker when set |
 | `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` | `09:00` | `HH:MM` local time for daily reminders — interpreted in `patients.timezone` (per-user), not a global timezone |
-| `MEDBUDDY_REMINDER_HORIZON_DAYS` | `14` | Days ahead to materialize dose events (max 90) |
+| `MEDBUDDY_REMINDER_HORIZON_DAYS` | `14` | Days ahead to materialize dose events (max 90). Also the depth that the chronic resync cron keeps full for `is_indefinite` meds. |
 | `MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES` | (empty) | Comma-separated minutes after the prior push/nudge for optional LINE follow-up nudges (e.g. `15,30,60`); empty disables nudges |
 | `MEDBUDDY_REMINDER_EDUCATION_CTA_EVERY_N_DAYS` | `5` | Cooldown days before appending an education CTA to a reminder push for the same user+medication (0 disables; max 30) |
+| `MEDBUDDY_CHRONIC_RESYNC_CRON_HOUR_UTC` | `3` | Hour-of-day in UTC for the daily chronic-med rolling-window refill cron (`resync_chronic_meds_cron`). Range 0–23. |
+| `MEDBUDDY_CHRONIC_RESYNC_CRON_MINUTE_UTC` | `15` | Minute-of-hour in UTC for the chronic resync cron. Range 0–59. |
+| `MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD` | `3` | Trigger threshold for the delivery-time safety net on indefinite meds. When fewer than this many future `dose_events` remain for the just-fired med, `deliver_dose_reminder` calls `sync_and_enqueue_reminders`. Range 0–100 (`0` disables the top-up). |
 | `MEDBUDDY_CRON_SECRET` | — | Header secret for reconcile endpoint |
 
 ### 15.7 Caching
@@ -1410,7 +1420,7 @@ Apply this checklist to major architecture changes:
 | Item | Status | Recommended path |
 |------|--------|-----------------|
 | Per-user bearer tokens | Single shared token | OAuth or per-user JWT for Growth phase — see `prd-extended.md` §13 OD-2. |
-| Free-text `schedule` column | Echo / human context only | Reminder **materialization** uses structured prefs in `raw_metadata["reminder"]`: `daily_local_hhmm`, `daily_local_hhmm_list` (multiple times per day), `first_reminder_in_minutes`, `materialize_daily`, `horizon_days`, etc. — populated from LLM extraction on add/update, with `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` when no explicit clock time is set. |
+| Free-text `schedule` column | Echo / human context only | Reminder **materialization** uses structured prefs in `raw_metadata["reminder"]`: `daily_local_hhmm`, `daily_local_hhmm_list` (multiple times per day), `first_reminder_in_minutes`, `materialize_daily`, `horizon_days`, etc. — populated from LLM extraction on add/update, with `MEDBUDDY_REMINDER_DEFAULT_LOCAL_TIME` when no explicit clock time is set. Lifelong therapies are flagged via the dedicated `medications.is_indefinite` column (not `raw_metadata`) and are refilled forever by `resync_chronic_meds_cron` and the delivery-time top-up — see [`reminders.md`](reminders.md). |
 | Full PHI scrubbing | Pattern-based only | Names, addresses, and clinical text are not masked. NER-based redaction recommended before wider deployment. |
 | Distributed tracing / metrics | Not implemented | Add OpenTelemetry before production. See §12.2. |
 | Rate limiting | Not implemented | Add per-user and per-IP limits before public-facing deploy. See §10.8. |
