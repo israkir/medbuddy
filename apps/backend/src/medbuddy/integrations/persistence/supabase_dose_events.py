@@ -190,7 +190,7 @@ class SupabaseDoseEventMixin:
         def q_med() -> Any:
             return (
                 self._client.table("medications")
-                .select("name, dosage, schedule")
+                .select("name, dosage, schedule, is_indefinite")
                 .eq("id", mid)
                 .limit(1)
                 .execute()
@@ -204,6 +204,7 @@ class SupabaseDoseEventMixin:
         return DoseEventReminderPayload(
             dose_event_id=dose_event_id,
             line_user_id=line_uid,
+            medication_id=mid,
             medication_name=str(m["name"]),
             dosage=str(m["dosage"]),
             schedule=str(m["schedule"]),
@@ -211,6 +212,7 @@ class SupabaseDoseEventMixin:
             user_timezone=tz_name,
             user_locale=user_locale,
             is_nudge=False,
+            medication_is_indefinite=bool(m.get("is_indefinite", False)),
         )
 
     async def get_dose_event_for_nudge(
@@ -275,7 +277,7 @@ class SupabaseDoseEventMixin:
         def q_med() -> Any:
             return (
                 self._client.table("medications")
-                .select("name, dosage, schedule")
+                .select("name, dosage, schedule, is_indefinite")
                 .eq("id", mid)
                 .limit(1)
                 .execute()
@@ -289,6 +291,7 @@ class SupabaseDoseEventMixin:
         return DoseEventReminderPayload(
             dose_event_id=dose_event_id,
             line_user_id=line_uid,
+            medication_id=mid,
             medication_name=str(m["name"]),
             dosage=str(m["dosage"]),
             schedule=str(m["schedule"]),
@@ -296,6 +299,7 @@ class SupabaseDoseEventMixin:
             user_timezone=tz_name,
             user_locale=user_locale,
             is_nudge=True,
+            medication_is_indefinite=bool(m.get("is_indefinite", False)),
         )
 
     async def try_mark_reminder_sent(self, dose_event_id: str) -> bool:
@@ -799,6 +803,30 @@ class SupabaseDoseEventMixin:
         updated = resp.data or []
         log.info("DB dose_events.stale_missed: closed=%d", len(updated))
         return len(updated)
+
+    async def count_future_dose_events(
+        self, medication_id: str, *, now_utc: datetime | None = None
+    ) -> int:
+        """Count pending dose rows for one med whose ``scheduled_at`` is strictly in the future."""
+        now = now_utc if now_utc is not None else datetime.now(UTC)
+        now_iso = (now if now.tzinfo else now.replace(tzinfo=UTC)).isoformat()
+
+        def q() -> Any:
+            return (
+                self._client.table("dose_events")
+                .select("id", count="exact")
+                .eq("medication_id", medication_id)
+                .is_("taken_at", "null")
+                .is_("missed_at", "null")
+                .gt("scheduled_at", now_iso)
+                .execute()
+            )
+
+        resp = await _run_q(q)
+        cnt = getattr(resp, "count", None)
+        if isinstance(cnt, int):
+            return cnt
+        return len(resp.data or [])
 
     async def list_dose_event_ids_for_reconcile(self, *, before_utc: datetime) -> list[str]:
         """Return IDs of recently-missed dose events (within RECONCILE_FRESH_HOURS) for re-enqueueing."""

@@ -206,15 +206,28 @@ def medication_draft_from_extraction(
         fm = int(fm)
         if fm <= 0:
             fm = None
+    is_indefinite = bool(extracted.is_indefinite)
+    # Chronic / lifelong meds: never ask "how many days?" and always materialize the rolling
+    # window. The daily cron + delivery-time top-up keep the window refilled (see
+    # medbuddy.reminders.chronic_resync). Any LLM-provided horizon is dropped so the
+    # server default applies on every refill.
+    if is_indefinite:
+        needs_horizon = False
+        materialize_daily = True
+        hd = None
+    else:
+        needs_horizon = extracted.needs_horizon_confirmation
+        materialize_daily = extracted.materialize_daily_reminders
     return MedicationDraft(
         name=name,
         dosage=extracted.dosage.strip() or unspecified,
         schedule=extracted.schedule.strip() or unspecified,
         instructions=extracted.instructions,
         first_reminder_in_minutes=fm,
-        materialize_daily_reminders=extracted.materialize_daily_reminders,
+        materialize_daily_reminders=materialize_daily,
         reminder_horizon_days=hd,
-        needs_horizon_confirmation=extracted.needs_horizon_confirmation,
+        needs_horizon_confirmation=needs_horizon,
         daily_reminder_local_hhmm=daily_single,
         daily_reminder_local_hhmm_list=daily_list,
+        is_indefinite=is_indefinite,
     )

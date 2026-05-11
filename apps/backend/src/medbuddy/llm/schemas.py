@@ -121,6 +121,16 @@ class MedicationExtraction(BaseModel):
             "suffices (use daily_reminder_local_hhmm) or defaults should apply."
         ),
     )
+    is_indefinite: bool = Field(
+        default=False,
+        description=(
+            "True when the user says they take this medication long-term / for life / "
+            "chronically / ongoing with no planned end (e.g. 'every day from now on', "
+            "'long-term', 'chronic', 'forever', '長期', '終身', '一直吃', '慢性病用藥'). "
+            "When true, daily reminders should run indefinitely and "
+            "reminder_horizon_days / needs_horizon_confirmation should be ignored."
+        ),
+    )
 
 
 class RemovalResolution(BaseModel):

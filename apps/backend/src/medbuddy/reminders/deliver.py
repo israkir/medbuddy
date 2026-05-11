@@ -14,6 +14,7 @@ from medbuddy.services import AppServices  # noqa: E402
 from medbuddy.core.i18n import t  # noqa: E402
 from medbuddy.llm.medication_draft_build import dose_or_schedule_display  # noqa: E402
 from medbuddy.reminders.enqueue import enqueue_reminder_nudge_job  # noqa: E402
+from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders  # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -104,9 +105,64 @@ async def deliver_dose_reminder(
             "reminder: push sent but try_mark_reminder_sent false for dose_event_id=%s",
             dose_event_id,
         )
-    elif marked and svc.settings.reminder_nudge_intervals_minutes and svc.settings.redis_url:
-        await _enqueue_first_nudge(svc, dose_event_id)
+    else:
+        if svc.settings.reminder_nudge_intervals_minutes and svc.settings.redis_url:
+            await _enqueue_first_nudge(svc, dose_event_id)
+        # Chronic / lifelong meds: top up the rolling window if it is running low so the
+        # daily cron is not the only thing keeping reminders flowing.
+        if payload.medication_is_indefinite and payload.medication_id:
+            await _maybe_topup_chronic_med(
+                svc,
+                user_key=payload.line_user_id,
+                medication_id=payload.medication_id,
+                dose_event_id=dose_event_id,
+            )
     return True
+
+
+async def _maybe_topup_chronic_med(
+    svc: AppServices,
+    *,
+    user_key: str,
+    medication_id: str,
+    dose_event_id: str,
+) -> None:
+    threshold = max(0, int(svc.settings.chronic_delivery_topup_threshold))
+    if threshold <= 0:
+        return
+    try:
+        remaining = await svc.users.count_future_dose_events(medication_id)
+    except Exception:
+        log.exception(
+            "chronic_topup: count_future_dose_events failed dose_event_id=%s med=%s",
+            dose_event_id,
+            medication_id,
+        )
+        return
+    if remaining >= threshold:
+        log.info(
+            "chronic_topup_skipped dose_event_id=%s med=%s remaining=%d threshold=%d",
+            dose_event_id,
+            medication_id,
+            remaining,
+            threshold,
+        )
+        return
+    log.info(
+        "chronic_topup_triggered dose_event_id=%s med=%s remaining=%d threshold=%d",
+        dose_event_id,
+        medication_id,
+        remaining,
+        threshold,
+    )
+    try:
+        await sync_and_enqueue_reminders(svc, user_key)
+    except Exception:
+        log.exception(
+            "chronic_topup: sync_and_enqueue_reminders failed user=%s med=%s",
+            user_key,
+            medication_id,
+        )
 
 
 async def deliver_dose_reminder_nudge(

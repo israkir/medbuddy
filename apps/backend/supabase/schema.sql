@@ -83,6 +83,7 @@ create table if not exists public.medications (
     dosage text not null,
     schedule text not null,
     instructions text,
+    is_indefinite boolean not null default false,
     raw_metadata jsonb not null default '{}'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -90,10 +91,18 @@ create table if not exists public.medications (
 
 comment on column public.medications.instructions is
     'Optional free-text notes from the user message (LLM extraction); not a substitute for prescriber directions.';
+comment on column public.medications.is_indefinite is
+    'True for chronic / lifelong medications with no planned end date; the reminder rolling window is '
+    'topped up by a daily cron + delivery-time safety-net resync instead of horizon-day expiry.';
 comment on column public.medications.raw_metadata is
     'App-defined JSON (e.g. raw_metadata.reminder for dose scheduling preferences).';
 
 create index if not exists medications_patient_id_idx on public.medications (patient_id);
+
+-- Partial index supports the daily chronic-resync cron's "find patients with chronic meds" query.
+create index if not exists medications_is_indefinite_idx
+    on public.medications (is_indefinite)
+    where is_indefinite;
 
 create table if not exists public.conversation_turns (
     id bigserial primary key,
