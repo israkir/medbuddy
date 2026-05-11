@@ -136,6 +136,9 @@ class _OrchestrationContext:
     async def reload_medications(self) -> None:
         self.medications = await self.svc.users.list_medications(self.user_key)
 
+    async def reload_user_row(self) -> None:
+        self.user_row = await self.svc.users.get_or_create_user(self.user_key)
+
 
 def _merge_confirm_dose_payload(
     args: dict[str, Any],
@@ -452,11 +455,38 @@ async def execute_agent_tool(
 
     if name == "update_profile":
         patch = await svc.llm.extract_profile_patch(ctx.user_text, locale=locale)
-        return await apply_profile_update_from_extracted_patch(
+        reply = await apply_profile_update_from_extracted_patch(
             svc, user_key=user_key, patch=patch, baseline_locale=locale
         )
+        await ctx.reload_user_row()
+        return reply
 
     return t("agent.generic_error", locale=locale)
+
+
+async def _orchestrator_system_prompt_content(
+    svc: AppServices,
+    *,
+    user_key: str,
+    user_row: dict[str, Any],
+    medications: list[MedicationRecord],
+    locale: str,
+    prior_turn_count: int,
+    system_prompt_suffix: str | None,
+) -> str:
+    """Build the medication-agent system message (catalog JSON + patient context block)."""
+    cat = json.dumps(
+        [{"id": m.id, "name": m.name} for m in medications],
+        ensure_ascii=False,
+    )
+    patient_ctx = await patient_context_for_llm(svc, user_key, user_row, medications, locale=locale)
+    return build_agent_system_prompt(
+        locale=locale,
+        medication_catalog_json=cat,
+        patient_context_block=patient_ctx,
+        prior_turn_count=prior_turn_count,
+        extra_instructions=system_prompt_suffix,
+    )
 
 
 async def run_tool_agent_loop(
@@ -476,18 +506,16 @@ async def run_tool_agent_loop(
     system_prompt_suffix: str | None = None,
 ) -> AgentTurnResult:
     """Multi-step OpenAI-tool loop until the model returns text or max steps."""
-    cat = json.dumps(
-        [{"id": m.id, "name": m.name} for m in medications],
-        ensure_ascii=False,
-    )
-    patient_ctx = await patient_context_for_llm(svc, user_key, user_row, medications, locale=locale)
     prior_msgs = orchestrator_prior_messages(history, max_turns=max_prior_turns)
-    system = build_agent_system_prompt(
+    prior_turn_count = len(prior_msgs)
+    system = await _orchestrator_system_prompt_content(
+        svc,
+        user_key=user_key,
+        user_row=user_row,
+        medications=medications,
         locale=locale,
-        medication_catalog_json=cat,
-        patient_context_block=patient_ctx,
-        prior_turn_count=len(prior_msgs),
-        extra_instructions=system_prompt_suffix,
+        prior_turn_count=prior_turn_count,
+        system_prompt_suffix=system_prompt_suffix,
     )
     ctx = _OrchestrationContext(
         svc=svc,
@@ -560,6 +588,16 @@ async def run_tool_agent_loop(
                         "tool_call_id": mech_id,
                         "content": out,
                     }
+                )
+            if "update_profile" in names_in_batch:
+                messages[0]["content"] = await _orchestrator_system_prompt_content(
+                    svc,
+                    user_key=user_key,
+                    user_row=ctx.user_row,
+                    medications=ctx.medications,
+                    locale=locale,
+                    prior_turn_count=prior_turn_count,
+                    system_prompt_suffix=system_prompt_suffix,
                 )
             continue
         final = (content or "").strip()

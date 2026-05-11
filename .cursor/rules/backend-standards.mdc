@@ -31,8 +31,8 @@ Logging must stay consistent with **Security** above: no tokens, credentials, ra
 
 ## Structure and layering
 
-- **FastAPI** entry: `medbuddy.main` (routers). Settings: `pydantic-settings` (`medbuddy.config`).
-- **Channels**: LINE in `channels/line/`; mobile HTTP in `channels/mobile/`. Shared HTTP in `http/shared_routes.py`.
+- **FastAPI** entry: `medbuddy.main` (routers). **Settings:** `medbuddy.config` — frozen dataclass loaded via `load_settings()` / cached `get_settings()` (env vars), not pydantic-settings.
+- **Channels**: LINE in `channels/line/`; standalone app REST in `channels/api/`. Shared ops routes (`/health`, reminders reconcile) in `channels/internal/routes.py`.
 - **Application**: Shared use cases in `application/` (e.g. `assistant_turn.py`) — no duplicated LLM / drug / history logic in `channels/*`.
 - **Ports / integrations**: Protocols in `protocols/`; adapters in `integrations/` (`mocks/` + concrete implementations). Shared types in `engine/`. Extend these patterns; avoid one-off integration modules elsewhere.
 

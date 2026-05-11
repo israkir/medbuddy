@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,6 +12,7 @@ import pytest
 from medbuddy.agents.orchestrator import (
     orchestrator_prior_messages,
     recent_conversation_for_medication_extraction,
+    run_tool_agent_loop,
 )
 from medbuddy.application.assistant_turn import run_assistant_text_turn
 from medbuddy.container import build_app_services
@@ -119,3 +122,55 @@ async def test_mock_llm_orchestrator_step_resets_each_turn_with_history() -> Non
     await run_assistant_text_turn(svc, user_key=key, user_text="add aspirin")
 
     assert getattr(llm, "_orch_step", 0) >= 1
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_rebuilds_system_after_update_profile_tool() -> None:
+    """After update_profile persists preferred_name, the next LLM hop must see refreshed system text."""
+    settings = make_mock_settings()
+    svc = build_app_services(settings)
+    key = f"U-orch-profile-refresh-{uuid.uuid4().hex[:12]}"
+    await svc.users.get_or_create_user(key)
+    await svc.users.patch_user_profile(key, {"locale": "en"})
+    user_row = await svc.users.get_or_create_user(key)
+    assert user_row.get("preferred_name") is None
+
+    captured: list[list[dict[str, Any]]] = []
+    base_llm = MockLLM(
+        intent=Intent.GENERAL_QUESTION,
+        locale="en",
+        profile_patch={"preferred_name": "Mei"},
+        orchestrator_tools_step1=[("update_profile", "{}")],
+    )
+    orig_complete = base_llm.complete_chat_with_tools
+
+    async def spy_complete(
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> tuple[str | None, Any]:
+        # Snapshot: orchestrator mutates messages[0] after update_profile; keep per-hop view.
+        captured.append(copy.deepcopy(messages))
+        return await orig_complete(messages=messages, tools=tools)
+
+    base_llm.complete_chat_with_tools = spy_complete  # type: ignore[method-assign]
+    svc.llm = base_llm
+
+    await run_tool_agent_loop(
+        svc,
+        user_key=key,
+        user_text="Please call me Mei",
+        safe_text="Please call me Mei",
+        user_row=user_row,
+        medications=[],
+        history=[],
+        locale="en",
+        llm=base_llm,
+        max_prior_turns=10,
+    )
+
+    assert len(captured) >= 2
+    first_system = str(captured[0][0].get("content") or "")
+    second_system = str(captured[1][0].get("content") or "")
+    assert "Mei" not in first_system
+    assert "Mei" in second_system

@@ -88,12 +88,14 @@ Each Python file in `protocols/` maps 1:1 to a Go interface file in `ports/`.
 
 ### Application layer
 
-The Python package is grouped into subpackages (`pending/`, `health_events/`, `profile/`); the Go target keeps the same grouping under `application/`.
+The Python package mixes top-level modules with subpackages (`pending/`, `health_events/`, `profile/`); the Go target mirrors that layout under `application/`.
 
 | Python (`application/`)                              | Go (`application/`)                              |
 | ---------------------------------------------------- | ------------------------------------------------ |
 | `assistant_turn.py`                                  | `application/assistant_turn.go`                  |
 | `patient_llm_context.py`                             | `application/patient_llm_context.go`             |
+| `drug_grounding.py`                                  | `application/drug_grounding.go`                  |
+| `drug_grounding_query.py`                            | `application/drug_grounding_query.go`            |
 | `vital_log_build.py`                                 | `application/vital_log_build.go`                 |
 | `pending/locale_intents.py`                          | `application/pending/locale_intents.go`          |
 | `pending/medication_add_confirm_resolve.py`          | `application/pending/medication_add_confirm.go`  |
@@ -103,7 +105,9 @@ The Python package is grouped into subpackages (`pending/`, `health_events/`, `p
 | `health_events/health_issue_events_format.py`        | `application/health_events/format.go`            |
 | `profile/profile_intents.py`                         | `application/profile/profile_intents.go`         |
 | `profile/emergency_contact_resolve.py`               | `application/profile/emergency_contact.go`       |
+| `profile/emergency_contacts.py`                      | `application/profile/emergency_contacts.go`      |
 | `profile/profile_completion_nudge.py`                | `application/profile/completion_nudge.go`        |
+| `post_add_medication_reply.py`                       | `application/post_add_medication_reply.go`       |
 
 
 ### Domain / agents
