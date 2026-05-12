@@ -2244,7 +2244,8 @@ A live, runnable prototype — every layer of the architecture working end-to-en
 .cols[
 .col[
 <ul class="checklist">
-<li><b>Registered tool-backed flows</b> covered end-to-end — list, add, update, remove, bulk clear, reminders off, explain, interactions, side-effects, confirm, miss, log vital, summary, profile, journal, and more · cohort-validated quality is an MVP gate</li>
+<li><b>Registered tool-backed flows</b> covered end-to-end — list, add, update, remove, bulk clear, reminders off, explain, interactions, side-effects, confirm, miss, log vital, health history lookup, summary, profile, journal · cohort-validated quality is an MVP gate</li>
+<li><b>Chat loading indicators</b> — LINE typing indicator dispatched before the assistant path on both inbound text and audio turns (<code>send_chat_loading_indicator</code>)</li>
 <li><b>Voice in &amp; out</b> — <a href="https://cloud.google.com/speech-to-text" target="_blank" rel="noopener noreferrer">Google STT v2</a> + <a href="https://cloud.google.com/text-to-speech" target="_blank" rel="noopener noreferrer">Cloud TTS</a>, sharing the same understanding pipeline as typed chat. Formal accuracy and cost targets are deferred to the OD-3 milestone at Growth.</li>
 <li><b>Reminders</b> — scheduled delivery, follow-up nudges, a catch-up path if queue or worker hiccups, and a daily refill + delivery-time safety net so <b>chronic / lifelong meds keep firing indefinitely</b> without ever asking "for how many days?"</li>
 <li><b>Data layer</b> — <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer">Supabase</a> (Postgres) for Prototype: patients, medications, dose events, drug reference cache, conversation turns; fast in-memory mock for development and CI. Migrates to RDS + DynamoDB + ElastiCache at MVP.</li>
@@ -2423,13 +2424,13 @@ class: deep
 
 # What patients can actually do
 
-Sixteen practical capabilities, grouped by patient job-to-be-done. Every flow is end-to-end in code; MVP quality gate is cohort-validated answer quality.
+Eighteen practical capabilities, grouped by patient job-to-be-done. Every flow is end-to-end in code; MVP quality gate is cohort-validated answer quality.
 
 .cols[
 .col[
 <div style="background:#eef4f2;border:1px solid #cfe2dd;border-radius:12px;padding:0.55em 0.75em;margin-bottom:0.45em">
   <div style="font-size:0.72em;font-weight:800;color:#066658;margin-bottom:0.2em">📋 Medication list</div>
-  <div style="font-size:0.62em;line-height:1.38;color:#233936">Add medication · update dose/schedule/instructions · remove stopped meds · view list · view upcoming doses</div>
+  <div style="font-size:0.62em;line-height:1.38;color:#233936">Add medication · update dose/schedule/instructions · remove stopped meds · view list · view upcoming doses · add emergency contacts (multiple; most-recent = primary)</div>
 </div>
 
 <div style="background:#eef4f2;border:1px solid #cfe2dd;border-radius:12px;padding:0.55em 0.75em">
@@ -2445,7 +2446,7 @@ Sixteen practical capabilities, grouped by patient job-to-be-done. Every flow is
 
 <div style="background:#fff8f5;border:1px solid #ffd4c4;border-radius:12px;padding:0.55em 0.75em;margin-bottom:0.45em">
   <div style="font-size:0.72em;font-weight:800;color:#a04a35;margin-bottom:0.2em">❤️ Health tracking</div>
-  <div style="font-size:0.62em;line-height:1.38;color:#4f3a35">Log vitals (BP/glucose/etc.) · review trends · request doctor-ready summary</div>
+  <div style="font-size:0.62em;line-height:1.38;color:#4f3a35">Log vitals (BP/glucose/etc.) · review trends · review recent health-issue history · request doctor-ready summary</div>
 </div>
 
 <div style="background:#f9f7fd;border:1px solid #d8c8f0;border-radius:12px;padding:0.55em 0.75em">
@@ -3554,7 +3555,7 @@ Per-turn budget: routing classify (~700 tokens) plus one or more orchestrator ro
 ]
 ]
 
-.src[LLM pricing: [Anthropic Claude pricing](https://www.anthropic.com/pricing) · [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) · [OpenAI pricing](https://openai.com/api/pricing/). [Anthropic Prompt Caching](https://www.anthropic.com/news/prompt-caching) — reduces cost on repeated system-prompt prefixes. Cost targets are internal projections — assumptions in [tdd-extended.md](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md).]
+.src[LLM pricing: [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) · [OpenAI pricing](https://openai.com/api/pricing/). Provider prompt-caching reduces cost on repeated system-prompt prefixes. Cost targets are internal projections — assumptions in [tdd-extended.md](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md).]
 
 ---
 
@@ -3649,7 +3650,7 @@ class: deep eng-proto
 ]
 ]
 
-.src[Internal projection — assumptions (engagement rate, peak-to-average ratio, LLM calls per turn) in [tdd-extended.md](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md). LLM pricing: [Anthropic / Claude pricing](https://www.anthropic.com/pricing) · [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) · [OpenAI pricing](https://openai.com/api/pricing/).]
+.src[Internal projection — assumptions (engagement rate, peak-to-average ratio, LLM calls per turn) in [tdd-extended.md](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md). LLM pricing: [Google Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) · [OpenAI pricing](https://openai.com/api/pricing/).]
 
 ---
 
@@ -3658,14 +3659,6 @@ class: deep eng-proto
 <div class="eng-proto-strip">Prototype <span class="detail">Engineering views match today&rsquo;s repository — not committed production</span></div>
 
 # Resilience &amp; reliability
-
-**MVP** optimises for *honest degradation + visibility*; **Growth** adds *automation, redundancy, and stricter SLOs* without rewriting the pipeline.
-
-**Prototype evidence:** idempotent reminder semantics + reconcile replay path validated in the current architecture.
-
-**MVP evidence:** queue depth, reminder delivery, and latency dashboards tracked per release.
-
-**Growth evidence:** SLO/error-budget review and automated burn alerts across tenants/regions.
 
 | Failure mode | MVP &amp; Taiwan Pilot | Growth |
 |---|---|---|
@@ -3828,12 +3821,12 @@ class: deep
   <div class="team-card">
     <div class="team-photo">photo</div>
     <div class="team-name">Jill</div>
-    <div class="team-role">Co-founder<br>GM</div>
+    <div class="team-role">GM</div>
   </div>
   <div class="team-card">
     <div class="team-photo">photo</div>
     <div class="team-name">Hakki</div>
-    <div class="team-role">Co-founder<br>Engineering &amp; Product</div>
+    <div class="team-role">Engineering &amp; Product</div>
   </div>
 </div>
 

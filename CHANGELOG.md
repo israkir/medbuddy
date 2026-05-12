@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reminder horizon replies:** Pending expiry returns `reminder.horizon_expired_ack` instead of a silent clear; `_parse_horizon_days` accepts word-form day counts (e.g. "seven days", 七天), trailing integers after short filler ("yes 7"), and related patterns.
 - **LINE webhook and voice UX:** `POST /v1/line/webhook` returns immediately after parse and idempotency, scheduling each event on FastAPI `BackgroundTasks` (failures logged in `_run_event`). Inbound **text and audio** start LINE's chat loading indicator before the assistant path (text: before LLM; audio: before download/STT). New `LineMessagingPort.send_chat_loading_indicator` on `LineHttpClient` and `MockLineClient.loading_indicators`; tests cover both paths.
 
+### Docs
+
+- **Documentation alignment pass:** Updated `docs/features.md`, `docs/tdd-extended.md`, `docs/llm-context.md`, and `docs/privacy.md` to replace the removed `patients.health_notes` column with the `patient_health_conditions` structured table; distinguished the live `include_health_notes` / `recent_health_notes` code identifiers from the removed DB column; added `is_indefinite` / chronic-med notes where missing. Updated `docs/presentation/index.html`: added `lookup_health_history` tool and chat loading indicators to the built-features checklist; updated capability count (16 → 18) and expanded capability cards with health-history lookup and multiple emergency contacts; dropped Anthropic/Claude pricing and prompt-caching citations (only Gemini + OpenAI are integrated providers).
+
 ### Security
 
 - **LINE webhook idempotency (S2):** A Redis `SETNX` keyed on `webhookEventId` (5-minute TTL) deduplicates events before dispatch. LINE retries and slow-200 re-deliveries are silently skipped. Falls back gracefully (always-process) when `REDIS_URL` is unset so mock mode is unaffected. New module: `apps/backend/src/medbuddy/channels/line/idempotency.py`.

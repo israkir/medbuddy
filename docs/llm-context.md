@@ -31,9 +31,9 @@ Typical blocks in the string sent to the model:
 | Medications | Lines from the user’s saved list: drug **name**, **dosage**, **schedule** (`format_patient_medication_context`). |
 | Upcoming doses | When the sync/window yields rows: **local time** (and date if not today), **medication name**, **dosage**, **schedule** text; lines are **pending** `dose_events` only (`taken_at` / `missed_at` null), soonest first. Intro comes from `prompts.upcoming_doses_*` keys. |
 
-**Not** included: raw `health_notes`, raw emergency contact values, exact `age_years`.
+**Not** included: raw free-text from `patient_health_conditions.notes` entries, raw emergency contact values, exact `age_years`.
 
-**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync), and **post-add** `check_interactions_structured` when `persist_medication_add_from_draft` runs with **two or more** medications on the updated list (same `patient_context_for_llm` assembly, `include_health_notes=True`). **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
+**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync), and **post-add** `check_interactions_structured` when `persist_medication_add_from_draft` runs with **two or more** medications on the updated list (same `patient_context_for_llm` assembly, `include_health_notes=True`). The `include_health_notes=True` flag toggles inclusion of the `recent_health_notes` buffer — a formatted block built from recent `patient_health_conditions` rows (not a removed stored column); it is omitted from the standard context block but included deliberately on the safety-critical call sites listed above. **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
 
 ### Patient context for **display** only (`build_patient_context_for_chat_display`)
 
