@@ -482,7 +482,7 @@ async def test_messages_emergency_with_saved_contact_simulates_notify(mock_setti
     body = r.json()
     assert body["metadata"].get("simulated_emergency_notification") is True
     assert "0912345678" in body["reply"]
-    assert "practice message" in body["reply"].lower()
+    assert "demo build" in body["reply"].lower()
 
 
 @pytest.mark.asyncio
@@ -528,7 +528,8 @@ async def test_messages_emergency_lists_all_saved_contacts(mock_settings) -> Non
     reply = body["reply"]
     assert "0900111111" in reply
     assert "0922222222" in reply
-    assert "every emergency contact" in reply.lower()
+    assert "saved contacts" in reply.lower()
+    assert "would be notified" in reply.lower()
 
 
 @pytest.mark.asyncio

@@ -122,6 +122,8 @@ class SupabaseMedicationMixin:
         line_user_id: str,
         medication_id: str,
         reminder_patch: dict[str, Any],
+        *,
+        set_indefinite: bool | None = None,
     ) -> MedicationRecord | None:
         user = await self.get_or_create_user(line_user_id)
         uid = user["id"]
@@ -150,6 +152,8 @@ class SupabaseMedicationMixin:
         rem_merged = {**rem, **reminder_patch}
         raw_merged = {**raw, "reminder": rem_merged}
         payload: dict[str, Any] = {"raw_metadata": raw_merged}
+        if set_indefinite is not None:
+            payload["is_indefinite"] = bool(set_indefinite)
 
         def upd() -> Any:
             return (

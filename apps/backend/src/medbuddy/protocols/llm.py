@@ -119,6 +119,7 @@ class LLMPort(Protocol):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        suppress_horizon_appendix: bool = False,
     ) -> str: ...
 
     async def compose_medication_added_primary(
@@ -129,6 +130,7 @@ class LLMPort(Protocol):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        suppress_horizon_appendix: bool = False,
     ) -> str: ...
 
     async def check_interactions_structured(

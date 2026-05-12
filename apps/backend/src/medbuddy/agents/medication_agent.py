@@ -160,10 +160,9 @@ class MedicationAgent:
             log.warning("medication_agent: user_key=%s emergency intent matched", user_key)
             hint = emergency_contacts_hint_all(user_row.get("emergency_contacts"), locale=locale)
             if hint:
-                reply = t("agent.emergency_with_saved_contact", locale=locale)
                 reason = _preview_text(safe_text, limit=120)
-                reply = f"{reply}\n\n" + t(
-                    "agent.simulated_emergency_notify",
+                reply = t(
+                    "agent.emergency_with_saved_contact",
                     locale=locale,
                     reason=reason,
                     contact_hint=hint,

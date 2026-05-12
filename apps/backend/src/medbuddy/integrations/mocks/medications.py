@@ -63,6 +63,8 @@ class MockMedicationMixin:
         line_user_id: str,
         medication_id: str,
         reminder_patch: dict[str, Any],
+        *,
+        set_indefinite: bool | None = None,
     ) -> MedicationRecord | None:
         await asyncio.sleep(0)
         await self.get_or_create_user(line_user_id)
@@ -76,6 +78,7 @@ class MockMedicationMixin:
                 rem = {}
             rem = {**rem, **reminder_patch}
             raw["reminder"] = rem
+            new_indefinite = m.is_indefinite if set_indefinite is None else set_indefinite
             updated = MedicationRecord(
                 id=m.id,
                 name=m.name,
@@ -83,7 +86,7 @@ class MockMedicationMixin:
                 schedule=m.schedule,
                 instructions=m.instructions,
                 raw_metadata=raw,
-                is_indefinite=m.is_indefinite,
+                is_indefinite=new_indefinite,
             )
             meds[i] = updated
             return updated

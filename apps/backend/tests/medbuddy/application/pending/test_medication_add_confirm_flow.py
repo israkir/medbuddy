@@ -85,3 +85,34 @@ async def test_add_medication_complete_skips_confirm() -> None:
     assert await svc.users.get_medication_add_confirmation_pending(key) is None
     meds = await svc.users.list_medications(key)
     assert len(meds) == 1
+
+
+@pytest.mark.asyncio
+async def test_confirm_yes_reply_does_not_re_ask_horizon() -> None:
+    """Bug 1: after confirm 'yes', the reply must not contain the horizon question."""
+    settings = make_mock_settings()
+    svc = build_app_services(settings)
+    key = "U-confirm-no-horizon"
+    await svc.users.get_or_create_user(key)
+    await svc.users.patch_user_profile(key, {"locale": "en"})
+    draft = MedicationDraft(
+        name="Aspirin",
+        dosage="Unspecified",
+        schedule="Unspecified",
+        instructions=None,
+        needs_horizon_confirmation=True,
+    )
+    svc.llm = MockLLM(intent=Intent.ADD_MEDICATION, medication_draft=draft, locale="en")
+    await run_assistant_text_turn(svc, user_key=key, user_text="track aspirin")
+    # Confirm prompt must be sent
+    assert await svc.users.get_medication_add_confirmation_pending(key) is not None
+
+    svc.llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale="en")
+    r2 = (await run_assistant_text_turn(svc, user_key=key, user_text="yes")).reply
+    # Medication must be saved
+    meds = await svc.users.list_medications(key)
+    assert len(meds) == 1
+    # Reply must NOT re-ask how many days (horizon question)
+    r2_lower = r2.lower()
+    assert "how many days" not in r2_lower
+    assert "幾天" not in r2

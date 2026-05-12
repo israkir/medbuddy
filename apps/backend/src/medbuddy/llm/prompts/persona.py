@@ -272,6 +272,7 @@ def build_patient_context_for_llm(
     upcoming_doses_context: str | None = None,
     include_health_notes: bool = False,
     health_conditions: list[HealthConditionRecord] | None = None,
+    recent_health_notes: str | None = None,
 ) -> str:
     """De-identified profile cues plus medications — safe for external model APIs.
 
@@ -289,6 +290,10 @@ def build_patient_context_for_llm(
     gaps = format_profile_gaps(user_row, locale=locale, active_health_condition_count=len(hc_list))
     med_part = format_patient_medication_context(meds, locale=locale)
     blocks: list[str] = []
+    # Hoist preferred_name as a first-class directive so the model treats it as an instruction.
+    name = user_row.get("preferred_name")
+    if isinstance(name, str) and name.strip():
+        blocks.append(t("prompts.address_user_as", locale=locale, name=name.strip()))
     if signals:
         blocks.append(signals)
     if gaps:
@@ -298,9 +303,9 @@ def build_patient_context_for_llm(
     else:
         base = med_part
     if upcoming_doses_context and upcoming_doses_context.strip():
-        result = f"{base}\n\n{upcoming_doses_context.strip()}"
-    else:
-        result = base
-    log.info("build_patient_context_for_llm complete locale=%s chars=%d", locale, len(result))
-    log.debug("build_patient_context_for_llm body:\n%s", result)
-    return result
+        base = f"{base}\n\n{upcoming_doses_context.strip()}"
+    if recent_health_notes and recent_health_notes.strip():
+        base = f"{base}\n\n{recent_health_notes.strip()}"
+    log.info("build_patient_context_for_llm complete locale=%s chars=%d", locale, len(base))
+    log.debug("build_patient_context_for_llm body:\n%s", base)
+    return base

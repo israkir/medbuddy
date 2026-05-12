@@ -141,7 +141,12 @@ def _dedupe_sorted(instants: list[datetime]) -> list[datetime]:
     return unique
 
 
-def reminder_compose_appendix(saved: MedicationRecord, locale: str) -> str:
+def reminder_compose_appendix(
+    saved: MedicationRecord,
+    locale: str,
+    *,
+    suppress_horizon_appendix: bool = False,
+) -> str:
     """Extra instructions for compose_medication_added_reply from stored reminder prefs."""
     raw = saved.raw_metadata or {}
     rem = raw.get("reminder") if isinstance(raw, dict) else None
@@ -155,7 +160,7 @@ def reminder_compose_appendix(saved: MedicationRecord, locale: str) -> str:
             lines.append(t("llm.added_first_reminder_only", locale=locale, minutes=int(fm)))
         lines.append(t("llm.added_indefinite", locale=locale))
         return "\n\n" + "\n".join(lines)
-    if rem.get("needs_horizon_confirmation"):
+    if rem.get("needs_horizon_confirmation") and not suppress_horizon_appendix:
         lines.append(t("llm.added_ask_reminder_horizon", locale=locale))
     fm = rem.get("first_reminder_in_minutes")
     md = bool(rem.get("materialize_daily", True))

@@ -16,6 +16,51 @@ from medbuddy.services import AppServices
 from medbuddy.core.i18n import t
 from medbuddy.reminders.lifecycle import sync_and_enqueue_reminders
 
+_INDEFINITE_PHRASES: frozenset[str] = frozenset(
+    {
+        # English
+        "every day",
+        "everyday",
+        "always",
+        "forever",
+        "ongoing",
+        "indefinitely",
+        "indefinite",
+        "long term",
+        "long-term",
+        "chronic",
+        "lifelong",
+        "life long",
+        "life-long",
+        "daily ongoing",
+        "for life",
+        "from now on",
+        "every day from now on",
+        # Traditional Chinese
+        "每天",
+        "一直",
+        "長期",
+        "永遠",
+        "長期服用",
+        "一直吃",
+        "每天吃",
+        "慢性病",
+        "終身",
+        "無期限",
+    }
+)
+
+
+def _is_indefinite_reply(text: str) -> bool:
+    """Return True when the text clearly signals the user wants ongoing / lifelong reminders."""
+    s = text.strip().lower()
+    # Strip punctuation
+    for ch in (".", "。", "!", "！", "?", "？", ",", "，"):
+        s = s.strip(ch)
+    s = s.strip()
+    return s in _INDEFINITE_PHRASES or any(phrase in s for phrase in _INDEFINITE_PHRASES)
+
+
 _DAYS_PATTERNS = [
     # "3 days", "3 天", "3 日", "3d"
     re.compile(r"\b(\d+)\s*(?:days?|天|日|d)\b", re.IGNORECASE),
@@ -143,6 +188,35 @@ async def try_resolve_pending_reminder_horizon(
     if now > exp:
         await svc.users.set_reminder_horizon_pending(user_key, None)
         return t("reminder.horizon_expired_ack", locale=locale, name=pending.medication_name)
+
+    # Check for indefinite / chronic intent first (e.g. "every day", "always", "長期").
+    if _is_indefinite_reply(user_text):
+        medications = await svc.users.list_medications(user_key)
+        target = next((m for m in medications if m.id == pending.medication_id), None)
+        if target is None:
+            await svc.users.set_reminder_horizon_pending(user_key, None)
+            return t("reminder.horizon_confirmed_indefinite", locale=locale)
+
+        updated = await svc.users.merge_medication_raw_metadata(
+            user_key,
+            pending.medication_id,
+            {
+                "needs_horizon_confirmation": False,
+                "materialize_daily": True,
+                "horizon_days": None,
+            },
+            set_indefinite=True,
+        )
+        if updated is None:
+            return None
+
+        await svc.users.set_reminder_horizon_pending(user_key, None)
+        await sync_and_enqueue_reminders(svc, user_key)
+        return t(
+            "reminder.horizon_confirmed_indefinite",
+            locale=locale,
+            name=pending.medication_name,
+        )
 
     days = _parse_horizon_days(user_text)
     if days is None:
