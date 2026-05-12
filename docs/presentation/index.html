@@ -2424,7 +2424,7 @@ class: deep
 
 # What patients can actually do
 
-Eighteen practical capabilities, grouped by patient job-to-be-done. Every flow is end-to-end in code; MVP quality gate is cohort-validated answer quality.
+Nineteen practical capabilities, grouped by patient job-to-be-done. Every flow is end-to-end in code; MVP quality gate is cohort-validated answer quality.
 
 .cols[
 .col[
@@ -3745,10 +3745,6 @@ class: deep
 | **Drug reference** | OpenFDA live + ElastiCache TTL | TFDA + PMDA; ElastiCache TTL cache | Country-local mirrors; CDN-cached |
 | **Cloud region** | 1× AWS (`ap-east-1` HK or `ap-northeast-1` JP) | 2× (TW/SG + JP) | 4+× (TW · JP · KR · SG) |
 | **Infra cost / month** | ~$150–250 | ~$2K–5K | ~$15K–30K |
-
-<div class="callout"><p><strong>Same cloud platform, same application code across all phases.</strong> Growing from MVP to Regional means resizing instances, enabling Multi-AZ, and adding tasks — <em>not</em> migrating platforms.</p></div>
-
-<div class="callout"><p><strong>Availability + speed takeaway:</strong> scaling is additive (replicas, Multi-AZ, queue workers), so latency and resilience improve without re-architecting the assistant pipeline.</p></div>
 
 .src[Pricing references: [AWS ECS Fargate pricing](https://aws.amazon.com/fargate/pricing/) · [AWS RDS pricing](https://aws.amazon.com/rds/pricing/) · [AWS ElastiCache pricing](https://aws.amazon.com/elasticache/pricing/) · [AWS SQS pricing](https://aws.amazon.com/sqs/pricing/). Cost estimates are internal projections — assumptions in [tdd-extended.md](https://github.com/israkir/medbuddy/blob/main/docs/tdd-extended.md).]
 
