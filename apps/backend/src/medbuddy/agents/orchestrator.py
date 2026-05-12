@@ -28,6 +28,7 @@ from medbuddy.agents.tools.medication_crud import (
     UpdateMedicationTool,
 )
 from medbuddy.agents.tools.upcoming_doses import ListUpcomingDosesTool
+from medbuddy.agents.tools.health_history_lookup import LookupHealthHistoryTool
 from medbuddy.application.patient_llm_context import patient_context_for_llm
 from medbuddy.application.health_events.health_issue_events_format import (
     format_health_issue_events_for_summary,
@@ -573,6 +574,20 @@ async def execute_agent_tool(
         )
         await ctx.reload_user_row()
         return reply
+
+    if name == "lookup_health_history":
+        since_days = args.get("since_days")
+        if isinstance(since_days, (int, float)):
+            since_days = int(since_days)
+        else:
+            since_days = None
+        r = await LookupHealthHistoryTool().run(
+            svc=svc,
+            user_key=user_key,
+            locale=locale,
+            since_days=since_days,
+        )
+        return r.reply
 
     return t("agent.generic_error", locale=locale)
 

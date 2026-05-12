@@ -318,6 +318,30 @@ AGENT_TOOLS_OPENAI: list[dict[str, object]] = [
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_health_history",
+            "description": (
+                "Retrieve the patient's past health-issue notes and symptom turns. "
+                "Use when they ask 'when did I last…', 'have I had…', 'was I fainting', "
+                "or any question about past symptoms or health events."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "since_days": {
+                        "type": "integer",
+                        "description": (
+                            "Optional: only return events from the last N days. "
+                            "Omit to return the most recent 30 entries regardless of date."
+                        ),
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 

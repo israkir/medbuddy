@@ -220,9 +220,10 @@ class MockLLM(LLMPort):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        suppress_horizon_appendix: bool = False,
     ) -> str:
         await asyncio.sleep(0)
-        _ = (patient_context, user_message)
+        _ = (patient_context, user_message, suppress_horizon_appendix)
         summary = (drug_grounding or "").replace("\n", " ").strip()[:160] or t(
             "llm.no_drug_data", locale=locale
         )
@@ -243,9 +244,10 @@ class MockLLM(LLMPort):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        suppress_horizon_appendix: bool = False,
     ) -> str:
         await asyncio.sleep(0)
-        _ = (patient_context, user_message, drug_grounding)
+        _ = (patient_context, user_message, drug_grounding, suppress_horizon_appendix)
         return t(
             "mocks.llm.medication_added_primary",
             locale=locale,

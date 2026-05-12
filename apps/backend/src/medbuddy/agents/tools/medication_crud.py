@@ -43,8 +43,14 @@ async def persist_medication_add_from_draft(
     user_text: str,
     draft: MedicationDraft,
     locale: str,
+    suppress_horizon_question: bool = False,
 ) -> ToolResult:
-    """Save draft, sync reminders, and compose the post-add reply (shared confirm + add tool)."""
+    """Save draft, sync reminders, and compose the post-add reply (shared confirm + add tool).
+
+    When ``suppress_horizon_question=True`` (confirm-resolve path), the LLM reply will not
+    re-ask "how many days?" — the pending state is still created so ``_maybe_append_pending_reminder``
+    can ask naturally on the next turn.
+    """
     safe_text = redact_pii_text(user_text)
     user_row = await svc.users.get_or_create_user(user_key)
     saved = await svc.users.add_medication(user_key, draft)
@@ -84,6 +90,7 @@ async def persist_medication_add_from_draft(
         drug_grounding=drug_grounding,
         user_message=safe_text,
         locale=locale,
+        suppress_horizon_appendix=suppress_horizon_question,
     )
     conditions = await svc.users.list_health_conditions(user_key, active_only=True)
     concern_lines = await svc.llm.check_drug_condition_interactions(

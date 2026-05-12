@@ -36,8 +36,8 @@
     "generic_error": "Something went wrong on our side. Please try again in a moment — or ask someone you trust to help if it keeps happening.",
     "off_topic": "I’m here for your medications, reminders, and everyday health questions about them. I’m not the best fit for that topic — how about your medicines, doses, or what you’d like a reminder for?",
     "emergency": "🚨 This sounds like a medical emergency. Please call 119 (ambulance) or 110 (police) right away, or have someone nearby call for you. If you can, sit or lie down safely and stay on the phone with emergency services. Do not take extra medication without speaking to them first.\n\nIf you have a family or emergency contact, please call them too. When you are safe, you can tell MedBuddy their name and mobile number in chat so we can keep an emergency contact on file for next time.\n\nI am not able to provide emergency medical care — please get help from emergency services immediately.",
-    "emergency_with_saved_contact": "🚨 This sounds like a medical emergency. Please call 119 (ambulance) or 110 (police) right away, or have someone nearby call for you. If you can, sit or lie down safely and stay on the phone with emergency services. Do not take extra medication without speaking to them first.\n\nYou have emergency contacts saved — in a real alert we would notify all of them; please reach out to whoever you can right now. Here’s the kind of message we’d pass along (practice only — no text or call was sent).\n\nI am not able to provide emergency medical care — please get help from emergency services immediately.",
-    "simulated_emergency_notify": "If MedBuddy could send a real alert, every emergency contact on file would see something like this: “{reason}.” Contacts on file: {contact_hint}. This is only a practice message — no text or call was sent, so please reach them yourself if you need help.",
+    "emergency_with_saved_contact": "🚨 This sounds urgent — please call 119 (ambulance) right now, or ask someone next to you to call. Sit or lie down where you are and stay on the line with 119.\n\nI’m with you. Your saved contacts ({contact_hint}) would be notified in a real alert — please reach them yourself if you can.\n\n(Demo build — I can’t dial or text yet. What you described: “{reason}.”)",
+    "simulated_emergency_notify": "If MedBuddy could send a real alert, every emergency contact on file would see something like this: “{reason}.” Contacts on file: {contact_hint}.",
     "simulated_emergency_no_contact": "There isn’t an emergency contact saved in your profile yet — when you’re able, you can add one here in chat.",
     "orchestrator_profile_saved_hint": "[Server instruction] Profile fields from the user’s latest message are already saved. Acknowledge briefly if appropriate and continue — do not call update_profile.",
     "orchestrator_profile_saved_hint_fields": "[Server] These profile fields were just persisted: {fields}. Only acknowledge what is in that list.",
@@ -146,6 +146,7 @@
     "education_cta": "Need a quick refresher on what this medicine is for?",
     "horizon_confirmed": "You’re set — daily reminders for {name} are on for {days} day(s). I’ll nudge you at the scheduled time each day. Reply anytime to check the plan or log a dose.",
     "horizon_confirmed_generic": "You’re set — {days} days of daily reminders are on. I’ll ping you at the scheduled times.",
+    "horizon_confirmed_indefinite": "Got it — daily reminders for {name} will keep running every day until you ask to stop. I’ll remind you at the scheduled time.",
     "horizon_still_needed": "I still need to know how many days you’d like daily reminders for {name}. Just reply with a number — for example \"7 days\" or \"2 weeks.\"",
     "horizon_expired_ack": "That reminder question has expired — just ask me to set up reminders for {name} again whenever you’re ready."
   },
@@ -170,6 +171,8 @@
     "gap_health_conditions": "- Allergies / conditions / history: not saved yet",
     "llm_profile_signals_header": "Profile signals for tone and safety (exact age, raw notes, or contact details may be hidden):",
     "llm_preferred_address_form": "Use “{name}” in greetings when it fits naturally",
+    "address_user_as": "Address this patient as **{name}** — use this name naturally in greetings and when speaking to them directly.",
+    "recent_health_notes_header": "Recent health notes (last 12 entries — use for context and to answer history questions):",
     "llm_signal_age_band": "Rough age band: {band}",
     "llm_signal_age_band_range": "about {low}–{high} years",
     "llm_signal_age_band_90_plus": "about 90 or older",
@@ -241,5 +244,8 @@
     "reported_symptoms": "Symptoms they’ve mentioned lately",
     "recommended_questions": "Good questions for their next visit",
     "symptom_sep": ", "
+  },
+  "health_history": {
+    "empty": "No health notes on file for that period — symptoms and wellness turns are logged as they happen."
   }
 }

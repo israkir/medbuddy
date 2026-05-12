@@ -173,7 +173,7 @@ async def test_update_then_horizon_days_materializes_dose_events() -> None:
             clear_instructions=False,
         ),
     )
-    await run_assistant_text_turn(svc, user_key=key, user_text="everyday 100mg one pill at noon")
+    await run_assistant_text_turn(svc, user_key=key, user_text="100mg one pill at noon, once daily")
     assert await svc.users.get_reminder_horizon_pending(key) is not None
 
     svc.llm = MockLLM(intent=Intent.GENERAL_QUESTION, locale="en")
@@ -190,6 +190,51 @@ async def test_update_then_horizon_days_materializes_dose_events() -> None:
 
     jobs = await svc.users.sync_upcoming_dose_events(key)
     assert len(jobs) > 0
+
+
+@pytest.mark.asyncio
+async def test_every_day_reply_sets_indefinite() -> None:
+    """Bug 2: 'every day' in response to the horizon question must set is_indefinite=True."""
+    settings = make_mock_settings(MEDBUDDY_LOCALE="en")
+    svc = build_app_services(settings)
+    key = "U-reminder-horizon-every-day"
+    await svc.users.get_or_create_user(key)
+    await svc.users.patch_user_profile(key, {"locale": "en", "timezone": "Asia/Taipei"})
+
+    saved = await svc.users.add_medication(
+        key,
+        MedicationDraft(
+            name="Aspirin",
+            dosage="100mg",
+            schedule="once daily",
+            needs_horizon_confirmation=True,
+        ),
+    )
+    from datetime import timedelta
+
+    await svc.users.set_reminder_horizon_pending(
+        key,
+        ReminderHorizonPending(
+            medication_id=saved.id,
+            medication_name=saved.name,
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        ),
+    )
+
+    reply = await try_resolve_pending_reminder_horizon(
+        svc, user_key=key, user_text="every day", locale="en"
+    )
+    assert reply is not None
+    assert (
+        "every day" in reply.lower() or "indefinit" in reply.lower() or "aspirin" in reply.lower()
+    )
+    assert await svc.users.get_reminder_horizon_pending(key) is None
+
+    meds = await svc.users.list_medications(key)
+    assert len(meds) == 1
+    assert meds[0].is_indefinite is True
+    reminder = meds[0].raw_metadata.get("reminder") or {}
+    assert reminder.get("needs_horizon_confirmation") is False
 
 
 @pytest.mark.asyncio

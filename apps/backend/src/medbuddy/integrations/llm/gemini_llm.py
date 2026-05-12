@@ -573,6 +573,7 @@ class GeminiLLM(LLMPort):
         user_message: str,
         locale: str,
         companion_task_key: str = "medication_added_companion",
+        suppress_horizon_appendix: bool = False,
     ) -> str:
         loc = locale or self._locale
         lang_lock = language_lock(loc)
@@ -594,7 +595,9 @@ class GeminiLLM(LLMPort):
                 locale=loc,
                 text=saved.instructions,
             )
-        appendix = reminder_compose_appendix(saved, loc)
+        appendix = reminder_compose_appendix(
+            saved, loc, suppress_horizon_appendix=suppress_horizon_appendix
+        )
         prompt = (
             f"{lang_lock}\n\n"
             f"{persona}\n\n{task}\n\n"
@@ -614,6 +617,7 @@ class GeminiLLM(LLMPort):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        suppress_horizon_appendix: bool = False,
     ) -> str:
         loc = locale or self._locale
         return await asyncio.to_thread(
@@ -624,6 +628,7 @@ class GeminiLLM(LLMPort):
             user_message=user_message,
             locale=loc,
             companion_task_key="medication_added_companion",
+            suppress_horizon_appendix=suppress_horizon_appendix,
         )
 
     async def compose_medication_added_primary(
@@ -634,6 +639,7 @@ class GeminiLLM(LLMPort):
         saved: MedicationRecord,
         user_message: str,
         locale: str,
+        suppress_horizon_appendix: bool = False,
     ) -> str:
         loc = locale or self._locale
         return await asyncio.to_thread(
@@ -644,6 +650,7 @@ class GeminiLLM(LLMPort):
             user_message=user_message,
             locale=loc,
             companion_task_key="medication_added_primary_before_crosscheck",
+            suppress_horizon_appendix=suppress_horizon_appendix,
         )
 
     # ------------------------------------------------------------------

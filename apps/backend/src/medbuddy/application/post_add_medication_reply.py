@@ -27,6 +27,7 @@ async def build_post_add_patient_reply(
     drug_grounding: str | None,
     user_message: str,
     locale: str,
+    suppress_horizon_appendix: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Compose primary acknowledgment, optional list cross-check, education tail on fallback only."""
     purpose = purpose_from_grounding(drug_grounding)
@@ -41,6 +42,7 @@ async def build_post_add_patient_reply(
                 saved=saved,
                 user_message=user_message,
                 locale=locale,
+                suppress_horizon_appendix=suppress_horizon_appendix,
             )
         else:
             reply = await svc.llm.compose_medication_added_reply(
@@ -49,6 +51,7 @@ async def build_post_add_patient_reply(
                 saved=saved,
                 user_message=user_message,
                 locale=locale,
+                suppress_horizon_appendix=suppress_horizon_appendix,
             )
         used_llm_primary = True
     except Exception:

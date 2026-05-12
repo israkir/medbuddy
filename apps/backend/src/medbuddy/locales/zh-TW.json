@@ -36,8 +36,8 @@
     "generic_error": "這邊剛剛出了點狀況，請稍後再試一次；若一直不行，也可以請家人協助。",
     "off_topic": "我主要陪您處理用藥提醒、藥物相關問題與照護相關的詢問。這個主題我不太適合回答，要不要聊聊您的用藥、劑量，或想記住的服藥時間？",
     "emergency": "🚨 您說的狀況聽起來非常緊急，請立刻撥打 119（救護車）或請旁邊的人幫您撥打。請保持鎮定，坐下或躺好，等待救援，並保持電話接通。未經急救人員指示，請不要自行服藥。\n\n如果您有緊急聯絡人或家人，也請同步通知他們。等您安全後，也可以在這裡告訴我對方的稱呼與手機號碼，讓 MedBuddy 幫您存成緊急聯絡人，下次更方便。\n\nMedBuddy 無法提供緊急醫療協助，請務必立刻向急救人員求助。",
-    "emergency_with_saved_contact": "🚨 您說的狀況聽起來非常緊急，請立刻撥打 119（救護車）或請旁邊的人幫您撥打。請保持鎮定，坐下或躺好，等待救援，並保持電話接通。未經急救人員指示，請不要自行服藥。\n\n您的個人檔已保存緊急聯絡人——若真的發生緊急狀況，我們會通知所有登記的聯絡人。若可以，也請您主動聯絡他們。以下是我們可能會發送的訊息示意（僅供參考，沒有真的發簡訊或打電話）。\n\nMedBuddy 無法提供緊急醫療協助，請務必立刻向急救人員求助。",
-    "simulated_emergency_notify": "若真的能發送通知，所有緊急聯絡人都會收到類似這樣的訊息：「{reason}」。檔案裡目前登記的聯絡人：{contact_hint}。這只是示意，沒有真的發簡訊或打電話；若需要協助，請您自己也聯絡他們。",
+    "emergency_with_saved_contact": "🚨 您說的狀況聽起來很緊急——請立刻撥打 119，或請旁邊的人幫您打。坐下或躺好，保持電話接通。\n\n我陪著您。您的聯絡人（{contact_hint}）在真實警報中會收到通知——若可以，請您也主動聯繫他們。\n\n（示範版本——我目前無法真的撥打或發簡訊。您描述的狀況：「{reason}」）",
+    "simulated_emergency_notify": "若真的能發送通知，所有緊急聯絡人都會收到類似這樣的訊息：「{reason}」。檔案裡目前登記的聯絡人：{contact_hint}。",
     "simulated_emergency_no_contact": "您的個人檔裡還沒有緊急聯絡人，方便時可以在這裡用一句話補上。",
     "orchestrator_profile_saved_hint": "[系統提示] 使用者這則訊息中的個人檔資料已儲存。必要時簡短確認即可並繼續協助——請勿再呼叫 update_profile。",
     "orchestrator_profile_saved_hint_fields": "[系統] 剛剛已寫入的個人檔欄位：{fields}。只承認此清單內的項目。",
@@ -146,6 +146,7 @@
     "education_cta": "需要我快速提醒這個藥是做什麼用的嗎？",
     "horizon_confirmed": "設定好了——{name} 的每日提醒已開啟，共 {days} 天。到了時間我會通知您。隨時可以回覆查看時程或記錄服藥。",
     "horizon_confirmed_generic": "設定好了——已開啟 {days} 天的每日提醒，我會在約好的時間提醒您。",
+    "horizon_confirmed_indefinite": "好的——{name} 的每日提醒會一直持續，直到您要求停止為止。到了時間我會通知您。",
     "horizon_still_needed": "我還需要知道「{name}」要連續提醒幾天——回一個數字就好，例如「7 天」或「兩週」。",
     "horizon_expired_ack": "提醒設定的詢問已逾時——想好了隨時再跟我說，我重新幫您設定「{name}」的提醒。"
   },
@@ -170,6 +171,8 @@
     "gap_health_conditions": "- 過敏／慢性病／病史：尚未填",
     "llm_profile_signals_header": "給語氣與安全參考用的個人訊號（精確年齡、原文備註或聯絡細節可能隱藏）：",
     "llm_preferred_address_form": "問候時可自然稱呼「{name}」",
+    "address_user_as": "請稱呼這位病人為「{name}」——在問候或直接對談時自然使用這個稱呼。",
+    "recent_health_notes_header": "近期健康紀錄（最近 12 筆——可用於回答使用者的歷史問題）：",
     "llm_signal_age_band": "大約年齡層：{band}",
     "llm_signal_age_band_range": "約 {low}–{high} 歲",
     "llm_signal_age_band_90_plus": "約 90 歲或以上",
@@ -241,5 +244,8 @@
     "reported_symptoms": "最近提到的身體狀況",
     "recommended_questions": "下次看診可以問醫師的問題",
     "symptom_sep": "、"
+  },
+  "health_history": {
+    "empty": "這段期間沒有健康紀錄——症狀與健康相關對話會在發生時自動記錄。"
   }
 }

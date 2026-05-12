@@ -84,5 +84,6 @@ async def try_resolve_pending_medication_add_confirmation(
         user_text=user_text,
         draft=pending.draft,
         locale=locale,
+        suppress_horizon_question=True,
     )
     return result.reply

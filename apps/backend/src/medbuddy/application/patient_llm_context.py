@@ -18,6 +18,9 @@ from medbuddy.reminders.upcoming_display import (
     upcoming_schedule_window_utc,
 )
 from medbuddy.core.timezone import effective_user_timezone
+from medbuddy.application.health_events.health_issue_events_format import (
+    format_health_issue_events_for_summary,
+)
 
 
 async def patient_context_for_llm(
@@ -29,6 +32,7 @@ async def patient_context_for_llm(
     locale: str,
     sync_dose_events_first: bool = False,
     include_health_notes: bool = False,
+    include_recent_health_events: bool = True,
 ) -> str:
     tz_name = effective_user_timezone(
         str(user_row.get("timezone")) if user_row.get("timezone") else None
@@ -45,6 +49,17 @@ async def patient_context_for_llm(
     )
     block = format_upcoming_doses_for_llm(upcoming, tz_name=tz_name, now_utc=now, locale=locale)
     health_conditions = await svc.users.list_health_conditions(user_key, active_only=True)
+
+    recent_health_notes: str | None = None
+    if include_recent_health_events:
+        events = await svc.users.list_recent_health_issue_events(user_key, limit=12)
+        if events:
+            from medbuddy.core.i18n import t
+
+            header = t("prompts.recent_health_notes_header", locale=locale)
+            body = format_health_issue_events_for_summary(events)
+            recent_health_notes = f"{header}\n{body}"
+
     return build_patient_context_for_llm(
         user_row,
         medications,
@@ -52,4 +67,5 @@ async def patient_context_for_llm(
         upcoming_doses_context=block,
         include_health_notes=include_health_notes,
         health_conditions=health_conditions,
+        recent_health_notes=recent_health_notes,
     )

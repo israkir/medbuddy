@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`lookup_health_history` agent tool:** OpenAI function schema plus orchestrator dispatch; returns recent health-issue events (optional `since_days` window, cap 30) via `LookupHealthHistoryTool`, with `health_history.empty` when none match.
+
 ### Changed
+
+- **Patient LLM context:** Last 12 health-issue events are summarized into the persona block (`recent_health_notes_header`); `preferred_name` is surfaced as an explicit `prompts.address_user_as` directive and the medication agent system prompt treats it as a hard instruction for greetings and direct address.
+- **Reminder horizon → chronic/indefinite:** Pending replies like “every day”, “long-term”, 長期, 終身, etc. clear horizon pending, merge reminder metadata (`needs_horizon_confirmation=false`, `materialize_daily`, `horizon_days` cleared), optionally set `is_indefinite` via `merge_medication_raw_metadata(..., set_indefinite=)` (Supabase + mock), run `sync_and_enqueue_reminders`, and reply with `reminder.horizon_confirmed_indefinite`.
+- **Medication add confirmation:** After confirm, `persist_medication_add_from_draft` passes `suppress_horizon_question` so the post-add LLM reply does not duplicate the “how many days?” appendix while `_maybe_append_pending_reminder` still nudges on the next turn; `suppress_horizon_appendix` threaded through `LLMPort`, Gemini/OpenAI/mocks, and `reminder_compose_appendix`.
+- **Emergency demo copy (en + zh-TW):** Urgent 119-first wording with embedded `reason` / `contact_hint` in `emergency_with_saved_contact`; shorter `simulated_emergency_notify`; medication agent uses the combined template; API tests updated for the new phrases.
 
 - **Emergency contacts in LLM context:** Multi-contact rows are described with bracketed tokens (`[EMERGENCY_CONTACT_N]`) plus relationship and channel type; real values live in a per-turn map and the orchestrator substitutes them into the model's final text before the patient sees it (unmapped tokens stripped with a warning). `format_patient_profile_signals_for_llm` returns `(signals, token_map)`; the orchestrator refreshes the system prompt after medication CRUD tool batches as well as profile / health tools. New locale strings for the redacted block; tests cover `emergency_contacts_redacted_hint`.
 - **Reminder horizon replies:** Pending expiry returns `reminder.horizon_expired_ack` instead of a silent clear; `_parse_horizon_days` accepts word-form day counts (e.g. "seven days", 七天), trailing integers after short filler ("yes 7"), and related patterns.
