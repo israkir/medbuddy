@@ -577,7 +577,6 @@ End-user profile rows. `users` is reserved in Supabase; `patients` allows other 
 | `preferred_name` | `text` | Display name (not sent raw to LLM) |
 | `age_years` | `int` | Optional |
 | `gender` | `text` | `female` / `male` / `non_binary` / `prefer_not_say` / `other` |
-| `health_notes` | `text` | Patient-entered notes — not sent to LLM |
 | `timezone` | `text` | IANA timezone; default `Asia/Taipei`; drives scheduling and push copy |
 | `locale` | `text` | `en` or `zh-TW`; DB default `zh-TW`. **Seeded** before first scripted welcome: LINE **`follow`** uses LINE profile **`language`**; standalone **`GET /v1/app/me`** (pre-onboarding) uses **`X-MedBuddy-Locale`** / **`Accept-Language`** when present. |
 | `onboarding_completed_at` | `timestamptz` | Set when onboarding is saved |
@@ -602,6 +601,22 @@ Per-patient emergency contact rows. Replaces the legacy `emergency_contact text`
 | `is_primary` | `boolean` | Most-recently saved row; older rows are demoted to `false` |
 | `notes` | `text` | Optional |
 | `source` | `text` | Default `user` |
+| `created_at` | `timestamptz` | |
+| `updated_at` | `timestamptz` | |
+
+#### `patient_health_conditions`
+
+Structured health-condition rows. Replaces the removed `patients.health_notes` free-text column. Unique index `uq_patient_health_conditions` on `(patient_id, lower(name), category)` prevents duplicate entries; `idx_patient_health_conditions_patient` backs per-patient lookups.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `uuid` PK | |
+| `patient_id` | `uuid` FK → `patients` | |
+| `category` | `text` | e.g. `chronic`, `allergy`, `surgical_history`, `other` |
+| `name` | `text` | Condition name (e.g. "hypertension") |
+| `severity` | `text` | Optional severity label |
+| `notes` | `text` | Optional free-text detail — **not** included in the standard LLM context block |
+| `is_active` | `boolean` | Whether the condition is currently active |
 | `created_at` | `timestamptz` | |
 | `updated_at` | `timestamptz` | |
 
@@ -815,7 +830,9 @@ Auth required. Returns the current user's profile.
   "emergency_contacts": [
     {"contact_name": "David", "relationship": "son", "channel_type": "phone", "channel_value": "0900111111", "is_primary": true}
   ],
-  "health_notes": "...",
+  "health_conditions": [
+    {"id": "...", "category": "chronic", "name": "hypertension", "severity": "mild", "notes": "...", "is_active": true}
+  ],
   "timezone": "Asia/Taipei",
   "locale": "zh-TW",
   "onboarding_completed_at": "2026-04-01T10:00:00Z"
@@ -837,7 +854,9 @@ Auth required. Saves first-run profile. Idempotent — safe to call again to upd
   "emergency_contacts": [        // optional; list of contact objects
     {"channel_value": "0900111111", "contact_name": "David", "relationship": "son"}
   ],
-  "health_notes": "...",         // optional
+  "health_conditions": [         // optional; list of HealthConditionOnboardingItem
+    {"category": "chronic", "name": "hypertension", "severity": "mild", "notes": "..."}
+  ],
   "locale": "zh-TW",             // optional: en | zh-TW (default zh-TW)
   "timezone": "Asia/Taipei"      // optional IANA; omit → Asia/Taipei
 }
@@ -948,7 +967,7 @@ All LLM calls follow the same layered structure:
 | **User message** | Current turn | Redacted via `redact_pii_text()` |
 | **Extra system** | Intent-specific instructions (e.g. interaction-check companion, summary format) | No PII |
 
-**Not included in any LLM call:** raw `preferred_name`, exact `age_years`, `health_notes`, raw emergency contact values (only a flag that contacts exist is included).
+**Not included in any LLM call:** raw `preferred_name`, exact `age_years`, raw free-text from `patient_health_conditions` entries (note: the `recent_health_notes` buffer — assembled deliberately from those rows — is included only on safety-critical call sites: interaction check, side effects, health summary, and post-add compose), raw emergency contact values (only a flag that contacts exist is included in the standard block; tokenised `[EMERGENCY_CONTACT_N]` values are substituted into the model's final reply at the orchestrator layer).
 
 ### 8.4 Structured outputs
 
