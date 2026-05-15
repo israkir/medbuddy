@@ -54,13 +54,18 @@ For real LINE, LLM, Supabase, and other services, use [`apps/backend/.env.exampl
 
 ## Where to read next
 
-Start with **[`docs/index.md`](docs/index.md)** — it lists every major doc, **reading paths by role** (backend, product, security, ops, mobile), and a **quick lookup** (API, env vars, reminders, privacy, and more).
+Start with **[`docs/index.md`](docs/index.md)** — every major doc, **reading paths by role** (backend, product, security, ops, mobile), and a **quick lookup** (API, env vars, reminders, privacy, LLM inputs, and more).
 
 | If you want… | Open |
 |--------------|------|
 | System design, API reference, deployment | [`docs/tdd.md`](docs/tdd.md) (brief), [`docs/tdd-extended.md`](docs/tdd-extended.md) (full) |
+| What the product does (feature catalog) | [`docs/features.md`](docs/features.md) |
+| User flows and example utterances | [`docs/use-cases.md`](docs/use-cases.md) |
+| Dose reminders, arq/Redis, reconcile cron | [`docs/reminders.md`](docs/reminders.md) |
+| PII / LLM boundaries | [`docs/privacy.md`](docs/privacy.md), [`docs/llm-context.md`](docs/llm-context.md) |
 | Backend env, package layout, deploy | [`apps/backend/README.md`](apps/backend/README.md) |
 | Expo app (reference / future client) | [`docs/frontend-expo.md`](docs/frontend-expo.md) → [`apps/frontend/README.md`](apps/frontend/README.md) |
+| Project Q&A (Q1–Q55: pipeline, voice, adherence, caches) | [`docs/qna.md`](docs/qna.md) |
 | Production checklist | [`TODO.md`](TODO.md) |
 | Change history | [`CHANGELOG.md`](CHANGELOG.md) |
 

@@ -1456,19 +1456,35 @@
       max-height: 50vh !important;
     }
     .remark-slide-content.single-conversation-slide .sys-context-wrap.proto-impl.single-conversation svg {
-      max-height: 42vh !important;
+      max-height: 48vh !important;
+    }
+    .sys-context-wrap.proto-impl.single-conversation .sc-step {
+      fill: #334155;
+      font-size: 9px;
+      font-weight: 500;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .remark-slide-content.single-conversation-slide h1 {
+      margin-bottom: 0.05em;
     }
     .remark-slide-content.single-conversation-slide .sys-context-wrap.proto-impl.single-conversation {
-      margin-top: 0;
+      margin-top: -5.15em;
       margin-bottom: 0;
     }
     .remark-slide-content.single-conversation-slide ul {
-      margin: -5.1em 0 0 1.1em;
+      margin: -4.35em 0 0 1.1em;
       font-size: 0.9em;
       line-height: 1.18;
     }
     .remark-slide-content.single-conversation-slide ul li {
       margin: 0.08em 0;
+    }
+    .remark-slide-content.reminders-flow-slide h1 {
+      margin-bottom: 0.05em;
+    }
+    .remark-slide-content.reminders-flow-slide .sys-context-wrap.proto-impl {
+      margin-top: -3.5em;
+      margin-bottom: 0;
     }
     .remark-slide-content.reminders-flow-slide .sys-context-wrap.proto-impl svg {
       width: auto !important;
@@ -1476,7 +1492,7 @@
       max-height: 42vh !important;
     }
     .remark-slide-content.reminders-flow-slide ul {
-      margin: -5.1em 0 0 1.1em;
+      margin: -5.6em 0 0 1.1em;
       font-size: 0.9em;
       line-height: 1.18;
     }
@@ -1834,7 +1850,7 @@ Plain-language Q&amp;A grounded in a public drug registry ([OpenFDA](https://ope
 ]
 .col[
 ### ⏰ Adhere
-Reminder at the right local time. Reply "took it" or "missed" to log. One ping per dose, no duplicates.
+LINE push at the right local time (informational copy). Log "took it" or "missed" in chat. One ping per dose, no duplicates.
 ]
 ]
 
@@ -2464,13 +2480,13 @@ class: deep
 # Reminder UX — chat-native, no buttons
 
 ```
-09:00 (local)  MedBuddy → "Time for metformin 500 mg.
-                          Reply 'took it' when you've taken it.
-                          Already done? Just say 'taken'."
+09:00 (local)  MedBuddy → "Hi — it's 09:00. Time for metformin (500 mg).
+                          Saved schedule: twice a day. If anything's unclear,
+                          ask your pharmacist or clinician."
 
 09:14          User     → "took it"
 
-09:14          MedBuddy → "Got it — recorded for the 09:00 dose. ✅"
+09:14          MedBuddy → "Thanks — I've marked 1 dose(s) as taken."
 ```
 
 .cols[
@@ -2490,7 +2506,7 @@ class: deep
 ]
 ]
 
-.small[Why no rich Flex cards or tap-to-confirm buttons in v1: a one-line text reminder works on every phone, every chat-app version, every locale. Keep the surface simple; let the conversation be the product.]
+.small[Push text matches <code>reminder.line_push</code> (zh-TW / en) — no reply CTA on the ping. Adherence is a separate chat turn via <code>confirm_dose</code> / <code>report_missed_dose</code>. No Flex cards or tap-to-confirm in v1.]
 
 ---
 
@@ -2680,7 +2696,7 @@ class: deep
   <text x="157" y="81" text-anchor="middle" font-size="9.5" fill="#586a67">Same LINE surface · same buyer · low risk</text>
   <line x1="35" y1="89" x2="278" y2="89" stroke="#cfe2dd" stroke-width="1"/>
   <text x="33" y="107" font-size="10" fill="#0f1f1d">👨‍👩‍👧  Caregiver read-only digest</text>
-  <text x="33" y="125" font-size="10" fill="#0f1f1d">📸  Photo → drug recognition · 分包 (unlabeled blister packs)</text>
+  <text x="33" y="125" font-size="10" fill="#0f1f1d">📸  Photo → drug recognition · 分包 (unlabeled packs)</text>
   <text x="33" y="143" font-size="10" fill="#0f1f1d">📦  Refill radar — nudge before run-out</text>
   <text x="33" y="161" font-size="10" fill="#0f1f1d">🌿  TCM + food interactions grounded</text>
   <text x="33" y="179" font-size="10" fill="#0f1f1d">🤔  "Why missed?" → reason logged</text>
@@ -3326,8 +3342,8 @@ class: deep eng-proto single-conversation-slide
 
 # Single conversation pipeline
 
-<div class="sys-context-wrap proto-impl single-conversation" aria-label="Prototype single conversation pipeline: channel adapter through routing hints, safety checks, tool orchestration, and persist">
-<svg viewBox="0 0 1040 520" xmlns="http://www.w3.org/2000/svg" role="img">
+<div class="sys-context-wrap proto-impl single-conversation" aria-label="Exact MedicationAgent.run() flow: setup, early user persist, ordered guards, tool loop, post-reply nudges, AgentTurnResult">
+<svg viewBox="0 0 1040 696" xmlns="http://www.w3.org/2000/svg" role="img">
   <defs>
     <marker id="pp-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
       <polygon points="0 0, 7 3.5, 0 7" fill="#4a6fa5"/>
@@ -3337,86 +3353,102 @@ class: deep eng-proto single-conversation-slide
     </marker>
   </defs>
 
-  <!-- Channel inputs (left column) -->
-  <rect class="sc-box-client-line" x="18" y="38" width="148" height="36" rx="8"/>
-  <text class="sc-label" x="92" y="53" text-anchor="middle">LINE</text>
-  <text class="sc-sublabel" x="92" y="67" text-anchor="middle">text · voice</text>
+  <!-- Channels (left) → run_assistant_text_turn (right) -->
+  <rect class="sc-box-client-line" x="0" y="74" width="132" height="32" rx="8"/>
+  <text class="sc-label" x="66" y="88" text-anchor="middle">LINE</text>
+  <text class="sc-sublabel" x="66" y="101" text-anchor="middle">text · voice→STT</text>
 
-  <rect class="sc-box-client" x="18" y="86" width="148" height="36" rx="8"/>
-  <text class="sc-label" x="92" y="101" text-anchor="middle">HTTP API</text>
-  <text class="sc-sublabel" x="92" y="115" text-anchor="middle">chat · voice</text>
+  <rect class="sc-box-client" x="0" y="118" width="132" height="32" rx="8"/>
+  <text class="sc-label" x="66" y="132" text-anchor="middle">HTTP API</text>
+  <text class="sc-sublabel" x="66" y="145" text-anchor="middle">messages · voice</text>
 
-  <!-- Merge → pipeline -->
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" d="M166 56 L192 56 L192 78"/>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" d="M166 104 L192 104 L192 78"/>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M192 78 L216 78"/>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" d="M132 90 L168 90 L168 112"/>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" d="M132 134 L168 134 L168 112"/>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M168 112 L152 112"/>
 
-  <!-- Pipeline backbone -->
-  <rect class="sc-box-backend" x="216" y="18" width="626" height="436" rx="14"/>
-  <text class="sc-title" x="529" y="40" text-anchor="middle">assistant_turn.py → MedicationAgent.run()</text>
+  <rect class="sc-box-routes" x="152" y="96" width="220" height="32" rx="6"/>
+  <text class="sc-label" x="262" y="116" text-anchor="middle">run_assistant_text_turn()</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M262 128 L262 134"/>
 
-  <!-- Step 1: build context -->
-  <rect class="sc-box-pipeline" x="236" y="52" width="586" height="42" rx="7"/>
-  <text class="sc-label" x="529" y="70" text-anchor="middle">build redacted LLM context</text>
-  <text class="sc-sublabel" x="529" y="84" text-anchor="middle">load profile · medications · recent turns  ·  redact PII</text>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 94 L529 108"/>
+  <rect class="sc-box-backend" x="188" y="134" width="668" height="526" rx="14"/>
+  <text class="sc-title" x="522" y="154" text-anchor="middle">MedicationAgent.run() — exact dispatch order</text>
 
-  <!-- Step 2: interpret -->
-  <rect class="sc-box-pipeline" x="236" y="108" width="586" height="42" rx="7"/>
-  <text class="sc-label" x="529" y="126" text-anchor="middle">interpret_user_turn()</text>
-  <text class="sc-sublabel" x="529" y="140" text-anchor="middle">interpret_user_turn  ·  gates + metrics only</text>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 150 L529 164"/>
+  <rect class="sc-box-pipeline" x="204" y="164" width="500" height="28" rx="6"/>
+  <text class="sc-step" x="214" y="182">① redact_pii_text · parallel load profile · meds · history</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 192 L454 206"/>
 
-  <!-- Step 3: pending state? (decision) -->
-  <rect class="sc-box-decision" x="236" y="164" width="586" height="42" rx="7"/>
-  <text class="sc-label" x="529" y="182" text-anchor="middle">Pending state?</text>
-  <text class="sc-sublabel" x="529" y="196" text-anchor="middle">add-confirm  ·  dose-clarify  ·  reminder-horizon</text>
-  <!-- YES exit right -->
-  <path fill="none" stroke="#ca8a04" stroke-width="1.25" stroke-dasharray="4 2" marker-end="url(#pp-arrow-exit)" d="M822 185 L836 185 L836 422 L822 422"/>
-  <text class="sc-arrow-label" x="830" y="304" text-anchor="start" transform="rotate(90 830 304)">yes → early reply</text>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 206 L529 220"/>
+  <rect class="sc-box-pipeline" x="204" y="206" width="500" height="28" rx="6"/>
+  <text class="sc-step" x="214" y="224">② interpret_user_turn(safe_text, recent redacted dialogue)</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 234 L454 248"/>
 
-  <!-- Step 4: emergency? (safety) -->
-  <rect class="sc-box-safe" x="236" y="220" width="586" height="42" rx="7"/>
-  <text class="sc-label" x="529" y="238" text-anchor="middle">Emergency?</text>
-  <text class="sc-sublabel" x="529" y="252" text-anchor="middle">yes → fixed i18n safety reply  ·  no LLM body generated</text>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 262 L529 276"/>
+  <rect class="sc-box-persist" x="204" y="248" width="500" height="28" rx="6"/>
+  <text class="sc-step" x="214" y="266">③ append user turn (raw) · maybe_record_health_issue_turn</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 276 L454 290"/>
 
-  <!-- Step 5: locale / hooks / off-topic / profile / tools / fallback -->
-  <rect class="sc-box-pipeline" x="236" y="276" width="586" height="56" rx="7"/>
-  <text class="sc-label" x="529" y="296" text-anchor="middle">locale/hook short-circuit → run_tool_agent_loop()</text>
-  <text class="sc-sublabel" x="529" y="311" text-anchor="middle">prior redacted turns  ·  complete_chat_with_tools  ·  registered tools  ·  optional metadata</text>
-  <text class="sc-sublabel" x="529" y="325" text-anchor="middle">locale-aware · drug-grounded response</text>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 332 L529 346"/>
+  <rect class="sc-box-decision" x="204" y="290" width="500" height="118" rx="7"/>
+  <text class="sc-label" x="454" y="306" text-anchor="middle">④–⑪ early exits — on hit: append assistant → return</text>
+  <text class="sc-step" x="216" y="322">④ try_locale_change_reply</text>
+  <text class="sc-step" x="216" y="334">⑤ try_resolve_pending_medication_add_confirmation</text>
+  <text class="sc-step" x="216" y="346">⑥ try_resolve_pending_dose_clarification</text>
+  <text class="sc-step" x="216" y="358">⑦ try_resolve_pending_reminder_horizon</text>
+  <text class="sc-step" x="216" y="370">⑧ Intent.EMERGENCY → i18n (metadata if saved contacts)</text>
+  <text class="sc-step" x="216" y="382">⑨ try_resolve_emergency_contact_from_message</text>
+  <text class="sc-step" x="216" y="394">⑩ try_intent_hooks</text>
+  <text class="sc-step" x="216" y="406">⑪ Intent.OFF_TOPIC</text>
 
-  <!-- Step 6: persist conversation turns -->
-  <rect class="sc-box-persist" x="236" y="346" width="586" height="42" rx="7"/>
-  <text class="sc-label" x="529" y="364" text-anchor="middle">persist turn(s) + optional pending-state reminder</text>
-  <text class="sc-sublabel" x="529" y="378" text-anchor="middle">append_user_turn  ·  append_assistant_turn  ·  pending clarification follow-up</text>
-  <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#pp-arrow)" d="M529 388 L529 402"/>
+  <path fill="none" stroke="#ca8a04" stroke-width="1.25" stroke-dasharray="4 2" marker-end="url(#pp-arrow-exit)" d="M704 349 L724 349"/>
+  <rect class="sc-box-adapter" x="724" y="318" width="118" height="58" rx="6"/>
+  <text class="sc-label" x="783" y="336" text-anchor="middle">early return</text>
+  <text class="sc-sublabel" x="783" y="350" text-anchor="middle">append assistant</text>
+  <text class="sc-sublabel" x="783" y="364" text-anchor="middle">AgentTurnResult</text>
 
-  <!-- Step 7: return reply -->
-  <rect class="sc-box-adapter" x="236" y="402" width="586" height="36" rx="7"/>
-  <text class="sc-label" x="529" y="421" text-anchor="middle">return AssistantReply  →  channel adapter</text>
-  <text class="sc-sublabel" x="529" y="434" text-anchor="middle">LINE reply / HTTP response / TTS audio</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 408 L454 422"/>
 
-  <!-- Legend (right column) -->
-  <rect class="sc-legend-bar" x="878" y="106" width="130" height="142" rx="6"/>
-  <rect fill="#ede9fe" stroke="#5b21b6" stroke-width="1" x="890" y="116" width="14" height="10" rx="2"/>
-  <text class="sc-legend-text" x="908" y="124">Core pipeline step</text>
-  <rect fill="#fefce8" stroke="#ca8a04" stroke-width="1" x="890" y="140" width="14" height="10" rx="2"/>
-  <text class="sc-legend-text" x="908" y="148">Decision / guard</text>
-  <rect fill="#fee2e2" stroke="#dc2626" stroke-width="1" x="890" y="164" width="14" height="10" rx="2"/>
-  <text class="sc-legend-text" x="908" y="172">Safety gate</text>
-  <rect fill="#dcfce7" stroke="#15803d" stroke-width="1" x="890" y="188" width="14" height="10" rx="2"/>
-  <text class="sc-legend-text" x="908" y="196">Success / persist</text>
-  <text class="sc-legend-text" x="890" y="220" fill="#ca8a04">- - → early-exit path</text>
+  <rect class="sc-box-inner" x="204" y="422" width="500" height="24" rx="5"/>
+  <text class="sc-step" x="214" y="438">⑫ refresh user_row · list_medications</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 446 L454 460"/>
+
+  <rect class="sc-box-inner" x="204" y="460" width="500" height="24" rx="5"/>
+  <text class="sc-step" x="214" y="476">⑬ UPDATE_PROFILE? → extract_profile_patch · patch · omit tool</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 484 L454 498"/>
+
+  <rect class="sc-box-pipeline" x="204" y="498" width="500" height="36" rx="6"/>
+  <text class="sc-step" x="214" y="516">⑭ run_tool_agent_loop → complete_chat_with_tools</text>
+  <text class="sc-sublabel" x="214" y="528">redacted prior turns (capped) · registered tools · metadata</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 534 L454 548"/>
+
+  <rect class="sc-box-inner" x="204" y="548" width="500" height="24" rx="5"/>
+  <text class="sc-step" x="214" y="564">⑮ _maybe_append_pending_reminder</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 572 L454 586"/>
+
+  <rect class="sc-box-inner" x="204" y="586" width="500" height="24" rx="5"/>
+  <text class="sc-step" x="214" y="602">⑯ append_profile_completion_nudge_if_due</text>
+  <path fill="none" stroke="#4a6fa5" stroke-width="1.25" marker-end="url(#pp-arrow)" d="M454 610 L454 624"/>
+
+  <rect class="sc-box-persist" x="204" y="624" width="248" height="26" rx="6"/>
+  <text class="sc-step" x="214" y="641">⑰ append assistant turn</text>
+  <path fill="none" stroke="#ca8a04" stroke-width="1.25" stroke-dasharray="4 2" d="M783 376 L783 637 L452 637"/>
+
+  <rect class="sc-box-adapter" x="460" y="624" width="244" height="26" rx="6"/>
+  <text class="sc-step" x="470" y="641">⑱ return AgentTurnResult → LINE · HTTP · optional TTS</text>
+
+  <rect class="sc-legend-bar" x="868" y="134" width="158" height="168" rx="6"/>
+  <rect fill="#ede9fe" stroke="#5b21b6" stroke-width="1" x="882" y="146" width="14" height="10" rx="2"/>
+  <text class="sc-legend-text" x="900" y="154">Setup / tool loop</text>
+  <rect fill="#fefce8" stroke="#ca8a04" stroke-width="1" x="882" y="168" width="14" height="10" rx="2"/>
+  <text class="sc-legend-text" x="900" y="176">Guards (ordered)</text>
+  <rect fill="#fee2e2" stroke="#dc2626" stroke-width="1" x="882" y="190" width="14" height="10" rx="2"/>
+  <text class="sc-legend-text" x="900" y="198">Emergency (⑧)</text>
+  <rect fill="#dcfce7" stroke="#15803d" stroke-width="1" x="882" y="212" width="14" height="10" rx="2"/>
+  <text class="sc-legend-text" x="900" y="220">Persist (③ user · ⑰ assistant)</text>
+  <text class="sc-legend-text" x="882" y="238" fill="#ca8a04">- - → early return (④–⑪)</text>
+  <text class="sc-legend-text" x="882" y="252">Source: medication_agent.py</text>
 </svg>
 </div>
 <div>
 <ul>
-  <li>Single channel entrypoint: <code>run_assistant_text_turn()</code> is a thin bridge to <code>MedicationAgent.run()</code>.</li>
-  <li>Deterministic ordering: pending-state resolvers and emergency/off-topic checks run before tool dispatch.</li>
+  <li>Entry: <code>run_assistant_text_turn()</code> → <code>MedicationAgent.run()</code> (LINE, HTTP text/voice after STT).</li>
+  <li>User turn is persisted at ③ <strong>before</strong> guards; every path appends the assistant turn before <code>AgentTurnResult</code>.</li>
 </ul>
 </div>
 
@@ -3445,7 +3477,7 @@ class: deep eng-proto reminders-flow-slide
   <!-- TRIGGER -->
   <rect class="sc-box-tool-drug" x="230" y="10" width="400" height="40" rx="9"/>
   <text class="sc-label" x="430" y="27" text-anchor="middle">Medication change event</text>
-  <text class="sc-sublabel" x="430" y="41" text-anchor="middle">user adds · updates · removes → medication_crud tool</text>
+  <text class="sc-sublabel" x="430" y="41" text-anchor="middle">med CRUD · disable_reminders · horizon confirm · upcoming_doses</text>
 
   <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#rf-arrow)" d="M430 50 L430 64"/>
 
@@ -3453,10 +3485,10 @@ class: deep eng-proto reminders-flow-slide
   <rect class="sc-box-backend" x="100" y="64" width="660" height="300" rx="14"/>
   <text class="sc-title" x="430" y="84" text-anchor="middle">Reminder scheduling &amp; delivery pipeline  ·  reminders/</text>
 
-  <!-- Step 1: sync dose rows -->
+  <!-- Step 1: lifecycle entry -->
   <rect class="sc-box-routes" x="160" y="96" width="540" height="42" rx="7"/>
-  <text class="sc-label" x="430" y="114" text-anchor="middle">sync_upcoming_dose_events(user_key)</text>
-  <text class="sc-sublabel" x="430" y="128" text-anchor="middle">materializes future dose_events in user timezone  ·  called by lifecycle sync step</text>
+  <text class="sc-label" x="430" y="114" text-anchor="middle">sync_and_enqueue_reminders(user_key)</text>
+  <text class="sc-sublabel" x="430" y="128" text-anchor="middle">sync_upcoming_dose_events → dose_events in user TZ  ·  lifecycle.py</text>
   <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#rf-arrow)" d="M430 138 L430 152"/>
 
   <!-- Step 2: enqueue (async) -->
@@ -3468,8 +3500,8 @@ class: deep eng-proto reminders-flow-slide
 
   <!-- Step 3: worker fires -->
   <rect class="sc-box-pipeline" x="160" y="208" width="540" height="42" rx="7"/>
-  <text class="sc-label" x="430" y="226" text-anchor="middle">worker: deliver_dose_reminder(dose_id)</text>
-  <text class="sc-sublabel" x="430" y="240" text-anchor="middle">arq worker executes at scheduled_at  ·  reminders/deliver.py</text>
+  <text class="sc-label" x="430" y="226" text-anchor="middle">send_reminder_for_dose → deliver_dose_reminder(dose_event_id)</text>
+  <text class="sc-sublabel" x="430" y="240" text-anchor="middle">arq job at scheduled_at  ·  worker.py → deliver.py</text>
   <path fill="none" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#rf-arrow)" d="M430 250 L430 264"/>
 
   <!-- Step 4: LINE push -->
@@ -3480,19 +3512,20 @@ class: deep eng-proto reminders-flow-slide
 
   <!-- Step 5: mark sent (idempotent) -->
   <rect class="sc-box-persist" x="160" y="320" width="540" height="36" rx="7"/>
-  <text class="sc-label" x="430" y="338" text-anchor="middle">try_mark_reminder_sent(dose_id)</text>
+  <text class="sc-label" x="430" y="338" text-anchor="middle">try_mark_reminder_sent(dose_event_id)</text>
   <text class="sc-sublabel" x="430" y="352" text-anchor="middle">idempotent reminder_sent_at write  ·  then schedule first nudge when enabled</text>
 
   <!-- RECONCILE path (side branch, left) -->
-  <rect class="sc-box-tool-hlth" x="18" y="370" width="340" height="64" rx="9"/>
+  <rect class="sc-box-tool-hlth" x="18" y="370" width="340" height="78" rx="9"/>
   <text class="sc-label" x="188" y="386" text-anchor="middle">Reconcile path</text>
   <text class="sc-sublabel" x="188" y="402" text-anchor="middle">cron + X-Cron-Secret → POST /internal/reminders/reconcile</text>
-  <text class="sc-sublabel" x="188" y="416" text-anchor="middle">list due unsent rows (before now UTC)</text>
-  <text class="sc-sublabel" x="188" y="428" text-anchor="middle">enqueue_reminder_jobs_now(ids) for catch-up</text>
+  <text class="sc-sublabel" x="188" y="416" text-anchor="middle">mark_stale_dose_events_missed(before now UTC)</text>
+  <text class="sc-sublabel" x="188" y="430" text-anchor="middle">list due unsent rows (48h freshness window)</text>
+  <text class="sc-sublabel" x="188" y="444" text-anchor="middle">enqueue_reminder_jobs_now(ids) for catch-up</text>
 
   <!-- Reconcile arrow loops back into enqueue -->
-  <path fill="none" stroke="#6b21a8" stroke-width="1.5" stroke-dasharray="4 2" d="M700 173 L730 173 L730 402 L358 402"/>
-  <text class="sc-arrow-label" x="430" y="398" text-anchor="middle">missed rows → re-enqueue</text>
+  <path fill="none" stroke="#6b21a8" stroke-width="1.5" stroke-dasharray="4 2" d="M700 173 L730 173 L730 414 L358 414"/>
+  <text class="sc-arrow-label" x="430" y="410" text-anchor="middle">stale / missed delivery → re-enqueue</text>
 
   <!-- Legend (right column) -->
   <rect class="sc-legend-bar" x="814" y="106" width="158" height="170" rx="6"/>
@@ -3512,8 +3545,8 @@ class: deep eng-proto reminders-flow-slide
 </div>
 <div>
 <ul>
-  <li>Medication writes call <code>sync_and_enqueue_reminders</code>: rebuild future <code>dose_events</code>, then enqueue with <code>_defer_until</code>.</li>
-  <li>Reconcile is a guarded safety net: cron + secret header re-enqueues <strong>due + unsent</strong> rows when worker/Redis delivery is interrupted.</li>
+  <li><code>sync_and_enqueue_reminders</code> is the lifecycle entry (med CRUD, <code>disable_reminders</code>, horizon confirm, <code>upcoming_doses</code>, chronic resync): rebuild <code>dose_events</code>, then enqueue with <code>_defer_until</code>.</li>
+  <li>Reconcile (<code>POST /internal/reminders/reconcile</code>): <code>mark_stale_dose_events_missed</code>, then re-enqueues <strong>due + unsent</strong> rows within a <strong>48h</strong> freshness window via <code>enqueue_reminder_jobs_now</code>.</li>
   <li>Chronic / indefinite-duration meds (<code>medications.is_indefinite</code>) reuse the same rolling-window architecture — kept full forever by a daily arq cron <code>resync_chronic_meds_cron</code> <strong>and</strong> a delivery-time top-up inside <code>deliver_dose_reminder</code> when fewer than <code>MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD</code> future doses remain.</li>
   <li>Nudge chain is explicit and bounded: first nudge starts only after successful send mark, then <code>expected_nudge_count</code> gates subsequent nudges.</li>
   <li>Idempotency is row-level (<code>reminder_sent_at</code>, <code>taken_at</code>) so replay/reconcile avoids duplicate state transitions.</li>
@@ -3693,7 +3726,7 @@ class: deep eng-proto
 
 # Engineering technical roadmap
 
-Items identified in the codebase robustness review, documented as future direction. Not started; gate conditions govern sequencing.
+Items identified in the codebase robustness review, documented as future direction.
 
 | # | Item | What | Gate |
 |---|------|------|------|

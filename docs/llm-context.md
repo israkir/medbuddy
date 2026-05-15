@@ -33,7 +33,7 @@ Typical blocks in the string sent to the model:
 
 **Not** included: raw free-text from `patient_health_conditions.notes` entries, raw emergency contact values, exact `age_years`.
 
-**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, **post-add** `compose_medication_added_reply` (after reminder sync, with `sync_dose_events_first=False` to avoid double sync), and **post-add** `check_interactions_structured` when `persist_medication_add_from_draft` runs with **two or more** medications on the updated list (same `patient_context_for_llm` assembly, `include_health_notes=True`). The `include_health_notes=True` flag toggles inclusion of the `recent_health_notes` buffer — a formatted block built from recent `patient_health_conditions` rows (not a removed stored column); it is omitted from the standard context block but included deliberately on the safety-critical call sites listed above. **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
+**Call sites** using the assembler (so the model sees the schedule): `MedicationAgent` fallback `compose_reply`, **Explain medication**, **Interaction check**, **Side effects**, **Health summary**, and **post-add** flows in **`build_post_add_patient_reply`** (`compose_medication_added_reply` / `compose_medication_added_primary`, **`post_add_interaction_crosscheck`**) after reminder sync, with `sync_dose_events_first=False` to avoid double sync. Post-add assembly uses `include_health_notes=True`. The `include_health_notes=True` flag toggles inclusion of the `recent_health_notes` buffer — a formatted block built from recent `patient_health_conditions` rows (not a removed stored column); it is omitted from the standard context block but included deliberately on the safety-critical call sites listed above. **`ListUpcomingDosesTool`** does not use this blob—it returns deterministic i18n only.
 
 ### Patient context for **display** only (`build_patient_context_for_chat_display`)
 
@@ -110,24 +110,52 @@ Used inside tools (**Explain medication**, **Interaction check** fallback, **`co
 
 ### `compose_medication_added_reply`
 
+Used when the patient’s list has **only the newly saved drug** (first medication on file). Assembled by **`build_post_add_patient_reply`**.
+
 | Input | Redaction / notes |
 |--------|-------------------|
-| `patient_context` | `patient_context_for_llm` after the new med is saved and reminders are synced (`sync_dose_events_first=False`). |
+| `patient_context` | `patient_context_for_llm` after the new med is saved and reminders are synced (`sync_dose_events_first=False`; often `include_health_notes=True`). |
 | `drug_grounding` | TFDA/OpenFDA snippets for the **saved drug name**. |
 | `saved` | Authoritative `name`, `dosage`, `schedule`, optional `instructions` in the prompt. |
 | `user_message` | **Redacted** (`safe_text`). |
 
-**Follow-on call (not a separate `LLMPort` method):** when **`agents/tools/medication_crud.py`** saves a new row and the reloaded list has length **≥ 2**, it calls **`check_interactions_structured`** using the same `patient_context` and **`drug_grounding`** as the post-add compose step, with **`user_message`** set to the localized template **`medication.post_add_interaction_user_query`** (substitutes the new drug’s **name** from the saved record — not the user’s raw add utterance). **`InteractionCheckTool`** still passes **`redact_pii_text(user_text)`** for real chat turns; the post-add path builds the prompt line in code without reusing `safe_text`.
+### `compose_medication_added_primary`
 
-### `check_interactions_structured`
+Used when the reloaded list has **≥ 2** medications (patient already had other drugs). Same inputs as **`compose_medication_added_reply`**; adapter uses task key `medication_added_primary_before_crosscheck` (shorter acknowledgment before the cross-check paragraph).
+
+### `post_add_interaction_crosscheck`
+
+**Not** the same prompt as chat **`check_interactions_structured`** — uses **`llm.post_add_interaction_crosscheck_task`** (continuation framing: do not re-greet; focus new drug vs rest of list). Called from **`build_post_add_patient_reply`** only when list length **≥ 2**; skipped on first-ever medication.
 
 | Input | Redaction / notes |
 |--------|-------------------|
-| `user_message` | **`InteractionCheckTool`:** **Redacted** user chat line (`safe_text`). **Post-add path (`medication_crud`):** localized synthetic prompt from **`medication.post_add_interaction_user_query`** + saved drug name (adapter treats it like the user question for interaction analysis). |
+| `user_message` | Localized synthetic line from **`medication.post_add_interaction_user_query`** + saved drug **name** (not the user’s raw add utterance). |
+| `patient_context` | Same block as post-add compose (`include_health_notes=True`). |
+| `medications` | Full updated list (name, dosage, schedule lines). |
+| `drug_grounding` | TFDA/OpenFDA snippets for the **newly saved** drug (same blob as compose step). |
+| History | **Not** included. |
+
+### `check_interactions_structured`
+
+Chat **`interaction_check`** tool only (user-initiated interaction questions).
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `user_message` | **Redacted** user chat line (`safe_text`). |
 | `patient_context` | `patient_context_for_llm` (includes upcoming `dose_events` block). |
 | `medications` | Explicit list lines (name, dosage, schedule) in the adapter prompt. |
-| `drug_grounding` | **`InteractionCheckTool`:** OpenFDA (and optional warnings excerpt) from the **user’s chat query**, or placeholder. **Post-add path:** TFDA/OpenFDA snippets already fetched for the **newly saved** drug (same blob as `compose_medication_added_reply`), or placeholder. |
+| `drug_grounding` | OpenFDA (and optional warnings excerpt) from the **user’s chat query**, or placeholder. |
 | History | **Not** included in the structured Gemini/OpenAI prompt (unlike `compose_reply`). |
+
+### `check_drug_condition_interactions`
+
+Called from **`persist_medication_add_from_draft`** after **`build_post_add_patient_reply`** when active **`patient_health_conditions`** exist. Returns patient-safe warning **lines** (not `InteractionResult`); appended to the reply string in code.
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| `drug_name` | Saved medication **name** (not user chat). |
+| `conditions` | Active condition rows: category, name, optional severity — **not** full clinical notes text from DB. |
+| Prompt | Structured JSON extraction; only moderate/high concerns become visible lines. |
 
 ### `extract_medication_draft`
 
@@ -141,6 +169,19 @@ Used inside tools (**Explain medication**, **Interaction check** fallback, **`co
 |--------|-------------------|
 | User text | **Redacted** (`safe_text`). |
 | Medications | JSON catalog of `id` + `name` only. |
+
+### `resolve_medication_update`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User text | **Redacted** (`safe_text`). |
+| Medications | JSON catalog of `id`, `name`, dosage, schedule, instructions for **`UpdateMedicationTool`**. |
+
+### `extract_health_conditions`
+
+| Input | Redaction / notes |
+|--------|-------------------|
+| User text | **Raw** `user_text` when **`manage_health_conditions`** runs extraction (allergies/diagnoses — not **`update_profile`**). Higher PII exposure than redacted chat lines. |
 
 ### `extract_profile_patch`
 
@@ -184,6 +225,7 @@ Personalized replies for explain/interaction intents are keyed by a fingerprint 
 |--------|----------|
 | Redaction helpers | `apps/backend/src/medbuddy/privacy/redact.py` |
 | Patient context builders | `apps/backend/src/medbuddy/llm/prompts/persona.py`, `apps/backend/src/medbuddy/application/patient_llm_context.py` |
+| Post-add reply assembly | `apps/backend/src/medbuddy/application/post_add_medication_reply.py` |
 | Turn orchestration | `apps/backend/src/medbuddy/agents/medication_agent.py`, `apps/backend/src/medbuddy/agents/orchestrator.py` (`orchestrator_prior_messages`) |
 | LLM adapters (prompt assembly) | `apps/backend/src/medbuddy/integrations/llm/gemini_llm.py`, `apps/backend/src/medbuddy/integrations/llm/openai_llm.py` |
 | Privacy overview | [docs/privacy.md](./privacy.md) |

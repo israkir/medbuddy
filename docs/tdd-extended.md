@@ -509,7 +509,7 @@ Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equiva
 |---------------------|----------------|
 | `ListMedicationsTool` / `list_medications` | Load medication list → i18n formatted reply |
 | `ListUpcomingDosesTool` / `list_upcoming_doses` | Sync dose_events → list pending rows in local-time window (~7 days) → i18n formatted schedule |
-| `AddMedicationTool` / `add_medication` | LLM extract draft → persist → **`sync_and_enqueue_reminders`** → drug grounding → `compose_medication_added_reply` → when the reloaded list has **2+** meds, **`check_interactions_structured`** (post-add cross-check) → append education lines (`persist_medication_add_from_draft`) |
+| `AddMedicationTool` / `add_medication` | LLM extract draft → **`persist_medication_add_from_draft`** → **`sync_and_enqueue_reminders`** → **`build_post_add_patient_reply`**: `compose_medication_added_reply` (first med) or `compose_medication_added_primary` + **`post_add_interaction_crosscheck`** (2+ meds); optional **`check_drug_condition_interactions`** append |
 | `UpdateMedicationTool` / `update_medication` | LLM resolve patch → update → i18n **`medication.updated`** or **`medication.updated_with_note`** (by non-empty saved instructions) → optional **`medication.update_reminder_followup`** if dose/schedule changed → reminder sync |
 | `RemoveMedicationTool` / `remove_medication` | LLM resolve target → delete → i18n confirm → reminder sync |
 | `remove_all_medications` | Delete all medications + sync reminders |
@@ -522,6 +522,8 @@ Tools are exposed to the LLM by **name** in `AGENT_TOOLS_OPENAI` / Gemini equiva
 | `LogVitalTool` / `log_vital` | Structured vital extraction → persist vital log → i18n acknowledgment |
 | `GenerateHealthSummaryTool` / `generate_health_summary` | Aggregate patient context + history → structured LLM summary output |
 | `export_health_journal` | Structured journal export |
+| `manage_health_conditions` | Allergies / chronic conditions via structured **`patient_health_conditions`** rows |
+| `lookup_health_history` | Recent **`health_issue_events`** (optional `since_days`, cap 30) |
 | `update_profile` | **`extract_profile_patch`** → **`patch_user_profile`** |
 | `simulate_notify_emergency_contact` | Simulated caregiver notify + **metadata** for HTTP clients |
 
@@ -950,9 +952,10 @@ Authoritative method signatures and return types are in **`apps/backend/src/medb
 | Identity | `drug_cache_provenance_id` (property) — stored on personalized cache rows |
 | Intent / profile | `interpret_user_turn`, `extract_profile_patch(..., *, locale)`, `extract_locale_intent` |
 | Chat / orchestration | `complete_chat_with_tools`, `compose_reply`, `simplify_drug_text_to_patient_zh` |
-| Medications | `extract_medication_draft`, `resolve_medication_removal_id`, `resolve_medication_update`, `compose_medication_added_reply` (takes persisted `saved: MedicationRecord`, not a draft); **`persist_medication_add_from_draft`** may call `check_interactions_structured` immediately after when the patient’s list has more than one drug |
+| Medications | `extract_medication_draft`, `resolve_medication_removal_id`, `resolve_medication_update`, `compose_medication_added_reply`, `compose_medication_added_primary` (post-add when list has 2+ meds); **`build_post_add_patient_reply`** also calls **`post_add_interaction_crosscheck`** when list has 2+ meds |
+| Conditions | `extract_health_conditions`, `check_drug_condition_interactions` (patient-safe warning lines) |
 | Vitals | `extract_vital_log` |
-| Safety / summary | `check_interactions_structured` → `InteractionResult`; `generate_health_summary` → domain `HealthSummary` |
+| Safety / summary | `check_interactions_structured` → `InteractionResult` (chat **`interaction_check`** tool); `post_add_interaction_crosscheck` → `InteractionResult` (post-add only); `generate_health_summary` → domain `HealthSummary` |
 
 ### 8.3 Prompt construction
 
@@ -1296,7 +1299,7 @@ All settings are in `config.py`. `load_settings(env)` reads a `Mapping[str, str]
 | `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | `12` | Prior **redacted** user/assistant turns prepended to `complete_chat_with_tools`; `0` disables |
 | `CONVERSATION_HISTORY_TURNS` | `5` | Turns loaded for `interpret_user_turn` recent context |
 | `MEDBUDDY_DOSE_CLARIFICATION_TTL_SECONDS` | `900` | TTL for pending dose-clarification / add-confirm state (60–86400) |
-| `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | `12` | When onboarding-style profile fields (name, age, gender, emergency contact, health notes) are still missing, append a short footer every **N** user messages on the orchestrator reply path; `0` disables. Cadence is staggered per user via a stable hash. |
+| `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | `12` | When onboarding-style profile fields (name, age, gender, emergency contact, active health conditions) are still missing, append a short footer every **N** user messages on the orchestrator reply path; `0` disables. Cadence is staggered per user via a stable hash. |
 | `MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS` | (built-in defaults) | Optional comma-separated **`Intent`** values to persist into **`health_issue_events`**; the sentinel **`all_non_off_topic`** logs every classifier outcome except **`off_topic`**. Structured vital rows are written separately by `LogVitalTool`. |
 | `MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT` | `60` | Cap (max **200**) on rows pulled from **`health_issue_events`** into the doctor-summary prompt. |
 

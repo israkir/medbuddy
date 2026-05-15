@@ -19,6 +19,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | [`llm-context.md`](llm-context.md) | Developers, compliance reviewers | Per-call LLM input reference — every `LLMPort` method with the data sent, redaction applied, and privacy exceptions |
 | [`frontend-expo.md`](frontend-expo.md) | Mobile engineers, product | Reference Expo app — **future product** kept separate from the primary LINE + backend documentation |
 | [`go-port-mapping.md`](go-port-mapping.md) | Engineers, platform leads | Python-to-Go/Fiber migration map — module/interface/package equivalence and translation notes |
+| [`qna.md`](qna.md) | Engineers | Project Q&A (Q1–Q55) — pipeline, voice/LINE, adherence, caches, reminders, privacy, design tradeoffs |
 
 ---
 
@@ -63,7 +64,7 @@ Navigation guide for the `docs/` folder. For project overview and quick start, s
 | Question | Go to |
 |----------|-------|
 | What data does each LLM call send? | [`llm-context.md`](llm-context.md) |
-| Is there an automatic interaction check after adding a drug? | Yes, when the user **already had** at least one other medication — second LLM call **`check_interactions_structured`** in **`persist_medication_add_from_draft`** — [`features.md`](features.md) §4.3, [`llm-context.md`](llm-context.md) (`compose_medication_added_reply` / `check_interactions_structured`) |
+| Is there an automatic interaction check after adding a drug? | Yes, when the user **already had** at least one other medication — **`build_post_add_patient_reply`** uses **`compose_medication_added_primary`**, then **`post_add_interaction_crosscheck`** (separate from chat **`interaction_check`** / **`check_interactions_structured`**) — [`features.md`](features.md) §4.3, [`llm-context.md`](llm-context.md) |
 | Does the tool orchestrator see earlier chat turns? | Yes — **redacted** prior user/assistant tail (cap **`MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS`**) — [`llm-context.md`](llm-context.md) (`complete_chat_with_tools`), [`features.md`](features.md) §3 |
 | Does the assistant nudge users to complete onboarding fields? | Yes — optional footer every **`MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS`** user messages on the orchestrator path — [`features.md`](features.md) §3.3, [`tdd-extended.md`](tdd-extended.md) §5.1 step 11 |
 | What happens on emergency intent if a contact is already saved? | Same fixed safety reply **plus** the simulated outreach line and **`metadata.simulated_emergency_notification`** — [`features.md`](features.md) §4.11, [`use-cases.md`](use-cases.md) §3.14 |
