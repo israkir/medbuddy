@@ -82,6 +82,7 @@ Add new **LINE** behavior in `src/medbuddy/channels/line/`; extend **app-only** 
 |----------|------|-------------|
 | `GET /health` | None | Plain-text liveness |
 | `POST /internal/reminders/reconcile` | `X-Cron-Secret` | Re-enqueues overdue, unsent dose reminder jobs |
+| `POST /internal/conversations/purge` | `X-Cron-Secret` | Deletes `conversation_turns` older than `MEDBUDDY_CONVERSATION_RETENTION_DAYS` (default 90) |
 
 ### LINE (`/v1/line`)
 
@@ -98,7 +99,7 @@ All protected routes require **`X-App-User-Id`** (4–128 chars) and, in product
 |----------|------|-------------|
 | `GET /v1/app/health` | None | JSON health check |
 | `GET /v1/app/info` | None | Public service metadata |
-| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contact, notes, **locale**, **timezone**). Pre-onboarding: optional **`X-MedBuddy-Locale`** or **`Accept-Language`** may update stored **locale**. |
+| `GET /v1/app/me` | Bearer + User-Id | User profile (name, age, gender, emergency contacts, **`health_conditions`**, **locale**, **timezone**). Pre-onboarding: optional **`X-MedBuddy-Locale`** or **`Accept-Language`** may update stored **locale**. |
 | `POST /v1/app/onboarding` | Bearer + User-Id | First-run profile save (optional **timezone** IANA; default **Asia/Taipei**) |
 | `POST /v1/app/messages` | Bearer + User-Id | Chat turn — `{"text":"…"}` → `{"reply":"…"}` |
 | `POST /v1/app/messages/voice` | Bearer + User-Id | Multipart **`file`** (audio) → STT (profile **`locale`**) → same assistant as text → `{"reply":"…","transcript":"…"}` |
@@ -164,12 +165,16 @@ Wiring is centralized in [`src/medbuddy/container.py`](src/medbuddy/container.py
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Postgres via PostgREST: Supabase **Secret** API key (`sb_secret_...` only). Not `sb_publishable_...` (anon/authenticated table access revoked in `supabase/schema.sql`) |
 | `REDIS_URL` | arq job queue for dose reminders |
 | `MEDBUDDY_MOBILE_BEARER_TOKEN` | Auth token for `/v1/app` protected routes |
-| `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` |
+| `MEDBUDDY_CRON_SECRET` | Auth for `POST /internal/reminders/reconcile` and `POST /internal/conversations/purge` |
+| `MEDBUDDY_CONVERSATION_RETENTION_DAYS` | Age threshold for conversation-turn purge (default **90**) |
+| `MEDBUDDY_REMINDER_NUDGE_INTERVALS_MINUTES` | Optional comma-separated follow-up nudge offsets after a dose push (e.g. `15,30,60`); empty disables |
+| `MEDBUDDY_CHRONIC_RESYNC_CRON_HOUR_UTC` / `MEDBUDDY_CHRONIC_RESYNC_CRON_MINUTE_UTC` | Daily cron for indefinite-med dose top-up (default **03:15** UTC) |
+| `MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD` | Inline top-up when fewer than N future doses remain for an indefinite med (default **3**) |
 | `MEDBUDDY_LOCALE` | Server locale (`zh-TW` default) |
 | `LOG_LEVEL` | `INFO` (default) or `DEBUG` |
 | `CONVERSATION_HISTORY_TURNS` | Max turns loaded from storage for routing context (default `5`) |
 | `MEDBUDDY_AGENT_ORCHESTRATOR_HISTORY_TURNS` | Max **prior** user/assistant turns injected into the tool orchestrator LLM per message (default **12**; `0` disables prior-turn injection) |
-| `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | When profile gaps remain (name, age, gender, emergency contact, health notes), append a gentle footer every **N** user messages on the main assistant path (default **12**; **`0`** disables) |
+| `MEDBUDDY_PROFILE_COMPLETION_NUDGE_EVERY_N_USER_TURNS` | When profile gaps remain (name, age, gender, emergency contact, active health conditions), append a gentle footer every **N** user messages on the main assistant path (default **12**; **`0`** disables) |
 | `MEDBUDDY_HEALTH_ISSUE_LOG_INTENTS` | Optional comma-separated **`Intent`** values to persist to **`health_issue_events`**; omit for built-in defaults; **`all_non_off_topic`** logs every non-**`off_topic`** classifier outcome |
 | `MEDBUDDY_HEALTH_ISSUE_SUMMARY_EVENTS_LIMIT` | Max **`health_issue_events`** rows formatted into the doctor health-summary prompt (default **60**, max **200**) |
 
@@ -221,7 +226,7 @@ The repo-root `Dockerfile` runs [`docker-entrypoint-web.sh`](../../docker-entryp
 
 **Compose:** `REDIS_URL=redis://redis:6379 podman compose --profile reminders up --build`
 
-**Safety net:** `POST /internal/reminders/reconcile` with `X-Cron-Secret` re-enqueues overdue, unsent rows.
+**Safety net:** `POST /internal/reminders/reconcile` with `X-Cron-Secret` re-enqueues overdue, unsent rows. **Retention:** `POST /internal/conversations/purge` (same secret) deletes chat turns older than `MEDBUDDY_CONVERSATION_RETENTION_DAYS`.
 
 **Chronic / indefinite-duration meds:** rows flagged with `medications.is_indefinite = true` (chronic phrasing such as *"long-term"* / *"終身"* / *"慢性病用藥"* extracted by `MedicationExtraction.is_indefinite`) skip the "how many days?" follow-up at save time and have their rolling window refilled forever by two paths registered in the same arq worker: the daily cron `resync_chronic_meds_cron` (default **03:15 UTC**, configurable via `MEDBUDDY_CHRONIC_RESYNC_CRON_HOUR_UTC` / `MEDBUDDY_CHRONIC_RESYNC_CRON_MINUTE_UTC`) and an inline top-up inside `deliver_dose_reminder` that fires when fewer than `MEDBUDDY_CHRONIC_DELIVERY_TOPUP_THRESHOLD` (default **3**) future doses remain for the just-fired med.
 

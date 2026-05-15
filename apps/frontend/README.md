@@ -12,7 +12,7 @@ Paths below are relative to **`apps/frontend/`**.
 
 | Screen | File | Description |
 |--------|------|-------------|
-| **Onboarding** | `app/onboarding.tsx` | First-run form — name, age, gender, emergency contact, health notes. **`lib/companionApi.ts`** **`fetchMeProfile`** sends **`X-MedBuddy-Locale`** (Expo primary **`languageTag`**) on **`GET /v1/app/me`** so the backend can seed **`locale`** before submit; **`POST /v1/app/onboarding`** includes **`timezone`** (device IANA via `Intl.DateTimeFormat().resolvedOptions().timeZone`). Gated in `app/_layout.tsx` until completed. |
+| **Onboarding** | `app/onboarding.tsx` | First-run form — name, age, gender, emergency contact, health notes (submitted as structured **`health_conditions`**). **`lib/companionApi.ts`** **`fetchMeProfile`** sends **`X-MedBuddy-Locale`** (Expo primary **`languageTag`**) on **`GET /v1/app/me`** so the backend can seed **`locale`** before submit; **`POST /v1/app/onboarding`** includes **`timezone`** (device IANA via `Intl.DateTimeFormat().resolvedOptions().timeZone`). Gated in `app/_layout.tsx` until completed. |
 | **Today** | `app/(tabs)/index.tsx` | Greeting, pending dose card, link to companion |
 | **Medications** | `app/(tabs)/medications.tsx` | Medication catalog, "Listen" (expo-speech), visit questions panel, hold-to-talk (expo-av) |
 | **Family** | `app/(tabs)/family.tsx` | Informational copy + "invite" placeholder |

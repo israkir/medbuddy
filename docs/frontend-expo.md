@@ -50,7 +50,7 @@ The repo today centers on LINE and the HTTP API; a **dedicated mobile client** i
 
 | Area | Path / behavior |
 |------|-----------------|
-| **Onboarding** | `app/onboarding.tsx`, gated in `app/_layout.tsx` — name, age, gender, emergency contact, health notes; **`lib/companionApi.ts`** calls **`GET /v1/app/me`** with **`X-MedBuddy-Locale`** (device **`languageTag`**) so the backend can align **`patients.locale`** before **`POST /v1/app/onboarding`**, which also sends device IANA **`timezone`** (`Intl.DateTimeFormat().resolvedOptions().timeZone`). |
+| **Onboarding** | `app/onboarding.tsx`, gated in `app/_layout.tsx` — name, age, gender, emergency contact, free-text health notes (mapped to structured **`health_conditions`** on submit); **`lib/companionApi.ts`** calls **`GET /v1/app/me`** with **`X-MedBuddy-Locale`** (device **`languageTag`**) so the backend can align **`patients.locale`** before **`POST /v1/app/onboarding`**, which sends **`health_conditions`**, device IANA **`timezone`** (`Intl.DateTimeFormat().resolvedOptions().timeZone`), and related profile fields. |
 | **Today** | `app/(tabs)/index.tsx` — greeting, link to companion, **`PendingDoseCard`** |
 | **Medications** | Catalog, **`MedicationListCard`**, visit questions, **`MedicationQuestionsPanel`**, **expo-speech** listen via **`MedicationExplanationContext`** |
 | **Family** | Informational copy; placeholder invite (no backend) |
