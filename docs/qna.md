@@ -4,6 +4,90 @@ Questions and answers about the codebase architecture and behavior. For the doc 
 
 Diagrams use **[Mermaid](https://mermaid.js.org/)** (rendered on GitHub and many Markdown viewers).
 
+## Questions (quick links)
+
+### [Section 1 — Project Overview & Goals](#section-1--project-overview--goals)
+
+- [Q1. What is MedBuddy?](#q1-in-one-paragraph-what-is-medbuddy-and-who-is-it-for)
+- [Q2. Why two channels?](#q2-why-two-channels-line--http-api-instead-of-just-one)
+- [Q3. Python now, Go later?](#q3-what-is-the-overall-stage-strategy-why-python-now-go-later)
+
+### [Section 2 — Repository & Module Structure](#section-2--repository--module-structure)
+
+- [Q4. Top-level layout](#q4-walk-me-through-the-top-level-layout)
+- [Q5. Channels never duplicate LLM logic](#q5-what-enforces-the-channels-never-duplicate-llm-logic-rule)
+- [Q6. Expo app production?](#q6-what-is-the-expo-app-in-this-repo--is-it-production)
+
+### [Section 3 — Hexagonal Architecture](#section-3--hexagonal-architecture-ports--adapters)
+
+- [Q7. Swap LLM for mock](#q7-show-me-the-seam-how-do-you-swap-a-real-llm-for-a-mock-without-changing-business-code)
+- [Q8. AppServices](#q8-whats-in-appservices-and-why-a-frozen-dataclass-instead-of-a-global)
+- [Q9. Configuration loading](#q9-how-is-configuration-loaded-why-not-pydantic-settings)
+- [Q10. Mock mode](#q10-how-does-the-system-know-were-in-mock-mode)
+
+### [Section 4 — One Conversation Pipeline](#section-4--one-conversation-pipeline)
+
+- [Q11. Walkthrough: aspirin in 5 minutes](#q11-a-line-user-types-remind-me-to-take-aspirin-in-5-minutes-walk-it-through)
+- [Q12. Gates vs orchestrator](#q12-why-have-fast-routing-gates-and-a-tool-calling-loop-why-not-run-everything-through-the-orchestrator)
+- [Q13. Early exits](#q13-what-are-the-early-exits-how-do-they-work-and-why-skip-the-orchestrator)
+- [Q14. Registered tools vs ReAct](#q14-why-registered-tools-instead-of-free-form-react)
+- [Q15. Conversation history & privacy](#q15-how-is-conversation-history-fed-back-to-the-model-what-about-privacy)
+- [Q16. Agent memory](#q16-how-does-the-agents-memory-work-is-there-long-term-recall)
+- [Q17. All 19 tools](#q17-what-are-all-19-orchestrator-tools)
+
+### [Section 5 — Reminders Subsystem](#section-5--reminders-subsystem)
+
+- [Q18. Reminder to LINE](#q18-walk-me-through-how-a-reminder-reaches-the-patient-on-line)
+- [Q19. Chronic / lifelong meds](#q19-how-do-chronic--lifelong-medications-stay-reminded)
+- [Q20. arq + Redis](#q20-why-arq--redis-instead-of-celery-or-in-process-scheduling)
+- [Q21. Double-pushes on retry](#q21-how-do-you-avoid-double-pushes-on-retry)
+- [Q22. Reminder reconcile](#q22-how-does-reminder-reconcile-work-real-world-scenarios-with-io)
+
+### [Section 6 — LLM Layer & Prompting](#section-6--llm-layer--prompting)
+
+- [Q23. Intent classification](#q23-how-is-intent-classification-done-why-structured-output)
+- [Q24. System prompt](#q24-the-system-prompt--whats-it-doing)
+- [Q25. Drug grounding](#q25-how-do-you-keep-drug-answers-grounded)
+- [Q26. drug_personalization_cache](#q26-what-is-drug_personalization_cache-when-does-it-hit-and-how-is-it-keyed)
+
+### [Section 6b — Voice, LINE, adherence, health records](#section-6b--voice-line-channel-adherence-and-health-records)
+
+- [Q27. Voice messages](#q27-how-do-voice-messages-work-line-and-v1app)
+- [Q28. LINE follow & webhook idempotency](#q28-line-follow-webhook-delivery-and-idempotency--what-bypasses-the-assistant)
+- [Q29. Dose adherence](#q29-how-does-dose-adherence-work--taken-missed-and-pending-clarification)
+- [Q30. Health summary](#q30-how-is-the-doctor-ready-health-summary-built)
+- [Q31. Side effects vs dose logging](#q31-how-do-side-effect-reports-relate-to-dose-logging)
+- [Q32. Health conditions & onboarding](#q32-how-are-health-conditions-and-app-onboarding-stored-vs-chat-profile-updates)
+- [Q33. Profile-completion nudge](#q33-what-is-the-profile-completion-nudge)
+- [Q34. Registry query resolution](#q34-how-does-the-server-choose-which-drug-name-to-send-to-openfdatfda)
+- [Q35. Reminder prefs & disable_reminders](#q35-how-are-per-medication-reminder-preferences-stored-what-does-disable_reminders-do)
+- [Q36. Education cues](#q36-what-are-just-in-time-medication-education-cues)
+- [Q37. Gemini vs OpenAI](#q37-how-do-you-switch-between-gemini-and-openai)
+- [Q38. Intent hooks](#q38-what-are-intent-hooks)
+- [Q39. Logging policy](#q39-what-gets-logged--and-what-is-deliberately-omitted)
+- [Q40. Post-add interaction crosscheck](#q40-whats-the-post-add-interaction-crosscheck-and-why-is-it-separate-from-the-chat-tool)
+
+### [Section 7 — Privacy, Security, i18n, Testing](#section-7--privacy-security-i18n-testing)
+
+- [Q41. Privacy boundary](#q41-whats-the-privacy-boundary)
+- [Q42. Mobile auth](#q42-how-is-mobile-auth-done)
+- [Q43. Webhooks, cron, media](#q43-how-are-webhooks-cron-routes-and-media-protected)
+- [Q44. i18n](#q44-how-is-i18n-handled)
+- [Q45. Testing without external APIs](#q45-how-do-you-test-without-hitting-gemini-openai-line-supabase-redis-or-google)
+
+### [Section 8 — Design Choices & Tradeoffs](#section-8--design-choices--tradeoffs)
+
+- [Q46. FastAPI vs Go](#q46-why-fastapi-now-and-go-later-why-not-just-start-in-go)
+- [Q47. Tool loop vs intent dispatch](#q47-why-an-llm-tool-calling-loop-instead-of-intent--handler-dispatch)
+- [Q48. Structured outputs](#q48-why-structured-outputs-pydantic-schemas-for-so-many-llm-calls)
+- [Q49. core/ vs models/](#q49-why-a-core-package-separate-from-models)
+- [Q50. Supabase mixins](#q50-why-split-supabase-persistence-into-mixins)
+- [Q51. application/ layer](#q51-why-a-separate-application-layer-between-channels-and-agents)
+- [Q52. Subtle bugs hardened](#q52-what-was-a-subtle-bug-you-hardened-against-and-how)
+- [Q53. New channel (WhatsApp)](#q53-if-you-had-to-add-a-new-channel--say-whatsapp--what-would-change)
+- [Q54. Production-readiness TODO](#q54-whats-on-the-production-readiness-todo)
+- [Q55. Defend one architectural decision](#q55-if-you-had-to-defend-one-architectural-decision-which-one-and-why)
+
 ---
 
 ## Section 1 — Project Overview & Goals
