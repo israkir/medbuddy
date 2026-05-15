@@ -1581,6 +1581,7 @@ Press **A** or click *Full deck*. Adds product detail (PM) and architecture &amp
 | [features.md](https://github.com/israkir/medbuddy/blob/main/docs/features.md) | Agent orchestration &amp; tool catalog, LINE + API capabilities |
 | [privacy.md](https://github.com/israkir/medbuddy/blob/main/docs/privacy.md) | PII redaction, LLM data boundaries, compliance |
 | [reminders.md](https://github.com/israkir/medbuddy/blob/main/docs/reminders.md) | Dose reminder queue, arq/Redis, deploy ops |
+| [qna.md](https://github.com/israkir/medbuddy/blob/main/docs/qna.md) | Q1–Q55 — pipeline walkthrough, tools, reminders, privacy, design tradeoffs |
 
 .footer[Tip · arrow keys to navigate · `c` to clone window · `p` for presenter view]
 
@@ -2260,7 +2261,7 @@ A live, runnable prototype — every layer of the architecture working end-to-en
 .cols[
 .col[
 <ul class="checklist">
-<li><b>Registered tool-backed flows</b> covered end-to-end — list, add, update, remove, bulk clear, reminders off, explain, interactions, side-effects, confirm, miss, log vital, health history lookup, summary, profile, journal · cohort-validated quality is an MVP gate</li>
+<li><b>Registered tool-backed flows</b> covered end-to-end — list, upcoming doses, add, update, remove, bulk clear, reminders off, explain, interactions, side-effects, confirm, miss, log vital, manage health conditions, health history lookup, summary, profile, journal, simulated emergency notify · cohort-validated quality is an MVP gate</li>
 <li><b>Chat loading indicators</b> — LINE typing indicator dispatched before the assistant path on both inbound text and audio turns (<code>send_chat_loading_indicator</code>)</li>
 <li><b>Voice in &amp; out</b> — <a href="https://cloud.google.com/speech-to-text" target="_blank" rel="noopener noreferrer">Google STT v2</a> + <a href="https://cloud.google.com/text-to-speech" target="_blank" rel="noopener noreferrer">Cloud TTS</a>, sharing the same understanding pipeline as typed chat. Formal accuracy and cost targets are deferred to the OD-3 milestone at Growth.</li>
 <li><b>Reminders</b> — scheduled delivery, follow-up nudges, a catch-up path if queue or worker hiccups, and a daily refill + delivery-time safety net so <b>chronic / lifelong meds keep firing indefinitely</b> without ever asking "for how many days?"</li>
